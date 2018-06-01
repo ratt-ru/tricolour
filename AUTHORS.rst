@@ -2,9 +2,11 @@
 Credits
 =======
 
-Development Lead
-----------------
+Development Leads
+-----------------
 
+* Tom Mauch <tmauch@ska.ac.za>
+* Bruce Merry <bmerry@ska.ac.za>
 * Simon Perkins <sperkins@ska.ac.za>
 
 Contributors
