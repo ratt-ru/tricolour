@@ -959,3 +959,127 @@ class SumThresholdFlagger(object):
         self.flag_all_time_frac = flag_all_time_frac
         self.flag_all_freq_frac = flag_all_freq_frac
         self.rho = rho
+
+    def _get_flags(self, in_data, in_flags, out_flags):
+        """Flag a batch of baselines.
+
+        The batches are doled out by :meth:`get_flags`, either to an executor
+        pool or directly. The batching is important because it affects memory
+        access patterns. The batch size should not be too large, as otherwise
+        it will overload the cache.
+
+        This function is the interface between Python code and numba code, and
+        takes care of conditioning the parameters into a form that the numba
+        code can consume. All the actual work is done in
+        :func:`_get_flags_impl`.
+        """
+        averaged_channels = (in_data.shape[1] + self.average_freq - 1) // self.average_freq
+
+        # Set up frequency chunks
+        freq_chunk_ends = np.linspace(0, averaged_channels, self.freq_chunks + 1).astype(np.int_)
+
+        # Clip the windows to the available time and frequency range
+        windows_time = np.array([w for w in self.windows_time if w <= in_data.shape[1]], np.int_)
+        windows_freq = np.array([w for w in self.windows_freq if w <= averaged_channels], np.int_)
+
+        _get_flags_impl(
+            in_data, in_flags, out_flags,
+            self.outlier_nsigma, windows_time, windows_freq,
+            self.background_reject, self.background_iterations,
+            self.spike_width_time, self.spike_width_freq,
+            self.time_extend, self.freq_extend,
+            freq_chunk_ends, self.average_freq,
+            self.flag_all_time_frac, self.flag_all_freq_frac,
+            self.rho)
+
+    def get_flags(self, data, flags, pool=None, chunk_size=None, is_multiprocess=None):
+        """Get flags in data array, with optional input flags of same shape
+        that denote samples in data to ignore when backgrounding and deriving
+        thresholds.
+
+        This can run in parallel if given a
+        :class:`concurrent.futures.Executor`. Performance is generally better
+        with a :class:`~current.futures.ThreadPoolExecutor`. While a
+        :class:`~concurrent.futures.ProcessPoolExecutor` is supported, it is
+        usually limited by the speed at which the data can be pickled and
+        transferred to the other processes.
+
+        Parameters
+        ----------
+        data : 3D array
+            The input visibility data, in (time, frequency, baseline) order. It may
+            also contain just the magnitudes.
+        flags : 3D array, boolean
+            Input flags.
+        pool : :class:`concurrent.futures.Executor`, optional
+            Worker pool for parallel computation. If not specified,
+            computation will be done serially.
+        chunk_size : int, optional
+            Number of baselines to process at a time. If not specified,
+            heuristics are used to pick a reasonable value. Values above 16
+            give diminishing returns and much larger values may actually reduce
+            performance. Power-of-two sizes are likely to perform best.
+        is_multiprocess : bool, optional
+            If `pool` behaves like
+            :class:`concurrent.futures.ProcessPoolExecutor` (in particular, if
+            it makes copies of its arguments) then this must be set to
+            ``True`` to invoke a slower path that ensures that results are
+            returned and reassembled. If unspecified, it defaults to true for
+            :class:`concurrent.futures.ProcessPoolExecutor` and false for all
+            other types. Thus, it only needs to be specified when using an
+            object that isn't a :class:`concurrent.futures.ProcessPoolExecutor`
+            but behaves like one.
+
+        Returns
+        -------
+        out_flags : 3D array, boolean, same shape as `data`
+            Derived flags (True=flagged)
+
+        """
+        if data.shape != flags.shape:
+            raise ValueError('Shape mismatch')
+        if data.ndim != 3:
+            raise ValueError('data has wrong number of dimensions')
+        out_flags = np.empty(flags.shape, np.bool_)
+
+        n_bl = data.shape[-1]
+        if not chunk_size:
+            chunk_size = 16
+            if pool is not None:
+                # Make sure there is enough parallelism. There is no way to
+                # query the number of workers in a pool, so we'll just assume
+                # it is equal to cpu_count. We want at least 4 tasks per CPU
+                # to avoid load imbalances.
+                workers = multiprocessing.cpu_count()
+                while chunk_size > 1 and chunk_size * workers * 4 > n_bl:
+                    chunk_size //= 2
+        if pool is not None and is_multiprocess is None:
+            is_multiprocess = isinstance(pool, concurrent.futures.ProcessPoolExecutor)
+        futures = []
+        outputs = {}
+        try:
+            for i in range(0, n_bl, chunk_size):
+                chunk_data = data[..., i : i + chunk_size]
+                chunk_flags = flags[..., i : i + chunk_size]
+                chunk_out = out_flags[..., i : i + chunk_size]
+                self._get_flags(chunk_data, chunk_flags, chunk_out)
+                # if pool is not None and is_multiprocess:
+                #     future = pool.submit(_get_flags_mp, chunk_data, chunk_flags, self)
+                #     outputs[future] = chunk_out
+                #     futures.append(future)
+                # elif pool is not None:
+                #     futures.append(pool.submit(self._get_flags, chunk_data, chunk_flags, chunk_out))
+                # else:
+                #    self._get_flags(chunk_data, chunk_flags, chunk_out)
+            # Wait for all the futures to complete, and raise any exception.
+            # In multiprocessing mode, copy results back.
+            # for future in concurrent.futures.as_completed(futures):
+            #     result = future.result()
+            #     if is_multiprocess:
+            #         outputs[future][:] = result
+            return out_flags
+        finally:
+            pass
+            # If there's an exception, stop any work we can
+            # for future in futures:
+            #     future.cancel()
