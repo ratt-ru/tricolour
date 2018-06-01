@@ -44,7 +44,7 @@ setup(
     include_package_data=True,
     keywords='tricolour',
     name='tricolour',
-    packages=find_packages(include=['tricolour']),
+    packages=find_packages(),
     scripts=glob(pjoin('tricolour', 'scripts', '*')),
     setup_requires=setup_requirements,
     test_suite='tests',
