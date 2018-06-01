@@ -18,7 +18,7 @@ requirements = [
     'dask[array] >= 0.17.5',
     'numpy >= 1.14.0',
     'numba >= 0.38.0',
-    'xarray-ms',
+    'xarray-ms >= 0.1.1',
 ]
 
 setup_requirements = ['pytest-runner', ]
