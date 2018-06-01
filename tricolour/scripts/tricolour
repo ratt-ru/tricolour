@@ -1,0 +1,117 @@
+#!/usr/bin/env python
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+import argparse
+from functools import wraps
+
+import dask
+import dask.array as da
+import numpy as np
+import xarray as xr
+
+from xarrayms import xds_from_ms, xds_to_table
+
+from tricolour import sum_threshold_flagger
+from tricolour.util import aggregate_chunks
+
+
+def create_parser():
+    p = argparse.ArgumentParser()
+    p.add_argument("ms")
+    return p
+
+if __name__ == "__main__":
+
+    args = create_parser().parse_args()
+
+    group_cols = ["FIELD_ID", "DATA_DESC_ID", "SCAN_NUMBER"]
+    index_cols = ["TIME", "ANTENNA1", "ANTENNA2"]
+    index_cols = ['TIME']
+
+    xms = list(xds_from_ms(args.ms,
+                      columns=index_cols,
+                      group_cols=group_cols,
+                      index_cols=index_cols,
+                      chunks={"row": 1e9}))
+
+    utime_chunks = [da.unique(ms.TIME.data, return_counts=True)
+                                    for i, ms in enumerate(xms)]
+
+    utime_chunks = dask.compute(utime_chunks)[0]
+    assert all(len(t) == 2 for t in utime_chunks)
+    time_row_chunks = [((1,)*ut.size, ch) for ut, ch in utime_chunks]
+    utime, rows = zip(*time_row_chunks)
+    agg_time, agg_row = zip(*[aggregate_chunks((tc, rc), (len(tc), 1e9))
+                                    for tc, rc in time_row_chunks])
+
+    xms = list(xds_from_ms(args.ms,
+                      columns=("TIME", "DATA", "FLAG"),
+                      group_cols=group_cols,
+                      index_cols=index_cols,
+                      chunks=[{"row": r} for r in agg_row]))
+
+
+    def flagger(vis, flag, chunks, **kwargs):
+        token = da.core.tokenize(vis, flag, chunks, kwargs)
+        name = '-'.join(('flagger', token))
+        dims = ("row", "chan", "corr")
+
+        dsk = da.core.top(sum_threshold_flagger, name, dims,
+                          vis.name, dims,
+                          flag.name, dims,
+                          chunks.name, ("row",),
+                          numblocks={
+                              vis.name: vis.numblocks,
+                              flag.name: flag.numblocks,
+                              chunks.name: chunks.numblocks
+                          },
+                          **kwargs)
+
+        # Add input graphs to the graph
+        dsk.update(vis.__dask_graph__())
+        dsk.update(flag.__dask_graph__())
+        dsk.update(chunks.__dask_graph__())
+
+        return da.Array(dsk, name, vis.chunks, dtype=flag.dtype)
+
+
+    assert len(agg_time) == len(xms)
+    assert len(rows) == len(xms)
+
+    write_computes = []
+
+    for ms, atc, rc in zip(xms, agg_time, rows):
+        if np.unique(rc).size != 1:
+            raise ValueError("Inconsistent number of baselines per timestep. "
+                             "All baselines must be present.")
+
+        ntime, nbl = atc[0], rc[0]
+        nrow, nchan, ncorr = ms.DATA.data.shape
+
+        # Reorder vis and flags into katdal-like format
+        # (ntime, nchan, ncorrprod). Chunk the corrprod
+        # dimension into groups of 128 correlation products
+        vis = ms.DATA.data.reshape(ntime, nbl, nchan, ncorr)
+        vis = vis.transpose(0,2,1,3).reshape((ntime,nchan,-1))
+        vis = vis.rechunk({2:128})
+
+        flags = ms.FLAG.data.reshape(ntime, nbl, nchan, ncorr)
+        flags = flags.transpose(0,2,1,3).reshape((ntime,nchan,-1))
+        flags = flags.rechunk({2:128})
+
+        new_flags = flagger(vis, flags, da.from_array(rc, chunks=(atc,)))
+
+        # Reorder flags from katdal-like format back to the MS ordering
+        # (ntime*nbl, nchan, ncorr)
+        new_flags = new_flags.reshape((ntime,nchan,nbl,ncorr))
+        new_flags = new_flags.transpose(0,2,1,3)
+        new_flags = new_flags.reshape((-1, nchan, ncorr))
+
+        new_ms = ms.assign(FLAG=xr.DataArray(new_flags, dims=ms.FLAG.dims))
+
+        writes = xds_to_table(new_ms, args.ms, "FLAG")
+        write_computes.append(writes)
+
+    dask.compute(write_computes)
