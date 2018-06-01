@@ -54,7 +54,6 @@ if __name__ == "__main__":
         ant1, ant2 = da.compute(ms.ANTENNA1.data, ms.ANTENNA2.data)
         start = 0
 
-
         for c, chunk in enumerate(rc):
             end = start + chunk
             ant1_ok = np.all(ant1[start:end] == ant1[0:rc[0]])
@@ -71,7 +70,7 @@ if __name__ == "__main__":
                                                 ant2[start:end], ant2[0:rc[0]]))
 
 
-
+    # Repoen the datasets using the aggregated row ordering
     xms = list(xds_from_ms(args.ms,
                       columns=("TIME", "DATA", "FLAG"),
                       group_cols=group_cols,
