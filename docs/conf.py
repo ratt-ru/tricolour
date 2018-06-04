@@ -52,6 +52,7 @@ import sphinx_rtd_theme
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.doctest',
+    'sphinx.ext.extlinks',
     'sphinx.ext.todo',
     'sphinx.ext.coverage',
     'sphinx.ext.viewcode',
@@ -296,6 +297,12 @@ texinfo_documents = [
    author, 'cookiecutter-pypackage', 'One line description of project.',
    'Miscellaneous'),
 ]
+
+extlinks = {
+    'issue': ('https://github.com/ska-sa/tricolour/issues/%s', 'GH#'),
+    'pr': ('https://github.com/ska-sa/tricolour/pull/%s', 'GH#')
+}
+
 
 # Documents to append as an appendix to all manuals.
 #texinfo_appendices = []
