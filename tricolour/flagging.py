@@ -12,6 +12,7 @@ MAD_NORMAL = 1.4826
 .. _median absolute deviation: https://en.wikipedia.org/wiki/Median_absolute_deviation
 """
 
+
 def _as_min_dtype(value):
     """Convert a non-negative integer into a numpy scalar of the narrowest
     type will hold it.
@@ -48,8 +49,6 @@ def _asbool(data):
         return lambda data: data.view(np.bool_)
     else:
         return lambda data: data.astype(np.bool_)
-
-
 
 
 @numba.jit(nopython=True, nogil=True, cache=True)
@@ -377,19 +376,22 @@ def _get_background2d(data, flags, iterations, spike_width, reject_threshold, fr
         sigma = extend_factor * spike_width
         masked_gaussian_filter(data, flags, sigma, background)
         for c in range(freq_chunk_ends.size - 1):
-            sub = (slice(None, None), slice(freq_chunk_ends[c], freq_chunk_ends[c + 1]))
+            sub = (slice(None, None), slice(
+                freq_chunk_ends[c], freq_chunk_ends[c + 1]))
             sub_data = data[sub]
             sub_flags = flags[sub]
             # Convert background to an absolute value residual, in-place
             sub_residual = background[sub]
             for t in range(n_time):
                 for f in range(sub_data.shape[1]):
-                    sub_residual[t, f] = np.abs(sub_data[t, f] - sub_residual[t, f])
+                    sub_residual[t, f] = np.abs(
+                        sub_data[t, f] - sub_residual[t, f])
             threshold = _median_abs(sub_residual, sub_flags)
             threshold *= MAD_NORMAL * reject_threshold
             for t in range(n_time):
                 for f in range(sub_data.shape[1]):
-                    # sub_residual can contain NaNs, but only where the flags already apply
+                    # sub_residual can contain NaNs, but only where the flags
+                    # already apply
                     if sub_residual[t, f] > threshold:
                         sub_flags[t, f] = True
     # Compute final background
@@ -411,7 +413,8 @@ def _convolve_flags(in_values, scale, threshold, out_flags, window):
     """
     cum_size = in_values.shape[0] + 2 * window - 1
     # TODO: could preallocate this externally
-    cum = np.empty((cum_size,) + (in_values.shape[1:]), np.uint32)     # Cumulative flagged values
+    # Cumulative flagged values
+    cum = np.empty((cum_size,) + (in_values.shape[1:]), np.uint32)
     cum[:window] = 0
     for i in range(in_values.shape[0]):
         for j in np.ndindex(in_values.shape[1:]):
@@ -422,7 +425,8 @@ def _convolve_flags(in_values, scale, threshold, out_flags, window):
     cum[cum_size - (window - 1):] = cum[cum_size - window]
     for i in range(out_flags.shape[0]):
         for j in np.ndindex(out_flags.shape[1:]):
-            out_flags[(i,) + j] |= (cum[(i + window,) + j] - cum[(i,) + j] != 0)
+            out_flags[(i,) + j] |= (cum[(i + window,) + j] -
+                                    cum[(i,) + j] != 0)
 
 
 @numba.jit(nopython=True, nogil=True, cache=True)
@@ -445,7 +449,8 @@ def _sum_threshold1d(input_data, input_flags, output_flags, windows, outlier_nsi
         padded_slice = slice(max(chunks[ci] - np.max(windows) + 1, 0),
                              min(chunks[ci + 1] + np.max(windows) - 1, input_data.size))
         padded_data = input_data[padded_slice]
-        # TODO: can pre-allocate these outside the loop (but will need resizing)
+        # TODO: can pre-allocate these outside the loop (but will need
+        # resizing)
         output_flags_pos = np.zeros(padded_data.shape, np.bool_)
         output_flags_neg = np.zeros(padded_data.shape, np.bool_)
         for window in windows:
@@ -457,7 +462,8 @@ def _sum_threshold1d(input_data, input_flags, output_flags, windows, outlier_nsi
             # Set already flagged values to be the +/- value of the
             # threshold if they are outside the threshold, and take
             # a cumulative sum.
-            cum_data = np.empty((padded_data.shape[0] + 1,) + padded_data.shape[1:], np.float64)
+            cum_data = np.empty(
+                (padded_data.shape[0] + 1,) + padded_data.shape[1:], np.float64)
             cum_data[0] = 0
             for i in range(padded_data.shape[0]):
                 for j in np.ndindex(padded_data.shape[1:]):
@@ -470,17 +476,20 @@ def _sum_threshold1d(input_data, input_flags, output_flags, windows, outlier_nsi
                         clamped = -limit
                     cum_data[(i + 1,) + j] = cum_data[idx] + clamped
             # Calculate a rolling sum array from the data with the window for this iteration,
-            # which is later scaled by rolliing_scale to give the rolling average.
+            # which is later scaled by rolliing_scale to give the rolling
+            # average.
             avgarray = cum_data[window:] - cum_data[:-window]
             rolling_scale = np.float32(1.0 / window)
 
             # Work out the flags from the average data above the current threshold,
             # convolve them, and combine with current flags.
-            _convolve_flags(avgarray, rolling_scale, thisthreshold, output_flags_pos, window)
+            _convolve_flags(avgarray, rolling_scale,
+                            thisthreshold, output_flags_pos, window)
 
             # Work out the flags from the average data below the current threshold,
             # convolve them, and OR with current flags.
-            _convolve_flags(avgarray, -rolling_scale, thisthreshold, output_flags_neg, window)
+            _convolve_flags(avgarray, -rolling_scale,
+                            thisthreshold, output_flags_neg, window)
 
         # Extract just the portion of output_flags_pos/neg corresponding to the
         # chunk itself, without the padding
@@ -578,7 +587,8 @@ def _get_flags_impl(
     for t in range(n_time):
         for f in range(n_freq):
             for bl in range(n_bl):
-                out_flags[t, f, bl] = tmp_flags[bl, t, f] or np.isnan(in_data[t, f, bl])
+                out_flags[t, f, bl] = tmp_flags[bl, t,
+                                                f] or np.isnan(in_data[t, f, bl])
 
 
 @numba.jit(nopython=True, nogil=True, cache=True)
@@ -668,7 +678,6 @@ def _average_freq(in_data, in_flags, factor):
     return avg_data, _asbool(avg_weight)
 
 
-
 @numba.jit(nopython=True, nogil=True, cache=True)
 def _unaverage_freq(flags, freq_extend, average_freq,
                     flag_all_time_frac,
@@ -748,7 +757,8 @@ def _get_baseline_flags(
 
     # Get and subtract 2D background
     background = _get_background2d(data, flags, background_iterations,
-                                   np.array((spike_width_time, spike_width_freq)),
+                                   np.array(
+                                       (spike_width_time, spike_width_freq)),
                                    background_reject,
                                    freq_chunk_ends)
     data -= background
@@ -778,15 +788,14 @@ def _get_flags_mp(in_data, in_flags, flagger):
     return out_flags
 
 
-
 def sum_threshold_flagger(vis, flags, chunks=None, outlier_nsigma=4.5,
-                windows_time=[1, 2, 4, 8], windows_freq=[1, 2, 4, 8],
-                background_reject=2.0, background_iterations=1,
-                spike_width_time=12.5, spike_width_freq=10.0,
-                time_extend=3, freq_extend=3,
-                freq_chunks=10, average_freq=1,
-                flag_all_time_frac=0.6, flag_all_freq_frac=0.8,
-                rho=1.3):
+                          windows_time=[1, 2, 4, 8], windows_freq=[1, 2, 4, 8],
+                          background_reject=2.0, background_iterations=1,
+                          spike_width_time=12.5, spike_width_freq=10.0,
+                          time_extend=3, freq_extend=3,
+                          freq_chunks=10, average_freq=1,
+                          flag_all_time_frac=0.6, flag_all_freq_frac=0.8,
+                          rho=1.3):
     """
     Flagger that uses the SumThreshold method (Offringa, A., MNRAS, 405, 155-167, 2010)
     to detect spikes in both frequency and time axes.
@@ -861,11 +870,14 @@ def sum_threshold_flagger(vis, flags, chunks=None, outlier_nsigma=4.5,
     averaged_channels = (vis.shape[1] + average_freq - 1) // average_freq
 
     # Set up frequency chunks
-    freq_chunk_ends = np.linspace(0, averaged_channels, freq_chunks + 1).astype(np.int_)
+    freq_chunk_ends = np.linspace(
+        0, averaged_channels, freq_chunks + 1).astype(np.int_)
 
     # Clip the windows to the available time and frequency range
-    windows_time = np.array([w for w in windows_time if w <= vis.shape[1]], np.int_)
-    windows_freq = np.array([w for w in windows_freq if w <= averaged_channels], np.int_)
+    windows_time = np.array(
+        [w for w in windows_time if w <= vis.shape[1]], np.int_)
+    windows_freq = np.array(
+        [w for w in windows_freq if w <= averaged_channels], np.int_)
 
     out_flags = np.empty_like(flags)
 
@@ -880,6 +892,7 @@ def sum_threshold_flagger(vis, flags, chunks=None, outlier_nsigma=4.5,
         rho)
 
     return out_flags
+
 
 class SumThresholdFlagger(object):
     """Flagger that uses the SumThreshold method (Offringa, A., MNRAS, 405, 155-167, 2010)
@@ -937,6 +950,7 @@ class SumThresholdFlagger(object):
     rho : float
         Falloff exponent for SumThreshold
     """
+
     def __init__(self, outlier_nsigma=4.5, windows_time=[1, 2, 4, 8],
                  windows_freq=[1, 2, 4, 8], background_reject=2.0, background_iterations=1,
                  spike_width_time=12.5, spike_width_freq=10.0, time_extend=3, freq_extend=3,
@@ -945,7 +959,8 @@ class SumThresholdFlagger(object):
         self.outlier_nsigma = outlier_nsigma
         self.windows_time = windows_time
         # Scale the frequency windows, and remove possible duplicates
-        windows_freq = np.ceil(np.array(windows_freq, dtype=np.float32) / average_freq)
+        windows_freq = np.ceil(
+            np.array(windows_freq, dtype=np.float32) / average_freq)
         self.windows_freq = np.unique(windows_freq.astype(np.int_))
         self.background_reject = background_reject
         self.background_iterations = background_iterations
@@ -973,14 +988,18 @@ class SumThresholdFlagger(object):
         code can consume. All the actual work is done in
         :func:`_get_flags_impl`.
         """
-        averaged_channels = (in_data.shape[1] + self.average_freq - 1) // self.average_freq
+        averaged_channels = (
+            in_data.shape[1] + self.average_freq - 1) // self.average_freq
 
         # Set up frequency chunks
-        freq_chunk_ends = np.linspace(0, averaged_channels, self.freq_chunks + 1).astype(np.int_)
+        freq_chunk_ends = np.linspace(
+            0, averaged_channels, self.freq_chunks + 1).astype(np.int_)
 
         # Clip the windows to the available time and frequency range
-        windows_time = np.array([w for w in self.windows_time if w <= in_data.shape[1]], np.int_)
-        windows_freq = np.array([w for w in self.windows_freq if w <= averaged_channels], np.int_)
+        windows_time = np.array(
+            [w for w in self.windows_time if w <= in_data.shape[1]], np.int_)
+        windows_freq = np.array(
+            [w for w in self.windows_freq if w <= averaged_channels], np.int_)
 
         _get_flags_impl(
             in_data, in_flags, out_flags,
@@ -1054,14 +1073,15 @@ class SumThresholdFlagger(object):
                 while chunk_size > 1 and chunk_size * workers * 4 > n_bl:
                     chunk_size //= 2
         if pool is not None and is_multiprocess is None:
-            is_multiprocess = isinstance(pool, concurrent.futures.ProcessPoolExecutor)
+            is_multiprocess = isinstance(
+                pool, concurrent.futures.ProcessPoolExecutor)
         futures = []
         outputs = {}
         try:
             for i in range(0, n_bl, chunk_size):
-                chunk_data = data[..., i : i + chunk_size]
-                chunk_flags = flags[..., i : i + chunk_size]
-                chunk_out = out_flags[..., i : i + chunk_size]
+                chunk_data = data[..., i: i + chunk_size]
+                chunk_flags = flags[..., i: i + chunk_size]
+                chunk_out = out_flags[..., i: i + chunk_size]
                 self._get_flags(chunk_data, chunk_flags, chunk_out)
                 # if pool is not None and is_multiprocess:
                 #     future = pool.submit(_get_flags_mp, chunk_data, chunk_flags, self)

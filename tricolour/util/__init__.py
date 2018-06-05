@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+
 def aggregate_chunks(chunks, max_chunks, return_groups=False):
     """
     Aggregate dask ``chunks`` together into chunks no larger than
@@ -67,4 +68,3 @@ def aggregate_chunks(chunks, max_chunks, return_groups=False):
     agg_chunks = tuple(tuple(ac) for ac in agg_chunks)
 
     return agg_chunks[0] if singleton else agg_chunks
-
