@@ -20,12 +20,23 @@ if 'TRICOLOUR_CONFIG' in os.environ:
     paths.append(os.environ['TRICOLOUR_CONFIG'])
 
 
-def collect_yaml(paths=paths):
-    """ Collect configuration from yaml files
-    This searches through a list of paths, expands to find all yaml or json
-    files, and then parses each file.
+def collect(paths=paths):
     """
-    # Find all paths
+    Collect yaml configuration from paths
+
+    Parameters
+    ----------
+    paths : list of str
+        A list of paths to search for yaml configuration files
+
+    Returns
+    -------
+    config: dict
+        Dictionary containing configuration
+    """
+    yaml = YAML(typ='safe')
+
+    configs = []
 
     file_paths = []
     file_exts = ('.json', '.yaml', '.yml')
@@ -49,26 +60,5 @@ def collect_yaml(paths=paths):
             data = yaml.load(f.read()) or {}
             configs.append(data)
 
-    return configs
-
-
-def collect(paths=paths):
-    """
-    Collect configuration from paths and environment variables
-    Parameters
-    ----------
-    paths : List[str]
-        A list of paths to search for yaml config files
-
-    Returns
-    -------
-    config: dict
-    """
-    yaml = YAML(typ='safe')
-
-    configs = []
-
-    if yaml:
-        configs.extend(collect_yaml(paths=paths))
 
     return merge(*configs)
