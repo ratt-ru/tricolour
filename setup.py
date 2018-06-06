@@ -18,6 +18,7 @@ requirements = [
     'dask[array] >= 0.17.5',
     'numpy >= 1.14.0',
     'numba >= 0.38.0',
+    'ruamel.yaml >= 0.15.37',
     'xarray-ms >= 0.1.1',
 ]
 
