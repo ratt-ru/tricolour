@@ -81,19 +81,38 @@ def stokes_corr_map(corr_types):
 
 
 @numba.jit(nopython=True, nogil=True, cache=True)
-def unpolarised_intensity(vis, corr_map):
+def unpolarised_intensity(vis, stokes_unpol, stokes_pol):
     """
     Generate unpolarised intensity from visibilities
     """
+
+    if not len(stokes_unpol) == 1:
+        raise ValueError("There should be exactly one entry "
+                         "for unpolarised stokes (stokes_unpol)")
+
+    if not len(stokes_pol) > 0:
+        raise ValueError("No entries for polarised stokes (stokes_pol)")
+
+    # There'll only be output value
     out_vis = np.zeros(vis.shape[:2] + (1,), vis.dtype)
 
     for r in range(vis.shape[0]):
         for f in range(vis.shape[1]):
-            for (c1, c2, a, s1, s2) in corr_map:
-                value = a*(s1*vis[r,f,c1] + s2*vis[r,f,c2])
-                out_vis[r,f,0] += value**2
+            # Polarised intensity (Q,U,V)
+            pol = 0
 
-            out_vis[r,f,0] = np.sqrt(out_vis[r,f,0])
+            for (c1, c2, a, s1, s2) in stokes_pol:
+                value = a*(s1*vis[r,f,c1] + s2*vis[r,f,c2])
+                pol += value**2
+
+            # Unpolarised intensity (I)
+            unpol = 0
+
+            for (c1, c2, a, s1, s2) in stokes_unpol:
+                value = a*(s1*vis[r,f,c1] + s2*vis[r,f,c2])
+                unpol += value
+
+            out_vis[r,f,0] = unpol - np.sqrt(pol)
 
     return out_vis
 
