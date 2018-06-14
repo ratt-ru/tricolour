@@ -78,8 +78,8 @@ def create_parser():
     p.add_argument("-fs", "--flagging-strategy", default="standard",
                    choices=["standard", "polarisation"],
                    help="Flagging Strategy. "
-                        "If 'standard' all correlations will be flagged "
-                          "independently."
+                        "If 'standard' all correlations in the visibility "
+                          "are flagged independently. "
                         "If 'polarisation' the unpolarised intensity is "
                           "calculated and used to flag all correlations "
                           "in the visibility.")
