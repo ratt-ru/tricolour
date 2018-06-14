@@ -133,14 +133,14 @@ def unpolarised_intensity(vis, stokes_unpol, stokes_pol):
 
             for (c1, c2, a, s1, s2) in stokes_pol:
                 value = a*(s1*vis[r,f,c1] + s2*vis[r,f,c2])
-                pol += value**2
+                pol += value.real**2  # imaginary contains only noise
 
             # Unpolarised intensity (I)
             unpol = 0
 
             for (c1, c2, a, s1, s2) in stokes_unpol:
                 value = a*(s1*vis[r,f,c1] + s2*vis[r,f,c2])
-                unpol += value
+                unpol += value.real   # imaginary contains only noise
 
             # I - sqrt(Q^2 + U^2 + V^2)
             out_vis[r,f,0] = unpol - np.sqrt(pol)

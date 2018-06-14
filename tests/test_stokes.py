@@ -28,7 +28,7 @@ def test_unpolarised_intensity(stokes):
 
     for c1, c2, a, s1, s2 in stokes_unpol:
         v = a*(s1*vis[0,0,c1] + s2*vis[0,0,c2])
-        unpol += v
+        unpol += v.real  # imaginary contains only noise
 
     # Polarised stokes mappings
     stokes_pol = tuple(v for k, v in stokes_map.items() if k != 'I')
@@ -36,7 +36,7 @@ def test_unpolarised_intensity(stokes):
 
     for c1, c2, a, s1, s2 in stokes_pol:
         v = a*(s1*vis[0,0,c1] + s2*vis[0,0,c2])
-        pol += v**2
+        pol += v.real**2  # imaginary contains only noise
 
     upi = unpol - np.sqrt(pol)
     val = unpolarised_intensity(vis, stokes_unpol, stokes_pol)
