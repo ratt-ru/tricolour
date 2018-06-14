@@ -6,8 +6,8 @@ import numpy as np
 import pytest
 
 from tricolour.stokes import (stokes_corr_map,
-                              STOKES_TYPES,
-                              unpolarised_intensity)
+                      STOKES_TYPES,
+                      unpolarised_intensity)
 
 
 @pytest.mark.parametrize('stokes', [

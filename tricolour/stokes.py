@@ -26,15 +26,13 @@ STOKES_TYPES = {
     'YY': 12    # parallel linear
 }
 
-INV_STOKES_TYPES = {v: k for k, v in STOKES_TYPES.items()}
-
 # Correlation dependencies required for reconstructing stokes values
 # (corr1, corr2, a, s1, s2). stokes = a*(s1*corr1 + s2*corr2)
 stokes_deps = {
-    'I': [('XX', 'YY', 0.5 + 0.0j, 1, 1),    ('RR', 'LL', 0.5 + 0.0j, 1, 1)],
-    'Q': [('XX', 'YY', 0.5 + 0.0j, 1, -1),   ('RL', 'LR', 0.5 + 0.0j, 1, 1)],
-    'U': [('XY', 'YX', 0.0 + 0.5j, 1, 1),    ('RL', 'LR', 0.0 - 0.5j, 1, -1)],
-    'V': [('XY', 'YX', 0.0 - 0.5j, 1, -1),   ('RR', 'LL', 0.0 + 0.5j, 1, -1)]
+    'I': [('XX', 'YY', 0.5 + 0.0j, 1,  1), ('RR', 'LL', 0.5 + 0.0j, 1,  1)],
+    'Q': [('XX', 'YY', 0.5 + 0.0j, 1, -1), ('RL', 'LR', 0.5 + 0.0j, 1,  1)],
+    'U': [('XY', 'YX', 0.0 + 0.5j, 1,  1), ('RL', 'LR', 0.0 - 0.5j, 1, -1)],
+    'V': [('XY', 'YX', 0.0 - 0.5j, 1, -1), ('RR', 'LL', 0.0 + 0.5j, 1, -1)]
 }
 
 # Convert to numeric stokes types
@@ -83,7 +81,39 @@ def stokes_corr_map(corr_types):
 @numba.jit(nopython=True, nogil=True, cache=True)
 def unpolarised_intensity(vis, stokes_unpol, stokes_pol):
     """
-    Generate unpolarised intensity from visibilities
+    Derives the unpolarised intensity from visibilities
+    and tuples describing how to derive stokes parameters
+    from visibility correlations.
+
+    .. math::
+
+        I - \sqrt(Q^2 + U^2 + V^2)
+
+    ``stokes_unpol`` and ``stokes_pol`` can be derived from
+    :func:`stokes_corr_map`.
+
+    Parameters
+    ----------
+    vis: :class:`numpy.ndarray`
+        Visibilities of shape :code:`(row, chan, corr)`
+    stokes_unpol: tuple
+        Tuple with schema :code:`(c1,c2,a,s1,s2)` describing
+        how to derive unpolarised stokes parameters (I):
+
+            1. ``c1`` -- First correlation index
+            2. ``c2`` -- Second correlation index
+            3. ``a``  -- alpha, multiplier
+            4. ``s1`` -- First correlation sign
+            5. ``s2`` -- Second correlation sign
+
+    stokes_pol: tuple
+        Tuple with schema :code:`(c1,c2,a,s1,s2)` describing
+        how to derive polarised stokes parameters (Q,U,V):
+
+    Returns
+    -------
+    :class:`numpy.ndarray`
+        Unpolarised intensities of shape :code:`(row, chan, 1)`.
     """
 
     if not len(stokes_unpol) == 1:
@@ -93,8 +123,8 @@ def unpolarised_intensity(vis, stokes_unpol, stokes_pol):
     if not len(stokes_pol) > 0:
         raise ValueError("No entries for polarised stokes (stokes_pol)")
 
-    # There'll only be output value
-    out_vis = np.zeros(vis.shape[:2] + (1,), vis.dtype)
+    # Only one output correlation -- unpolarised intensity
+    out_vis = np.empty(vis.shape[:2] + (1,), vis.dtype)
 
     for r in range(vis.shape[0]):
         for f in range(vis.shape[1]):
@@ -112,6 +142,7 @@ def unpolarised_intensity(vis, stokes_unpol, stokes_pol):
                 value = a*(s1*vis[r,f,c1] + s2*vis[r,f,c2])
                 unpol += value
 
+            # I - sqrt(Q^2 + U^2 + V^2)
             out_vis[r,f,0] = unpol - np.sqrt(pol)
 
     return out_vis
