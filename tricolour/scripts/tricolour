@@ -63,6 +63,7 @@ def create_parser():
                    required=False, type=load_config,
                    help="YAML config file containing parameters for "
                    "the flagger in the 'sum_threshold' key.")
+    p.add_argument("-if", "--ignore-flags", action="store_true")
     p.add_argument("-fs", "--flagging-strategy", default="standard",
                    choices=["standard", "polarisation"],
                    help="Flagging Strategy. "
@@ -77,6 +78,7 @@ def create_parser():
 
 if __name__ == "__main__":
     args = create_parser().parse_args()
+    cfg_file, flagger_kwargs = args.config
 
     # Group datasets by these columns
     group_cols = ["FIELD_ID", "DATA_DESC_ID", "SCAN_NUMBER"]
@@ -135,17 +137,23 @@ if __name__ == "__main__":
 
     xms = [_add_pol_data(ms) for ms in xms]
 
-    cfg_file, flagger_kwargs = args.config
     write_computes = []
 
-    # Iterate through dataset
+    # Iterate through each dataset
     for ms, agg_time_counts, row_counts in zip(xms, agg_time, rows):
         ntime, nbl = agg_time_counts[0], row_counts[0]
         nrow, nchan, ncorr = ms.DATA.data.shape
         chunks = da.from_array(row_counts, chunks=(agg_time_counts,))
 
+        # Visibilities from the dataset
         vis = ms.DATA.data
-        flags = ms.FLAG.data
+
+        # Generate unflagged defaults if we should ignore existing flags
+        # otherwise take flags from the dataset
+        if args.ignore_flags == True:
+            flags = da.full_like(vis, False, dtype=np.bool)
+        else:
+            flags = ms.FLAG.data
 
         # If we're flagging on unpolarised intensity,
         # we convert visibilities to unpolarised intensity
