@@ -4,16 +4,27 @@ from __future__ import division
 from __future__ import print_function
 
 import argparse
+import contextlib
 import logging
 from functools import wraps
 
 import dask
 import dask.array as da
-from dask.diagnostics import ProgressBar
+from dask.diagnostics import (ProgressBar, Profiler,
+                                  ResourceProfiler,
+                                  CacheProfiler, visualize)
+
 import numpy as np
 import xarray as xr
 
 from xarrayms import xds_from_ms, xds_from_table, xds_to_table
+
+try:
+    import bokeh
+    can_profile = True
+except ImportError:
+    can_profile = False
+
 
 from tricolour.util import aggregate_chunks
 from tricolour.config import collect
@@ -204,5 +215,12 @@ if __name__ == "__main__":
         writes = xds_to_table(new_ms, args.ms, "FLAG")
         write_computes.append(writes)
 
-with ProgressBar():
+profilers = ([Profiler(), CacheProfiler(), ResourceProfiler()]
+              if can_profile else [])
+contexts = [ProgressBar()] + profilers
+
+with contextlib.nested(*contexts):
     dask.compute(write_computes)
+
+if can_profile:
+    visualize(profilers)
