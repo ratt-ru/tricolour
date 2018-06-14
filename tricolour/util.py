@@ -1,5 +1,56 @@
 # -*- coding: utf-8 -*-
 
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+import numpy as np
+
+
+def check_baseline_ordering(ant1, ant2, chunks, g=None):
+    """
+    Checks that the baseline ordering for each timestep
+    is the same
+
+    Parameters
+    ----------
+    ant1: :class:`numpy.ndarray`
+        antenna1 values
+    ant2: :class:`numpy.ndarray`
+        antenna2 values
+    chunks: :class: `numpy.ndarray`
+        Number of baselines per timestep.
+    g: int
+        Group number
+
+    Returns
+    -------
+    :class:`numpy.ndarray`
+        Array of True equal with shape :code:`(chunks.size,)`
+    """
+    if not ant1.size == ant2.size == np.sum(chunks):
+        raise ValueError("Number of antenna values do not equal chunk sum")
+
+    start = 0
+    chunk1_len = chunks[0]
+
+    for c, chunk in enumerate(chunks):
+        end = start + chunk
+        ant1_ok = np.all(ant1[start:end] == ant1[0:chunk1_len])
+        ant2_ok = np.all(ant2[start:end] == ant2[0:chunk1_len])
+
+        if not ant1_ok or not ant2_ok:
+            raise ValueError("Baseline ordering for chunk %d in group %d "
+                             "is inconsistent with other chunks. "
+                             "Fully generally Measurement Sets are not "
+                             "yet supported\n"
+                             "%s != %s\n"
+                             "%s != %s" % (c, g,
+                                           ant1[start:end], ant1[0:chunk1_len],
+                                           ant2[start:end], ant2[0:chunk1_len]))
+
+    return np.full(chunks.shape, True, np.bool)
+
 
 def aggregate_chunks(chunks, max_chunks, return_groups=False):
     """
