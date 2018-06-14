@@ -6,19 +6,19 @@ from functools import wraps
 
 import dask.array as da
 
-from .flagging import sum_threshold_flagger
+from .flagging import sum_threshold_flagger as np_sum_threshold_flagger
 from .stokes import unpolarised_intensity as np_unpolarised_intensity
 
 
-def flagger(vis, flag, chunks, **kwargs):
+def sum_threshold_flagger(vis, flag, chunks, **kwargs):
     """
-    Dask wrapper for :func:`~tricolour.flagging.sum_threshold`
+    Dask wrapper for :func:`~tricolour.flagging.sum_threshold_flagger`
     """
     token = da.core.tokenize(vis, flag, chunks, kwargs)
     name = '-'.join(('flagger', token))
     dims = ("row", "chan", "corr")
 
-    dsk = da.core.top(sum_threshold_flagger, name, dims,
+    dsk = da.core.top(np_sum_threshold_flagger, name, dims,
                       vis.name, dims,
                       flag.name, dims,
                       chunks.name, ("row",),
