@@ -13,31 +13,69 @@ from dask.diagnostics import ProgressBar
 import numpy as np
 import xarray as xr
 
-from xarrayms import xds_from_ms, xds_to_table
+from xarrayms import xds_from_ms, xds_from_table, xds_to_table
 
-from tricolour import sum_threshold_flagger
 from tricolour.util import aggregate_chunks
 from tricolour.config import collect
+from tricolour.dask import (sum_threshold_flagger,
+                            unpolarised_intensity,
+                            check_baseline_ordering)
+from tricolour.stokes import stokes_corr_map
+
 
 
 log = logging.getLogger("tricolour")
 
 
 def load_config(config_file):
-    return config_file, collect([config_file])
+    """
+    Parameters
+    ----------
+    config_file : str
+
+    Returns
+    -------
+    str
+      Configuration file name
+    dict
+      Configuration
+    """
+    if config_file == "":
+      return config_file, {}
+
+    config = collect([config_file])
+
+    # Load configuration from file if present
+    try:
+        flagger_kwargs = config['sum_threshold']
+    except KeyError:
+        log.warn("Configuration file '%s' did not "
+                 "contain a 'sum_threshold' key", filename)
+        flagger_kwargs = {}
+
+    return config_file, flagger_kwargs
 
 
 def create_parser():
     p = argparse.ArgumentParser()
     p.add_argument("ms", help="Measurement Set")
-    p.add_argument("-c", "--config", required=False, type=load_config,
+    p.add_argument("-c", "--config", default="",
+                   required=False, type=load_config,
                    help="YAML config file containing parameters for "
                    "the flagger in the 'sum_threshold' key.")
+    p.add_argument("-fs", "--flagging-strategy", default="standard",
+                   choices=["standard", "polarisation"],
+                   help="Flagging Strategy. "
+                        "If 'standard' all correlations will be flagged "
+                          "independently."
+                        "If 'polarisation' the unpolarised intensity is "
+                          "calculated and used to flag all correlations "
+                          "in the visibility.")
+
     return p
 
 
 if __name__ == "__main__":
-
     args = create_parser().parse_args()
 
     # Group datasets by these columns
@@ -63,100 +101,95 @@ if __name__ == "__main__":
     agg_time, agg_row = zip(*[aggregate_chunks((tc, rc), (len(tc), 1e9))
                               for tc, rc in time_row_chunks])
 
+    assert len(agg_time) == len(xms)
+    assert len(rows) == len(xms)
+
     # Ensure that baseline ordering is consistent per timestep
-    for g, (ms, atc, rc) in enumerate(zip(xms, agg_time, rows)):
-        ant1, ant2 = da.compute(ms.ANTENNA1.data, ms.ANTENNA2.data)
-        start = 0
+    dask.compute([check_baseline_ordering(ms.ANTENNA1.data,
+                                          ms.ANTENNA2.data,
+                                          da.from_array(rc, chunks=(atc,)),
+                                          g=g)
+                  for g, (ms, atc, rc)
+                  in enumerate(zip(xms, agg_time, rows))])
 
-        for c, chunk in enumerate(rc):
-            end = start + chunk
-            ant1_ok = np.all(ant1[start:end] == ant1[0:rc[0]])
-            ant2_ok = np.all(ant2[start:end] == ant2[0:rc[0]])
-
-            if not ant1_ok or not ant2_ok:
-                raise ValueError("Baseline ordering for chunk %d in group %d "
-                                 "is inconsistent with other chunks. "
-                                 "Fully generally Measurement Sets are not "
-                                 "yet supported\n"
-                                 "%s != %s\n"
-                                 "%s != %s" % (c, g,
-                                               ant1[start:end], ant1[0:rc[0]],
-                                               ant2[start:end], ant2[0:rc[0]]))
-
-    # Repoen the datasets using the aggregated row ordering
+    # Reopen the datasets using the aggregated row ordering
     xms = list(xds_from_ms(args.ms,
-                           columns=("TIME", "DATA", "FLAG"),
+                           columns=("DATA", "FLAG"),
                            group_cols=group_cols,
                            index_cols=index_cols,
                            chunks=[{"row": r} for r in agg_row]))
 
-    def flagger(vis, flag, chunks, **kwargs):
-        token = da.core.tokenize(vis, flag, chunks, kwargs)
-        name = '-'.join(('flagger', token))
-        dims = ("row", "chan", "corr")
+    # Get datasets for DATA_DESCRIPTION and POLARIZATION,
+    # partitioned by row
+    data_desc_tab = "::".join((args.ms,"DATA_DESCRIPTION"))
+    ddid_ds = list(xds_from_table(data_desc_tab, group_cols="__row__"))
+    pol_tab = "::".join((args.ms,"POLARIZATION"))
+    pds = list(xds_from_table(pol_tab, group_cols="__row__"))
 
-        dsk = da.core.top(sum_threshold_flagger, name, dims,
-                          vis.name, dims,
-                          flag.name, dims,
-                          chunks.name, ("row",),
-                          numblocks={
-                              vis.name: vis.numblocks,
-                              flag.name: flag.numblocks,
-                              chunks.name: chunks.numblocks
-                          },
-                          **kwargs)
+    # Add data from the POLARIZATION table into the dataset
+    def _add_pol_data(ms):
+        ddid = ddid_ds[ms.attrs['DATA_DESC_ID']].drop('table_row')
+        pol = pds[ddid.POLARIZATION_ID.values].drop('table_row')
+        return ms.assign(CORR_TYPE=pol.CORR_TYPE,
+                         CORR_PRODUCT=pol.CORR_PRODUCT)
 
-        # Add input graphs to the graph
-        dsk.update(vis.__dask_graph__())
-        dsk.update(flag.__dask_graph__())
-        dsk.update(chunks.__dask_graph__())
+    xms = [_add_pol_data(ms) for ms in xms]
 
-        return da.Array(dsk, name, vis.chunks, dtype=flag.dtype)
-
-    assert len(agg_time) == len(xms)
-    assert len(rows) == len(xms)
-
-    # Load configuration from file if present
-    if args.config:
-        filename, config = args.config
-        try:
-            flagger_kwargs = config['sum_threshold']
-        except KeyError:
-            log.warn("Configuration file '%s' did not "
-                     "contain a 'sum_threshold' key", filename)
-            flagger_kwargs = {}
-    else:
-        flagger_kwargs = {}
-
+    cfg_file, flagger_kwargs = args.config
     write_computes = []
 
-    for ms, atc, rc in zip(xms, agg_time, rows):
-        if np.unique(rc).size != 1:
-            raise ValueError("Inconsistent number of baselines per timestep. "
-                             "All baselines must be present.")
-
-        ntime, nbl = atc[0], rc[0]
+    # Iterate through dataset
+    for ms, agg_time_counts, row_counts in zip(xms, agg_time, rows):
+        ntime, nbl = agg_time_counts[0], row_counts[0]
         nrow, nchan, ncorr = ms.DATA.data.shape
+        chunks = da.from_array(row_counts, chunks=(agg_time_counts,))
+
+        vis = ms.DATA.data
+        flags = ms.FLAG.data
+
+        # If we're flagging on unpolarised intensity,
+        # we convert visibilities to unpolarised intensity
+        # and any flagged correlation will flag the entire visibility
+        if args.flagging_strategy == "polarisation":
+            corr_type = ms.CORR_TYPE.data.compute().tolist()
+            stokes_map = stokes_corr_map(corr_type)
+            stokes_unpol = tuple(v for k, v in stokes_map.items() if k == 'I')
+            stokes_pol = tuple(v for k, v in stokes_map.items() if k != 'I')
+
+            vis = unpolarised_intensity(vis, stokes_unpol, stokes_pol)
+            flags = da.any(flags, axis=2, keepdims=True)
+            xncorr = 1
+        elif args.flagging_strategy == "standard":
+            xncorr = ncorr
+        else:
+            raise ValueError("Invalid flagging Strategy %s" %
+                              args.flagging_strategy)
 
         # Reorder vis and flags into katdal-like format
         # (ntime, nchan, ncorrprod). Chunk the corrprod
         # dimension into groups of 128 correlation products
-        vis = ms.DATA.data.reshape(ntime, nbl, nchan, ncorr)
-        vis = vis.transpose(0, 2, 1, 3).reshape((ntime, nchan, -1))
-        vis = vis.rechunk({2: 128})
+        vis = vis.reshape(ntime, nbl, nchan, xncorr)
+        flags = flags.reshape(ntime, nbl, nchan, xncorr)
 
-        flags = ms.FLAG.data.reshape(ntime, nbl, nchan, ncorr)
+        vis = vis.transpose(0, 2, 1, 3).reshape((ntime, nchan, -1))
         flags = flags.transpose(0, 2, 1, 3).reshape((ntime, nchan, -1))
+
+        vis = vis.rechunk({2: 128})
         flags = flags.rechunk({2: 128})
 
-        chunks = da.from_array(rc, chunks=(atc,))
-        new_flags = flagger(vis, flags, chunks, **flagger_kwargs)
+        # Run the flagger
+        new_flags = sum_threshold_flagger(vis, flags, chunks, **flagger_kwargs)
 
         # Reorder flags from katdal-like format back to the MS ordering
         # (ntime*nbl, nchan, ncorr)
-        new_flags = new_flags.reshape((ntime, nchan, nbl, ncorr))
+        new_flags = new_flags.reshape((ntime, nchan, nbl, xncorr))
         new_flags = new_flags.transpose(0, 2, 1, 3)
-        new_flags = new_flags.reshape((-1, nchan, ncorr))
+        new_flags = new_flags.reshape((-1, nchan, xncorr))
+
+        # Polarised flagging, broadcast the single correlation
+        # back to the full correlation range (all flagged)
+        if args.flagging_strategy == "polarisation":
+            new_flags = da.broadcast_to(new_flags, (ntime*nbl, nchan, ncorr))
 
         new_ms = ms.assign(FLAG=xr.DataArray(new_flags, dims=ms.FLAG.dims))
 
