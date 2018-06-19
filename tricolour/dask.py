@@ -10,7 +10,8 @@ import dask.array as da
 import numpy as np
 
 from .flagging import sum_threshold_flagger as np_sum_threshold_flagger
-from .stokes import unpolarised_intensity as np_unpolarised_intensity
+from .stokes import (polarised_intensity as np_polarised_intensity,
+                     unpolarised_intensity as np_unpolarised_intensity)
 from .util import check_baseline_ordering as np_check_baseline_ordering
 
 
@@ -84,9 +85,24 @@ def unpolarised_intensity(vis, stokes_unpol, stokes_pol):
     def _wrapper(vis, stokes_unpol=None, stokes_pol=None):
         return np_unpolarised_intensity(vis, stokes_unpol, stokes_pol)
 
-    return da.core.atop(_wrapper, ("row", "chan", "corr"),
-                        vis, ("row", "chan", "corr"),
+    return da.core.atop(_wrapper, ("time", "bl", "chan", "corr"),
+                        vis, ("time", "bl", "chan", "corr"),
                         stokes_unpol=stokes_unpol,
+                        stokes_pol=stokes_pol,
+                        adjust_chunks={"corr": 1},
+                        dtype=vis.dtype)
+
+
+def polarised_intensity(vis, stokes_pol):
+    """
+    Dask wrapper for :func:`~tricolour.stokes.polarised_intensity`
+    """
+    @wraps(np_polarised_intensity)
+    def _wrapper(vis, stokes_pol=None):
+        return np_polarised_intensity(vis, stokes_pol)
+
+    return da.core.atop(_wrapper, ("time", "bl", "chan", "corr"),
+                        vis, ("time", "bl", "chan", "corr"),
                         stokes_pol=stokes_pol,
                         adjust_chunks={"corr": 1},
                         dtype=vis.dtype)

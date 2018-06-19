@@ -29,6 +29,7 @@ except ImportError:
 from tricolour.util import aggregate_chunks
 from tricolour.config import collect
 from tricolour.dask import (sum_threshold_flagger,
+                            polarised_intensity,
                             unpolarised_intensity,
                             check_baseline_ordering)
 from tricolour.stokes import stokes_corr_map
@@ -80,7 +81,8 @@ def create_parser():
                    help="Flagging Strategy. "
                         "If 'standard' all correlations in the visibility "
                           "are flagged independently. "
-                        "If 'polarisation' the unpolarised intensity is "
+                        "If 'polarisation' the polarised intensity "
+                          "sqrt(Q^2 + U^2 + V^2) is "
                           "calculated and used to flag all correlations "
                           "in the visibility.")
 
@@ -166,17 +168,26 @@ if __name__ == "__main__":
         else:
             flags = ms.FLAG.data
 
-        # If we're flagging on unpolarised intensity,
-        # we convert visibilities to unpolarised intensity
+        # Reorder vis and flags into katdal-like format
+        # (ntime, nchan, ncorrprod). Chunk the corrprod
+        # dimension into groups of 64 baselines
+        vis = vis.reshape(ntime, nbl, nchan, ncorr)
+        flags = flags.reshape(ntime, nbl, nchan, ncorr)
+
+        # Rechunk on baseline dimension
+        vis = vis.rechunk({1: 64})
+        flags = flags.rechunk({1: 64})
+
+        # If we're flagging on polarised intensity,
+        # we convert visibilities to polarised intensity
         # and any flagged correlation will flag the entire visibility
         if args.flagging_strategy == "polarisation":
             corr_type = ms.CORR_TYPE.data.compute().tolist()
             stokes_map = stokes_corr_map(corr_type)
-            stokes_unpol = tuple(v for k, v in stokes_map.items() if k == 'I')
             stokes_pol = tuple(v for k, v in stokes_map.items() if k != 'I')
 
-            vis = unpolarised_intensity(vis, stokes_unpol, stokes_pol)
-            flags = da.any(flags, axis=2, keepdims=True)
+            vis = polarised_intensity(vis, stokes_pol)
+            flags = da.any(flags, axis=3, keepdims=True)
             xncorr = 1
         elif args.flagging_strategy == "standard":
             xncorr = ncorr
@@ -184,17 +195,10 @@ if __name__ == "__main__":
             raise ValueError("Invalid flagging Strategy %s" %
                               args.flagging_strategy)
 
-        # Reorder vis and flags into katdal-like format
-        # (ntime, nchan, ncorrprod). Chunk the corrprod
-        # dimension into groups of 128 correlation products
-        vis = vis.reshape(ntime, nbl, nchan, xncorr)
-        flags = flags.reshape(ntime, nbl, nchan, xncorr)
-
-        vis = vis.transpose(0, 2, 1, 3).reshape((ntime, nchan, -1))
-        flags = flags.transpose(0, 2, 1, 3).reshape((ntime, nchan, -1))
-
-        vis = vis.rechunk({2: 128})
-        flags = flags.rechunk({2: 128})
+        vis = vis.transpose(0, 2, 1, 3)
+        vis = vis.reshape((ntime, nchan, nbl*xncorr))
+        flags = flags.transpose(0, 2, 1, 3)
+        flags = flags.reshape((ntime, nchan, nbl*xncorr))
 
         # Run the flagger
         new_flags = sum_threshold_flagger(vis, flags, chunks, **flagger_kwargs)
