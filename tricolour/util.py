@@ -42,7 +42,7 @@ def check_baseline_ordering(ant1, ant2, chunks, g=None):
         if not ant1_ok or not ant2_ok:
             raise ValueError("Baseline ordering for chunk %d in group %d "
                              "is inconsistent with other chunks. "
-                             "Fully generally Measurement Sets are not "
+                             "Fully general Measurement Sets are not "
                              "yet supported\n"
                              "%s != %s\n"
                              "%s != %s" % (c, g,

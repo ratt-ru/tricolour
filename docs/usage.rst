@@ -22,8 +22,10 @@ The flagger can be run from the command line::
         -fs {standard,polarisation}, --flagging-strategy {standard,polarisation}
                               Flagging Strategy. If 'standard' all correlations in
                               the visibility are flagged independently. If
-                              'polarisation' the unpolarised intensity is calculated
-                              and used to flag all correlations in the visibility.
+                              'polarisation' the polarised intensity sqrt(Q^2 + U^2
+                              + V^2) is calculated and used to flag all correlations
+                              in the visibility.
+
 
 Sample Configuration Parameters
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
