@@ -28,15 +28,15 @@ def check_baseline_ordering(ant1, ant2, chunks, g):
     dims = ("row",)
 
     dsk = da.core.top(np_check_baseline_ordering, name, dims,
-                        ant1.name, dims,
-                        ant2.name, dims,
-                        chunks.name, dims,
-                        numblocks={
-                            ant1.name: ant1.numblocks,
-                            ant2.name: ant2.numblocks,
-                            chunks.name: chunks.numblocks,
-                        },
-                        g=g)
+                      ant1.name, dims,
+                      ant2.name, dims,
+                      chunks.name, dims,
+                      numblocks={
+                          ant1.name: ant1.numblocks,
+                          ant2.name: ant2.numblocks,
+                          chunks.name: chunks.numblocks,
+                      },
+                      g=g)
 
     dsk.update(ant1.__dask_graph__())
     dsk.update(ant2.__dask_graph__())
@@ -74,7 +74,6 @@ def sum_threshold_flagger(vis, flag, chunks, **kwargs):
     dsk.update(chunks.__dask_graph__())
 
     return da.Array(dsk, name, vis.chunks, dtype=flag.dtype)
-
 
 
 def unpolarised_intensity(vis, stokes_unpol, stokes_pol):

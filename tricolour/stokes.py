@@ -38,9 +38,9 @@ stokes_deps = {
 }
 
 # Convert to numeric stokes types
-stokes_deps = { k: [(STOKES_TYPES[c1], STOKES_TYPES[c2], a, s1, s2)
-                    for (c1, c2, a, s1, s2) in deps]
-                    for k, deps in stokes_deps.items()}
+stokes_deps = {k: [(STOKES_TYPES[c1], STOKES_TYPES[c2], a, s1, s2)
+                   for (c1, c2, a, s1, s2) in deps]
+               for k, deps in stokes_deps.items()}
 
 
 def stokes_corr_map(corr_types):
@@ -135,18 +135,20 @@ def unpolarised_intensity(vis, stokes_unpol, stokes_pol):
                 pol = 0
 
                 for (c1, c2, a, s1, s2) in stokes_pol:
-                    value = a*(s1*vis[t,bl,f,c1] + s2*vis[t,bl,f,c2])
+                    value = a * (s1 * vis[t, bl, f, c1] +
+                                 s2 * vis[t, bl, f, c2])
                     pol += value.real**2  # imaginary contains only noise
 
                 # Unpolarised intensity (I)
                 unpol = 0
 
                 for (c1, c2, a, s1, s2) in stokes_unpol:
-                    value = a*(s1*vis[t,bl,f,c1] + s2*vis[t,bl,f,c2])
+                    value = a * (s1 * vis[t, bl, f, c1] +
+                                 s2 * vis[t, bl, f, c2])
                     unpol += value.real   # imaginary contains only noise
 
                 # I - sqrt(Q^2 + U^2 + V^2)
-                out_vis[t,bl,f,0] = unpol - np.sqrt(pol)
+                out_vis[t, bl, f, 0] = unpol - np.sqrt(pol)
 
     return out_vis
 
@@ -194,10 +196,11 @@ def polarised_intensity(vis, stokes_pol):
                 pol = 0
 
                 for (c1, c2, a, s1, s2) in stokes_pol:
-                    value = a*(s1*vis[t,bl,f,c1] + s2*vis[t,bl,f,c2])
+                    value = a * (s1 * vis[t, bl, f, c1] +
+                                 s2 * vis[t, bl, f, c2])
                     pol += value.real**2  # imaginary contains only noise
 
                 # sqrt(Q^2 + U^2 + V^2)
-                out_vis[t,bl,f,0] = np.sqrt(pol)
+                out_vis[t, bl, f, 0] = np.sqrt(pol)
 
     return out_vis
