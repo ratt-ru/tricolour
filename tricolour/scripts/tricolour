@@ -5,8 +5,9 @@ from __future__ import print_function
 
 import argparse
 import contextlib
-import logging
 from functools import wraps
+import logging
+import multiprocessing
 
 import dask
 import dask.array as da
@@ -85,6 +86,12 @@ def create_parser():
                           "sqrt(Q^2 + U^2 + V^2) is "
                           "calculated and used to flag all correlations "
                           "in the visibility.")
+    p.add_argument("-rc", "--row-chunks", type=int, default=10000,
+                    help="Hint indicating the number of Measurement Set rows "
+                         "to read in a single chunk. "
+                         "Smaller and larger numbers will tend to "
+                         "respectively decrease or increase both memory usage "
+                         "and computational efficiency")
 
     return p
 
@@ -98,37 +105,43 @@ if __name__ == "__main__":
     # Index datasets by these columns
     index_cols = ['TIME']
 
-    xms = list(xds_from_ms(args.ms,
+    xds = list(xds_from_ms(args.ms,
                            columns=("TIME", "ANTENNA1", "ANTENNA2"),
                            group_cols=group_cols,
                            index_cols=index_cols,
                            chunks={"row": 1e9}))
 
     # Find the unique times and their row counts
-    utime_chunks = [da.unique(ms.TIME.data, return_counts=True)
-                    for i, ms in enumerate(xms)]
-    utime_chunks = dask.compute(utime_chunks)[0]
-    assert all(len(t) == 2 for t in utime_chunks)
-    # Set up dask chunks for the unique timesteps and their row counts
-    time_row_chunks = [((1,) * ut.size, rc) for ut, rc in utime_chunks]
-    utime, rows = zip(*time_row_chunks)
-    # Aggregate time and row chunks into the number of timesteps per scan
-    agg_time, agg_row = zip(*[aggregate_chunks((tc, rc), (len(tc), 1e9))
-                              for tc, rc in time_row_chunks])
-
-    assert len(agg_time) == len(xms)
-    assert len(rows) == len(xms)
+    utime_counts = [da.unique(ds.TIME.data, return_counts=True)
+                    for i, ds in enumerate(xds)]
+    utime_counts = dask.compute(utime_counts)[0]
+    scan_rows = tuple(counts for _, counts in utime_counts)
+    scan_chunks = [da.from_array(rc, chunks=ut.size)
+                         for ut, rc in utime_counts]
+    assert len(scan_rows) == len(xds)
 
     # Ensure that baseline ordering is consistent per timestep
-    dask.compute([check_baseline_ordering(ms.ANTENNA1.data,
-                                          ms.ANTENNA2.data,
-                                          da.from_array(rc, chunks=(atc,)),
+    dask.compute([check_baseline_ordering(ds.ANTENNA1.data,
+                                          ds.ANTENNA2.data,
+                                          chunks,
                                           g=g)
-                  for g, (ms, atc, rc)
-                  in enumerate(zip(xms, agg_time, rows))])
+                  for g, (ds, chunks)
+                  in enumerate(zip(xds, scan_chunks))])
+
+    # Determine how many rows we should handle at once.
+    # The row chunk sizes in scan rows already correspond to
+    # single timesteps, so choose the maximum supplied either by the user
+    # or discovered intrinsically in the data itself
+    row_chunks = max(args.row_chunks, max(c.max() for c in scan_rows))
+
+    # Aggregate time and row chunks into the number of timesteps per scan
+    #time_row_chunks = [(, rc) for ut, rc in utime_counts]
+    agg_time, agg_row = zip(*[aggregate_chunks(((1,) * len(counts), counts),
+                                               (len(counts), row_chunks))
+                              for utime, counts in utime_counts])
 
     # Reopen the datasets using the aggregated row ordering
-    xms = list(xds_from_ms(args.ms,
+    xds = list(xds_from_ms(args.ms,
                            columns=("DATA", "FLAG"),
                            group_cols=group_cols,
                            index_cols=index_cols,
@@ -142,31 +155,32 @@ if __name__ == "__main__":
     pds = list(xds_from_table(pol_tab, group_cols="__row__"))
 
     # Add data from the POLARIZATION table into the dataset
-    def _add_pol_data(ms):
-        ddid = ddid_ds[ms.attrs['DATA_DESC_ID']].drop('table_row')
+    def _add_pol_data(ds):
+        ddid = ddid_ds[ds.attrs['DATA_DESC_ID']].drop('table_row')
         pol = pds[ddid.POLARIZATION_ID.values].drop('table_row')
-        return ms.assign(CORR_TYPE=pol.CORR_TYPE,
+        return ds.assign(CORR_TYPE=pol.CORR_TYPE,
                          CORR_PRODUCT=pol.CORR_PRODUCT)
 
-    xms = [_add_pol_data(ms) for ms in xms]
+    xds = [_add_pol_data(ds) for ds in xds]
 
     write_computes = []
 
     # Iterate through each dataset
-    for ms, agg_time_counts, row_counts in zip(xms, agg_time, rows):
-        ntime, nbl = agg_time_counts[0], row_counts[0]
-        nrow, nchan, ncorr = ms.DATA.data.shape
+    for ds, agg_time_counts, row_counts in zip(xds, agg_time, scan_rows):
+        row_counts = np.asarray(row_counts)
+        ntime, nbl = row_counts.size, row_counts[0]
+        nrow, nchan, ncorr = ds.DATA.data.shape
         chunks = da.from_array(row_counts, chunks=(agg_time_counts,))
 
         # Visibilities from the dataset
-        vis = ms.DATA.data
+        vis = ds.DATA.data
 
         # Generate unflagged defaults if we should ignore existing flags
         # otherwise take flags from the dataset
         if args.ignore_flags == True:
             flags = da.full_like(vis, False, dtype=np.bool)
         else:
-            flags = ms.FLAG.data
+            flags = ds.FLAG.data
 
         # Reorder vis and flags into katdal-like format
         # (ntime, nchan, ncorrprod). Chunk the corrprod
@@ -182,7 +196,7 @@ if __name__ == "__main__":
         # we convert visibilities to polarised intensity
         # and any flagged correlation will flag the entire visibility
         if args.flagging_strategy == "polarisation":
-            corr_type = ms.CORR_TYPE.data.compute().tolist()
+            corr_type = ds.CORR_TYPE.data.compute().tolist()
             stokes_map = stokes_corr_map(corr_type)
             stokes_pol = tuple(v for k, v in stokes_map.items() if k != 'I')
 
@@ -214,7 +228,9 @@ if __name__ == "__main__":
         if args.flagging_strategy == "polarisation":
             new_flags = da.broadcast_to(new_flags, (ntime*nbl, nchan, ncorr))
 
-        new_ms = ms.assign(FLAG=xr.DataArray(new_flags, dims=ms.FLAG.dims))
+        # Make a single chunk for the write back to disk
+        new_flags = new_flags.rechunk(new_flags.shape)
+        new_ms = ds.assign(FLAG=xr.DataArray(new_flags, dims=ds.FLAG.dims))
 
         writes = xds_to_table(new_ms, args.ms, "FLAG")
         write_computes.append(writes)
@@ -223,8 +239,12 @@ profilers = ([Profiler(), CacheProfiler(), ResourceProfiler()]
               if can_profile else [])
 contexts = [ProgressBar()] + profilers
 
-with contextlib.nested(*contexts):
-    dask.compute(write_computes)
+
+from multiprocessing.pool import ThreadPool
+pool = ThreadPool(multiprocessing.cpu_count()*2)
+
+with contextlib.nested(*contexts), dask.config.set(pool=pool):
+        dask.compute(write_computes)
 
 if can_profile:
     visualize(profilers)
