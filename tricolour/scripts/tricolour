@@ -136,7 +136,6 @@ if __name__ == "__main__":
     row_chunks = max(args.row_chunks, max(c.max() for c in scan_rows))
 
     # Aggregate time and row chunks into the number of timesteps per scan
-    #time_row_chunks = [(, rc) for ut, rc in utime_counts]
     agg_time, agg_row = zip(*[aggregate_chunks(((1,) * len(counts), counts),
                                                (len(counts), row_chunks))
                               for utime, counts in utime_counts])
