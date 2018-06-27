@@ -140,7 +140,9 @@ if __name__ == "__main__":
     # or discovered intrinsically in the data itself
     row_chunks = max(args.row_chunks, max(c.max() for c in scan_rows))
 
-    # Aggregate time and row chunks into the number of timesteps per scan
+    # Aggregate time and rows together into chunks that
+    # are at least len(counts) in time or counts in rows,
+    # whichever gets reached first
     agg_time, agg_row = zip(*[aggregate_chunks(((1,) * len(counts), counts),
                                                (len(counts), row_chunks))
                               for utime, counts in utime_counts])
