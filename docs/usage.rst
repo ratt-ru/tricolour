@@ -9,7 +9,7 @@ The flagger can be run from the command line::
 
     $ tricolour --help
       usage: tricolour [-h] [-c CONFIG] [-if] [-fs {standard,polarisation}]
-                       [-rc ROW_CHUNKS]
+                       [-rc ROW_CHUNKS] [-nw NWORKERS]
                        ms
 
       positional arguments:
@@ -33,6 +33,11 @@ The flagger can be run from the command line::
                               will tend to respectively decrease or increase both
                               memory usage and computational efficiency (default:
                               10000)
+        -nw NWORKERS, --nworkers NWORKERS
+                              Number of workers (threads) to use. By default, set to
+                              twice the number of logical CPUs on the system. Many
+                              workers can also affect memory usage on systems with
+                              many cores. (default: 16)
 
 Sample Configuration Parameters
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

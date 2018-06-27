@@ -7,7 +7,7 @@ import argparse
 import contextlib
 from functools import wraps
 import logging
-import multiprocessing
+from multiprocessing.pool import ThreadPool, cpu_count
 
 import dask
 import dask.array as da
@@ -93,6 +93,12 @@ def create_parser():
                          "Smaller and larger numbers will tend to "
                          "respectively decrease or increase both memory usage "
                          "and computational efficiency")
+    p.add_argument("-nw", "--nworkers", type=int, default=cpu_count()*2,
+                    help="Number of workers (threads) to use. "
+                         "By default, set to twice the "
+                         "number of logical CPUs on the system. "
+                         "Many workers can also affect memory usage "
+                         "on systems with many cores.")
 
     return p
 
@@ -240,8 +246,7 @@ profilers = ([Profiler(), CacheProfiler(), ResourceProfiler()]
 contexts = [ProgressBar()] + profilers
 
 
-from multiprocessing.pool import ThreadPool
-pool = ThreadPool(multiprocessing.cpu_count()*2)
+pool = ThreadPool(args.nworkers)
 
 with contextlib.nested(*contexts), dask.config.set(pool=pool):
         dask.compute(write_computes)
