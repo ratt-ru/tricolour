@@ -8,7 +8,9 @@ Command Line
 The flagger can be run from the command line::
 
     $ tricolour --help
-      usage: tricolour [-h] [-c CONFIG] [-if] [-fs {standard,polarisation}] ms
+      usage: tricolour [-h] [-c CONFIG] [-if] [-fs {standard,polarisation}]
+                       [-rc ROW_CHUNKS]
+                       ms
 
       positional arguments:
         ms                    Measurement Set
@@ -17,15 +19,20 @@ The flagger can be run from the command line::
         -h, --help            show this help message and exit
         -c CONFIG, --config CONFIG
                               YAML config file containing parameters for the flagger
-                              in the 'sum_threshold' key.
+                              in the 'sum_threshold' key. (default: )
         -if, --ignore-flags
         -fs {standard,polarisation}, --flagging-strategy {standard,polarisation}
                               Flagging Strategy. If 'standard' all correlations in
                               the visibility are flagged independently. If
                               'polarisation' the polarised intensity sqrt(Q^2 + U^2
                               + V^2) is calculated and used to flag all correlations
-                              in the visibility.
-
+                              in the visibility. (default: standard)
+        -rc ROW_CHUNKS, --row-chunks ROW_CHUNKS
+                              Hint indicating the number of Measurement Set rows to
+                              read in a single chunk. Smaller and larger numbers
+                              will tend to respectively decrease or increase both
+                              memory usage and computational efficiency (default:
+                              10000)
 
 Sample Configuration Parameters
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

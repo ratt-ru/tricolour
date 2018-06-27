@@ -70,7 +70,8 @@ def load_config(config_file):
 
 
 def create_parser():
-    p = argparse.ArgumentParser()
+    formatter = argparse.ArgumentDefaultsHelpFormatter
+    p = argparse.ArgumentParser(formatter_class=formatter)
     p.add_argument("ms", help="Measurement Set")
     p.add_argument("-c", "--config", default="",
                    required=False, type=load_config,
