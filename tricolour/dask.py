@@ -6,6 +6,7 @@ from __future__ import print_function
 
 from functools import wraps
 
+from dask import sharedict
 import dask.array as da
 import numpy as np
 
@@ -38,9 +39,9 @@ def check_baseline_ordering(ant1, ant2, chunks, g):
                       },
                       g=g)
 
-    dsk.update(ant1.__dask_graph__())
-    dsk.update(ant2.__dask_graph__())
-    dsk.update(chunks.__dask_graph__())
+    dsk = sharedict.merge(dsk, ant1.__dask_graph__(),
+                          ant2.__dask_graph__(),
+                          chunks.__dask_graph__())
 
     return da.Array(dsk, name, chunks.chunks, dtype=np.bool)
 
@@ -69,9 +70,9 @@ def sum_threshold_flagger(vis, flag, chunks, **kwargs):
                       **kwargs)
 
     # Add input graphs to the graph
-    dsk.update(vis.__dask_graph__())
-    dsk.update(flag.__dask_graph__())
-    dsk.update(chunks.__dask_graph__())
+    dsk = sharedict.merge(dsk, vis.__dask_graph__(),
+                          flag.__dask_graph__(),
+                          chunks.__dask_graph__())
 
     return da.Array(dsk, name, vis.chunks, dtype=flag.dtype)
 
