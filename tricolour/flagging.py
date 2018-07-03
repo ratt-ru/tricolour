@@ -875,7 +875,7 @@ def sum_threshold_flagger(vis, flags, chunks=None, outlier_nsigma=4.5,
 
     # Clip the windows to the available time and frequency range
     windows_time = np.array(
-        [w for w in windows_time if w <= vis.shape[1]], np.int_)
+        [w for w in windows_time if w <= vis.shape[0]], np.int_)
     windows_freq = np.array(
         [w for w in windows_freq if w <= averaged_channels], np.int_)
 

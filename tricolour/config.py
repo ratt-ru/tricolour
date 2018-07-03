@@ -60,5 +60,4 @@ def collect(paths=paths):
             data = yaml.load(f.read()) or {}
             configs.append(data)
 
-
     return merge(*configs)
