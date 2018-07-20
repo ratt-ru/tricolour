@@ -5,33 +5,22 @@ from __future__ import print_function
 
 import argparse
 import contextlib
-from functools import wraps
 import logging
 from multiprocessing.pool import ThreadPool, cpu_count
 
 import dask
 import dask.array as da
-from dask.diagnostics import (ProgressBar, Profiler,
-                              ResourceProfiler,
-                              CacheProfiler, visualize)
 
 import numpy as np
 import xarray as xr
 
 from xarrayms import xds_from_ms, xds_from_table, xds_to_table
 
-try:
-    import bokeh
-    can_profile = True
-except ImportError:
-    can_profile = False
-
-
+from tricolour.sched_context import scheduler_context
 from tricolour.util import aggregate_chunks
 from tricolour.config import collect
 from tricolour.dask import (sum_threshold_flagger,
                             polarised_intensity,
-                            unpolarised_intensity,
                             check_baseline_ordering)
 from tricolour.stokes import stokes_corr_map
 
@@ -62,7 +51,7 @@ def load_config(config_file):
         flagger_kwargs = config['sum_threshold']
     except KeyError:
         log.warn("Configuration file '%s' did not "
-                 "contain a 'sum_threshold' key", filename)
+                 "contain a 'sum_threshold' key", config_file)
         flagger_kwargs = {}
 
     return config_file, flagger_kwargs
@@ -98,6 +87,8 @@ def create_parser():
                    "number of logical CPUs on the system. "
                    "Many workers can also affect memory usage "
                    "on systems with many cores.")
+    p.add_argument("-ds", "--scheduler", default="threads",
+                   help="Dask Scheduler")
 
     return p
 
@@ -242,15 +233,7 @@ if __name__ == "__main__":
         writes = xds_to_table(new_ms, args.ms, "FLAG")
         write_computes.append(writes)
 
-profilers = ([Profiler(), CacheProfiler(), ResourceProfiler()]
-             if can_profile else [])
-contexts = [ProgressBar()] + profilers
 
 
-pool = ThreadPool(args.nworkers)
-
-with contextlib.nested(*contexts), dask.config.set(pool=pool):
+with scheduler_context(args.scheduler):
     dask.compute(write_computes)
-
-if can_profile:
-    visualize(profilers)
