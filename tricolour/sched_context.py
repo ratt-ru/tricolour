@@ -68,10 +68,7 @@ def scheduler_context(scheduler):
                 else:
                     client.close()
 
-                try:
-                    local_cluster = sched_info["local_cluster"]
-                except KeyError:
-                    local_cluster = None
+                local_cluster = sched_info.get("local_cluster", None)
 
                 if local_cluster:
                     local_cluster.close()
