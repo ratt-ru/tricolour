@@ -20,7 +20,7 @@ requirements = [
     'numpy >= 1.14.0',
     'numba >= 0.38.0',
     'ruamel.yaml >= 0.15.37',
-    'xarray-ms >= 0.1.1',
+    'xarray-ms >= 0.1.2',
 ]
 
 setup_requirements = ['pytest-runner', ]
