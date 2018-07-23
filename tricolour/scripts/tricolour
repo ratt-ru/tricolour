@@ -187,8 +187,8 @@ if __name__ == "__main__":
         flags = flags.reshape(ntime, nbl, nchan, ncorr)
 
         # Rechunk on baseline dimension
-        vis = vis.rechunk({1: 64})
-        flags = flags.rechunk({1: 64})
+        vis = vis.rechunk(ntime, 64, nchan, ncorr)
+        flags = flags.rechunk(ntime, 64, nchan, ncorr)
 
         # If we're flagging on polarised intensity,
         # we convert visibilities to polarised intensity
@@ -232,8 +232,6 @@ if __name__ == "__main__":
 
         writes = xds_to_table(new_ms, args.ms, "FLAG")
         write_computes.append(writes)
-
-
 
 with scheduler_context(args.scheduler):
     dask.compute(write_computes)
