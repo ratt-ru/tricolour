@@ -187,8 +187,8 @@ if __name__ == "__main__":
         flags = flags.reshape(ntime, nbl, nchan, ncorr)
 
         # Rechunk on baseline dimension
-        vis = vis.rechunk(ntime, 64, nchan, ncorr)
-        flags = flags.rechunk(ntime, 64, nchan, ncorr)
+        vis = vis.rechunk((ntime, 64, nchan, ncorr))
+        flags = flags.rechunk((ntime, 64, nchan, ncorr))
 
         # If we're flagging on polarised intensity,
         # we convert visibilities to polarised intensity
