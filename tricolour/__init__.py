@@ -11,7 +11,7 @@ import logging.handlers
 
 __author__ = """Simon Perkins"""
 __email__ = 'sperkins@ska.ac.za'
-__version__ = '0.1.0'
+__version__ = '0.2.0'
 import tricolour.post_mortem_handler
 post_mortem_handler.enable_pdb_on_error()
 import argparse
