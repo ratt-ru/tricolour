@@ -1,0 +1,56 @@
+background_static_mask:
+    task: apply_static_mask
+    order: 0
+    accumulation_mode: "or"
+    uvrange: ""
+background_flags:
+    task: sum_threshold 
+    order: 1
+    outlier_nsigma: 4.5
+    windows_time: [1, 2, 4, 8]
+    windows_freq: [1, 2, 4, 8]
+    background_reject: 2.0
+    background_iterations: 1
+    spike_width_time: 12.5
+    spike_width_freq: 10.0
+    time_extend: 3
+    freq_extend: 3
+    freq_chunks: 10
+    average_freq: 1
+    flag_all_time_frac: 0.6
+    flag_all_freq_frac: 0.8
+    rho: 1.3
+    num_major_iterations: 5
+residual_flag:
+    task: uvcontsub_flagger
+    order: 2
+    major_cycles: 5
+    or_original_from_cycle: 1
+    taylor_degrees: 20
+    sigma: 5
+short_spacings_static_mask:
+    task: apply_static_mask
+    order: 3
+    accumulation_mode: "or"
+    uvrange: "0~250m"
+final_sum_threshold:
+    task: sum_threshold 
+    order: 4
+    outlier_nsigma: 4.5
+    windows_time: [1, 2, 4, 8]
+    windows_freq: [1, 2, 4, 8]
+    background_reject: 2.0
+    background_iterations: 5
+    spike_width_time: 1.0
+    spike_width_freq: 2.0
+    time_extend: 3
+    freq_extend: 3
+    freq_chunks: 10
+    average_freq: 1
+    flag_all_time_frac: 0.6
+    flag_all_freq_frac: 0.8
+    rho: 1.3
+    num_major_iterations: 1
+combine_with_input_flags:
+    task: combine_with_input_flags
+    order: 5

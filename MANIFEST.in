@@ -4,7 +4,8 @@ include HISTORY.rst
 include LICENSE
 include README.rst
 
-recursive-include conf *
+recursive-include tricolour/conf *
+recursive-include tricolour/data *
 recursive-include tests *
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]
