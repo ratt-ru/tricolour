@@ -51,7 +51,7 @@ def apply_static_mask(vis, flag, a1, a2, antspos, masks, spw_chanlabels, spw_cha
         if not isinstance(val, str):
             raise argparse.ArgumentTypeError("Value must be of type string")
         if val == "":
-            return (-np.inf, np.inf)
+            return (0, 1e9)
         elif re.match(r"^(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?~(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?[\s]*[m]?$", val):
             return map(float,val.replace(" ","").replace("\t","").replace("m","").split("~"))
         else:
@@ -88,7 +88,7 @@ def apply_static_mask(vis, flag, a1, a2, antspos, masks, spw_chanlabels, spw_cha
                                "Maybe run pyxis ms.prep?")
         # Apply flags
         flag_buffer = flag.view()
-        d2 = np.sum((antspos[a1.flatten()][:] - antspos[a2.flatten()][:])**2, axis=1).reshape(a1.shape)
+        d2 = np.sum((antspos[a1.flatten()][:] - antspos[a2.flatten()][:])**2, axis=1)
 
         # ECEF antenna coordinates are in meters. The transforms to get it into UV space are just rotations
         # can just take the euclidian norm here - optimized by not doing sqrt
@@ -102,15 +102,15 @@ def apply_static_mask(vis, flag, a1, a2, antspos, masks, spw_chanlabels, spw_cha
                                ncorr).reshape([nfreq,
                                                ncorr]).transpose(1, 0) # ncorr, nfreq
         flag_buffer = flag_buffer.transpose(0, 2, 1).reshape(nrow, ncorr, nfreq)
+
         if accumulation_mode == "or":
-            flag_buffer[sel, :, :] |= mask_corrs
+            flag_buffer[sel, :, :] |= mask_corrs[None, :, :]
         elif accumulation_mode == "override":
-            flag_buffer[sel, :, :] = mask_corrs
+            flag_buffer[sel, :, :] = mask_corrs[None, :, :]
         else:
-            pass
+            raise ValueError("Static mask accumulation mode not understood - only 'or' or 'override' accepted")
         flag_buffer = flag_buffer.reshape(ntime, ncorr * nbl, nfreq).transpose(0, 2, 1)
         assert flag_buffer.shape == tuple([ntime, nfreq, ncorr * nbl])
-
     return flag_buffer
 
 def _as_min_dtype(value):
