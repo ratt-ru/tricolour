@@ -9,12 +9,17 @@ import numba
 import re
 
 MAD_NORMAL = 1.4826
-"""Ratio between `median absolute deviation`_ and standard deviation of a Gaussian distribution.
+"""Ratio between `median absolute deviation`_ and
+standard deviation of a Gaussian distribution.
 .. _median absolute deviation: https://en.wikipedia.org/wiki/Median_absolute_deviation
-"""
+"""  # noqa
 
-def apply_static_mask(vis, flag, a1, a2, antspos, masks, spw_chanlabels, spw_chanwidths, ncorr, accumulation_mode="or", uvrange=""):
-    """Interpolates and applies static masks to the data, flagging channels that spans over frequencies included in the mask
+
+def apply_static_mask(vis, flag, a1, a2, antspos, masks,
+                      spw_chanlabels, spw_chanwidths, ncorr,
+                      accumulation_mode="or", uvrange=""):
+    """Interpolates and applies static masks to the data, flagging channels
+    that spans over frequencies included in the mask
 
     Parameters
     ----------
@@ -27,9 +32,11 @@ def apply_static_mask(vis, flag, a1, a2, antspos, masks, spw_chanlabels, spw_cha
     a2 : antenna2, int
         Indices for data, with shape (time, nbl*ncorr)
     antspos: ndarray, float
-        antenna ECEF positions, as defined in CASA MEMO 229 ::ANTENNA, of shape (nant, 3)
+        antenna ECEF positions, as defined in CASA MEMO 229 ::ANTENNA,
+        of shape (nant, 3)
     masks: list of lists
-        nested lists of masked channels, each inner list corresponding to a mask
+        nested lists of masked channels, each inner list
+        corresponding to a mask
     spw_chanlabels: ndarray, float
         Centre frequencies corresponding to data of shape nfreq
     spw_chanwidths: ndarray, float
@@ -37,7 +44,8 @@ def apply_static_mask(vis, flag, a1, a2, antspos, masks, spw_chanlabels, spw_cha
     ncorr: float
         Number of feed correlations corresponding to data
     accumulation_mode: str
-        Either 'or' or 'override' - element-wise ORs masked channels or replaces respectively
+        Either 'or' or 'override' - element-wise ORs masked channels
+        or replaces respectively
     uvrange: str
         uvrange (only accepts meters) in CASA style (e.g. 0~250m or 0~250)
     Returns

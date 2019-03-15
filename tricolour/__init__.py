@@ -334,8 +334,26 @@ def main():
         vis = vis.reshape((ntime, nchan, nbl * xncorr))
         flags = flags.transpose(0, 2, 1, 3)
         flags = flags.reshape((ntime, nchan, nbl * xncorr))
-        a1 = a1.repeat(xncorr, axis=0).reshape((ntime, nbl * xncorr))
-        a2 = a2.repeat(xncorr, axis=0).reshape((ntime, nbl * xncorr))
+        # a1 = a1.repeat(xncorr, axis=0).reshape((ntime, nbl * xncorr))
+        # a2 = a2.repeat(xncorr, axis=0).reshape((ntime, nbl * xncorr))
+
+        def _explode_ants(ants, xncorr=None):
+            return np.tile(ants, (ants.shape[0], ants.shape[1]*xncorr))
+            # ntime, nbl = ants.shape
+            # return ants.repeat(xncorr, axis=0).reshape(ntime, nbl*xncorr)
+
+        a1 = da.blockwise(_explode_ants, ("time", "corrprod"),
+                          a1, ("time", "corrprod"),
+                          adjust_chunks={"corrprod": lambda x: x*xncorr},
+                          xncorr=xncorr,
+                          dtype=a1.dtype)
+
+        a2 = da.blockwise(_explode_ants, ("time", "corrprod"),
+                          a2, ("time", "corrprod"),
+                          adjust_chunks={"corrprod": lambda x: x*xncorr},
+                          xncorr=xncorr,
+                          dtype=a1.dtype)
+
 
         # Run the flagger
         original = flags.copy()
