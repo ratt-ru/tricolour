@@ -296,7 +296,7 @@ def main():
 
         # Generate unflagged defaults if we should ignore existing flags
         # otherwise take flags from the dataset
-        if args.ignore_flags == True:
+        if args.ignore_flags == True:  # noqa
             flags = da.full_like(vis, False, dtype=np.bool)
         else:
             flags = ds.FLAG.data
@@ -337,23 +337,13 @@ def main():
         # a1 = a1.repeat(xncorr, axis=0).reshape((ntime, nbl * xncorr))
         # a2 = a2.repeat(xncorr, axis=0).reshape((ntime, nbl * xncorr))
 
-        def _explode_ants(ants, xncorr=None):
-            return np.tile(ants, (ants.shape[0], ants.shape[1]*xncorr))
-            # ntime, nbl = ants.shape
-            # return ants.repeat(xncorr, axis=0).reshape(ntime, nbl*xncorr)
+        a1 = da.tile(a1, xncorr).rechunk((a1.chunks[0], 64*xncorr))
+        a2 = da.tile(a2, xncorr).rechunk((a2.chunks[0], 64*xncorr))
 
-        a1 = da.blockwise(_explode_ants, ("time", "corrprod"),
-                          a1, ("time", "corrprod"),
-                          adjust_chunks={"corrprod": lambda x: x*xncorr},
-                          xncorr=xncorr,
-                          dtype=a1.dtype)
-
-        a2 = da.blockwise(_explode_ants, ("time", "corrprod"),
-                          a2, ("time", "corrprod"),
-                          adjust_chunks={"corrprod": lambda x: x*xncorr},
-                          xncorr=xncorr,
-                          dtype=a1.dtype)
-
+        # a1 = da.broadcast_to(a1, (ntime, nbl*xncorr),
+        #                      chunks=(a1.chunks[0], a1.chunks[1]*xncorr))
+        # a2 = da.broadcast_to(a2, (ntime, nbl*xncorr),
+        #                      chunks=(a2.chunks[0], a2.chunks[1]*xncorr))
 
         # Run the flagger
         original = flags.copy()
