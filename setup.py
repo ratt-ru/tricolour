@@ -17,7 +17,7 @@ with open('HISTORY.rst') as history_file:
 requirements = [
     'dask[array] >= 1.1.4',
     'numpy <= 1.14.0',
-    'numba >= 0.38.0',
+    'numba >= 0.42.0',
     'ruamel.yaml >= 0.15.37',
     'xarray-ms >= 0.1.3',
 ]
