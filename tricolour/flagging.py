@@ -70,11 +70,15 @@ def apply_static_mask(vis, flag, a1, a2, antspos, masks,
         raise ValueError("vis.shape '%s' != flag.shape '%s'"
                          % (vis.shape, flag.shape))
 
-    if a1.shape != (flag.shape[0], flag.shape[2] // 2):
-        raise ValueError("antenna1 shape mismatch")
+    exp_ant_shape = (flag.shape[0], flag.shape[2] // ncorr)
 
-    if a2.shape != (flag.shape[0], flag.shape[2] // 2):
-        raise ValueError("antenna2 shape mismatch")
+    if a1.shape != exp_ant_shape:
+        raise ValueError("antenna1 shape mismatch %s != %s"
+                         % (a1.shape, exp_ant_shape))
+
+    if a2.shape != (flag.shape[0], flag.shape[2] // ncorr):
+        raise ValueError("antenna2 shape mismatch %s != %s"
+                         % (a2.shape, exp_ant_shape))
 
     nfreq = flag.shape[1]
     ntime = flag.shape[0]
