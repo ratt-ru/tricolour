@@ -65,14 +65,25 @@ def apply_static_mask(vis, flag, a1, a2, antspos, masks,
         else:
             raise ValueError("Value must be range or blank")
     uvrange = _casa_style_range(uvrange)
-    assert(vis.shape == flag.shape, "vis and flags must have the same shape")
-    assert(a1.shape == [flag.shape[0], flag.shape[2]], "a1 must have the same number of rows as vis and flags")
-    assert(a2.shape == [flag.shape[0], flag.shape[2]], "a2 must have the same number of rows as vis and flags")
+
+    if vis.shape != flag.shape:
+        raise ValueError("vis.shape '%s' != flag.shape '%s'"
+                         % (vis.shape, flag.shape))
+
+    if a1.shape != (flag.shape[0], flag.shape[2] // 2):
+        raise ValueError("antenna1 shape mismatch")
+
+    if a2.shape != (flag.shape[0], flag.shape[2] // 2):
+        raise ValueError("antenna2 shape mismatch")
+
     nfreq = flag.shape[1]
     ntime = flag.shape[0]
     nbl = flag.shape[2] // ncorr
     nrow = nbl * ntime
-    assert(ntime * nbl * nfreq * ncorr == flag.size, "invalid dimensions, possibly ncorr is wrong")
+
+    if ntime * nbl * nfreq * ncorr != flag.size:
+        raise ValueError("Invalid Dimensions. Possibly ncorr is wrong")
+
     # Check each dataset for compatibility before applying
     msants = {}
     msddidsel = []
@@ -88,28 +99,31 @@ def apply_static_mask(vis, flag, a1, a2, antspos, masks,
                       axis=0) > 0
         num_mschansmasked = len(np.argwhere(mask))
 
-
         flag_shape = flag.shape
 
-        if len(flag_shape) != 3: #spectral flags are optional in CASA memo 229
-            raise RuntimeError("Your dataset does not support storing spectral flags. "
-                               "Maybe run pyxis ms.prep?")
+        # spectral flags are optional in CASA memo 229
+        if len(flag_shape) != 3:
+            raise RuntimeError("Your dataset does not support storing "
+                               "spectral flags. Maybe run pyxis ms.prep?")
         # Apply flags
         flag_buffer = flag.view()
-        d2 = np.sum((antspos[a1.flatten()][:] - antspos[a2.flatten()][:])**2, axis=1)
+        ant_diff = antspos[a1.flat] - antspos[a2.flat]
+        d2 = np.sum(ant_diff**2, axis=1)
 
-        # ECEF antenna coordinates are in meters. The transforms to get it into UV space are just rotations
+        # ECEF antenna coordinates are in meters.
+        # The transforms to get it into UV space are just rotations
         # can just take the euclidian norm here - optimized by not doing sqrt
-        luvrange = min(uvrange[0], uvrange[1]) if uvrange is not None else 0.0
-        uuvrange = max(uvrange[0], uvrange[1]) if uvrange is not None else np.inf
+        luvrange = 0.0 if uvrange is None else min(uvrange[0], uvrange[1])
+        uuvrange = np.inf if uvrange is None else max(uvrange[0], uvrange[1])
         sel = np.argwhere(np.logical_and(d2 >= luvrange**2,
                                          d2 <= uuvrange**2))
 
         # for now all correlations flagged equal
-        mask_corrs = np.repeat(mask,
-                               ncorr).reshape([nfreq,
-                                               ncorr]).transpose(1, 0) # ncorr, nfreq
-        flag_buffer = flag_buffer.transpose(0, 2, 1).reshape(nrow, ncorr, nfreq)
+        mask_corrs = np.repeat(mask, ncorr)
+        mask_corrs = mask_corrs.reshape([nfreq, ncorr])
+        mask_corrs = mask_corrs.transpose(1, 0)  # ncorr, nfreq
+        flag_buffer = flag_buffer.transpose(0, 2, 1)
+        flag_buffer = flag_buffer.reshape(nrow, ncorr, nfreq)
 
         if accumulation_mode == "or":
             flag_buffer[sel, :, :] |= mask_corrs[None, :, :]

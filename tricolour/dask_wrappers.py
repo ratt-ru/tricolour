@@ -101,13 +101,23 @@ def apply_static_mask(vis, flag, a1, a2, antspos, masks,
     kwargs["spw_chanwidths"] = spw_chanwidths
     kwargs["ncorr"] = ncorrs
 
-    return da.blockwise(np_apply_static_mask, dims,
-                        vis, dims,
-                        flag, dims,
-                        a1, ("row", "corrprod"),
-                        a2, ("row", "corrprod"),
-                        dtype=flag.dtype,
-                        **kwargs)
+    name = "apply-static-mask-" + da.core.tokenize(vis, flag, a1, a2, kwargs)
+
+    layers = db.blockwise(np_apply_static_mask, name, dims,
+                          vis.name, dims,
+                          flag.name, dims,
+                          a1.name, ("row", "corrprod"),
+                          a2.name, ("row", "corrprod"),
+                          numblocks={
+                            vis.name: vis.numblocks,
+                            flag.name: flag.numblocks,
+                            a1.name: a1.numblocks,
+                            a2.name: a2.numblocks,
+                          },
+                          **kwargs)
+
+    graph = HighLevelGraph.from_collections(name, layers, (vis, flag, a1, a2))
+    return da.Array(graph, name, flag.chunks, dtype=flag.dtype)
 
 
 def unpolarised_intensity(vis, stokes_unpol, stokes_pol):

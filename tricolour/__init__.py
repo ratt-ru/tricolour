@@ -334,16 +334,6 @@ def main():
         vis = vis.reshape((ntime, nchan, nbl * xncorr))
         flags = flags.transpose(0, 2, 1, 3)
         flags = flags.reshape((ntime, nchan, nbl * xncorr))
-        # a1 = a1.repeat(xncorr, axis=0).reshape((ntime, nbl * xncorr))
-        # a2 = a2.repeat(xncorr, axis=0).reshape((ntime, nbl * xncorr))
-
-        a1 = da.tile(a1, xncorr).rechunk((a1.chunks[0], 64*xncorr))
-        a2 = da.tile(a2, xncorr).rechunk((a2.chunks[0], 64*xncorr))
-
-        # a1 = da.broadcast_to(a1, (ntime, nbl*xncorr),
-        #                      chunks=(a1.chunks[0], a1.chunks[1]*xncorr))
-        # a2 = da.broadcast_to(a2, (ntime, nbl*xncorr),
-        #                      chunks=(a2.chunks[0], a2.chunks[1]*xncorr))
 
         # Run the flagger
         original = flags.copy()
