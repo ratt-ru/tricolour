@@ -2,7 +2,7 @@ background_static_mask:
     task: apply_static_mask
     order: 0
     accumulation_mode: "or"
-    uvrange: ""
+    uvrange: "0~250m"
 background_flags:
     task: sum_threshold 
     order: 1

@@ -149,11 +149,7 @@ def load_config(config_file):
     log.info("********************************")
     log.info("   BEGINNING OF CONFIGURATION   ")
     log.info("********************************")
-    try:
-        _print_tree(GD)
-    except Exception, e:
-        import ipdb
-        ipdb.set_trace()
+    _print_tree(GD)
     log.info("********************************")
     log.info("      END OF CONFIGURATION      ")
     log.info("********************************")
