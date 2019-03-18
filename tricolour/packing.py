@@ -27,8 +27,9 @@ def unique_baselines(ant1, ant2):
 
         ubl = dask.compute(ubl_dask)[0].view(np.int32).reshape(-1, 2)
     """
-    if not ant1.dtype == np.int32 or ant2.dtype.dtype == np.int32:
-        raise TypeError("antenna1 and antenna2 dtypes must be np.int32")
+    if not (ant1.dtype == np.int32 and ant2.dtype == np.int32):
+        raise TypeError("antenna1 '%s' and antenna2 '%s' dtypes "
+                        "must both be np.int32" % (ant1.dtype, ant2.dtype))
 
     # Stack, create a 64 bit baseline values
     bl = da.stack([ant1, ant2], axis=1)

@@ -8,7 +8,8 @@ import dask.array as da
 import numpy as np
 from numpy.testing import assert_array_almost_equal
 
-from tricolour.packing import (create_vis_windows,
+from tricolour.packing import (unique_baselines,
+                               create_vis_windows,
                                create_flag_windows,
                                pack_data,
                                unpack_data)
@@ -34,10 +35,8 @@ def test_vis_and_flag_packing(tmpdir):
     tmpdir = str(tmpdir)
 
     time = np.linspace(0.1, 0.9, ntime)
-    antenna1, antenna2 = np.triu_indices(na, 1)
+    antenna1, antenna2 = (a.astype(np.int32) for a in np.triu_indices(na, 1))
     nbl = antenna1.size
-
-    ubl = np.unique(np.stack([antenna1, antenna2], axis=1), axis=0)
 
     antenna1 = np.tile(antenna1, ntime)
     antenna2 = np.tile(antenna2, ntime)
@@ -55,6 +54,9 @@ def test_vis_and_flag_packing(tmpdir):
     time = da.from_array(time, chunks=10)
     vis = da.from_array(vis, chunks=(10, nchan, ncorr))
     flag = da.from_array(flag, chunks=(10, nchan, ncorr))
+
+    ubl = unique_baselines(antenna1, antenna2)
+    ubl = ubl.compute().view(np.int32).reshape(-1, 2)
 
     vis_windows = create_vis_windows(ubl, ntime, nchan, ncorr,
                                      np.complex64, path=tmpdir)
