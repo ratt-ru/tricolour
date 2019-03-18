@@ -9,12 +9,17 @@ import numba
 import re
 
 MAD_NORMAL = 1.4826
-"""Ratio between `median absolute deviation`_ and standard deviation of a Gaussian distribution.
+"""Ratio between `median absolute deviation`_ and
+standard deviation of a Gaussian distribution.
 .. _median absolute deviation: https://en.wikipedia.org/wiki/Median_absolute_deviation
-"""
+"""  # noqa
 
-def apply_static_mask(vis, flag, a1, a2, antspos, masks, spw_chanlabels, spw_chanwidths, ncorr, accumulation_mode="or", uvrange=""):
-    """Interpolates and applies static masks to the data, flagging channels that spans over frequencies included in the mask
+
+def apply_static_mask(vis, flag, a1, a2, antspos, masks,
+                      spw_chanlabels, spw_chanwidths, ncorr,
+                      accumulation_mode="or", uvrange=""):
+    """Interpolates and applies static masks to the data, flagging channels
+    that spans over frequencies included in the mask
 
     Parameters
     ----------
@@ -27,9 +32,11 @@ def apply_static_mask(vis, flag, a1, a2, antspos, masks, spw_chanlabels, spw_cha
     a2 : antenna2, int
         Indices for data, with shape (time, nbl*ncorr)
     antspos: ndarray, float
-        antenna ECEF positions, as defined in CASA MEMO 229 ::ANTENNA, of shape (nant, 3)
+        antenna ECEF positions, as defined in CASA MEMO 229 ::ANTENNA,
+        of shape (nant, 3)
     masks: list of lists
-        nested lists of masked channels, each inner list corresponding to a mask
+        nested lists of masked channels, each inner list
+        corresponding to a mask
     spw_chanlabels: ndarray, float
         Centre frequencies corresponding to data of shape nfreq
     spw_chanwidths: ndarray, float
@@ -37,7 +44,8 @@ def apply_static_mask(vis, flag, a1, a2, antspos, masks, spw_chanlabels, spw_cha
     ncorr: float
         Number of feed correlations corresponding to data
     accumulation_mode: str
-        Either 'or' or 'override' - element-wise ORs masked channels or replaces respectively
+        Either 'or' or 'override' - element-wise ORs masked channels
+        or replaces respectively
     uvrange: str
         uvrange (only accepts meters) in CASA style (e.g. 0~250m or 0~250)
     Returns
@@ -57,14 +65,29 @@ def apply_static_mask(vis, flag, a1, a2, antspos, masks, spw_chanlabels, spw_cha
         else:
             raise ValueError("Value must be range or blank")
     uvrange = _casa_style_range(uvrange)
-    assert(vis.shape == flag.shape, "vis and flags must have the same shape")
-    assert(a1.shape == [flag.shape[0], flag.shape[2]], "a1 must have the same number of rows as vis and flags")
-    assert(a2.shape == [flag.shape[0], flag.shape[2]], "a2 must have the same number of rows as vis and flags")
+
+    if vis.shape != flag.shape:
+        raise ValueError("vis.shape '%s' != flag.shape '%s'"
+                         % (vis.shape, flag.shape))
+
+    exp_ant_shape = (flag.shape[0], flag.shape[2] // ncorr)
+
+    if a1.shape != exp_ant_shape:
+        raise ValueError("antenna1 shape mismatch %s != %s"
+                         % (a1.shape, exp_ant_shape))
+
+    if a2.shape != (flag.shape[0], flag.shape[2] // ncorr):
+        raise ValueError("antenna2 shape mismatch %s != %s"
+                         % (a2.shape, exp_ant_shape))
+
     nfreq = flag.shape[1]
     ntime = flag.shape[0]
     nbl = flag.shape[2] // ncorr
     nrow = nbl * ntime
-    assert(ntime * nbl * nfreq * ncorr == flag.size, "invalid dimensions, possibly ncorr is wrong")
+
+    if ntime * nbl * nfreq * ncorr != flag.size:
+        raise ValueError("Invalid Dimensions. Possibly ncorr is wrong")
+
     # Check each dataset for compatibility before applying
     msants = {}
     msddidsel = []
@@ -80,28 +103,31 @@ def apply_static_mask(vis, flag, a1, a2, antspos, masks, spw_chanlabels, spw_cha
                       axis=0) > 0
         num_mschansmasked = len(np.argwhere(mask))
 
-
         flag_shape = flag.shape
 
-        if len(flag_shape) != 3: #spectral flags are optional in CASA memo 229
-            raise RuntimeError("Your dataset does not support storing spectral flags. "
-                               "Maybe run pyxis ms.prep?")
+        # spectral flags are optional in CASA memo 229
+        if len(flag_shape) != 3:
+            raise RuntimeError("Your dataset does not support storing "
+                               "spectral flags. Maybe run pyxis ms.prep?")
         # Apply flags
         flag_buffer = flag.view()
-        d2 = np.sum((antspos[a1.flatten()][:] - antspos[a2.flatten()][:])**2, axis=1)
+        ant_diff = antspos[a1.flat] - antspos[a2.flat]
+        d2 = np.sum(ant_diff**2, axis=1)
 
-        # ECEF antenna coordinates are in meters. The transforms to get it into UV space are just rotations
+        # ECEF antenna coordinates are in meters.
+        # The transforms to get it into UV space are just rotations
         # can just take the euclidian norm here - optimized by not doing sqrt
-        luvrange = min(uvrange[0], uvrange[1]) if uvrange is not None else 0.0
-        uuvrange = max(uvrange[0], uvrange[1]) if uvrange is not None else np.inf
+        luvrange = 0.0 if uvrange is None else min(uvrange[0], uvrange[1])
+        uuvrange = np.inf if uvrange is None else max(uvrange[0], uvrange[1])
         sel = np.argwhere(np.logical_and(d2 >= luvrange**2,
                                          d2 <= uuvrange**2))
 
         # for now all correlations flagged equal
-        mask_corrs = np.repeat(mask,
-                               ncorr).reshape([nfreq,
-                                               ncorr]).transpose(1, 0) # ncorr, nfreq
-        flag_buffer = flag_buffer.transpose(0, 2, 1).reshape(nrow, ncorr, nfreq)
+        mask_corrs = np.repeat(mask, ncorr)
+        mask_corrs = mask_corrs.reshape([nfreq, ncorr])
+        mask_corrs = mask_corrs.transpose(1, 0)  # ncorr, nfreq
+        flag_buffer = flag_buffer.transpose(0, 2, 1)
+        flag_buffer = flag_buffer.reshape(nrow, ncorr, nfreq)
 
         if accumulation_mode == "or":
             flag_buffer[sel, :, :] |= mask_corrs[None, :, :]

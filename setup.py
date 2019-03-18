@@ -15,11 +15,11 @@ with open('HISTORY.rst') as history_file:
     history = history_file.read()
 
 requirements = [
-    'dask[array] >= 0.18.0',
+    'dask[array] >= 1.1.4',
     'numpy <= 1.14.0',
-    'numba >= 0.38.0',
+    'numba >= 0.42.0',
     'ruamel.yaml >= 0.15.37',
-    'xarray-ms >= 0.1.1',
+    'xarray-ms >= 0.1.3',
 ]
 
 setup_requirements = ['pytest-runner', ]

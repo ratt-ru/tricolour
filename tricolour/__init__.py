@@ -292,7 +292,7 @@ def main():
 
         # Generate unflagged defaults if we should ignore existing flags
         # otherwise take flags from the dataset
-        if args.ignore_flags == True:
+        if args.ignore_flags == True:  # noqa
             flags = da.full_like(vis, False, dtype=np.bool)
         else:
             flags = ds.FLAG.data
@@ -330,8 +330,6 @@ def main():
         vis = vis.reshape((ntime, nchan, nbl * xncorr))
         flags = flags.transpose(0, 2, 1, 3)
         flags = flags.reshape((ntime, nchan, nbl * xncorr))
-        a1 = a1.repeat(xncorr, axis=0).reshape((ntime, nbl * xncorr))
-        a2 = a2.repeat(xncorr, axis=0).reshape((ntime, nbl * xncorr))
 
         # Run the flagger
         original = flags.copy()
