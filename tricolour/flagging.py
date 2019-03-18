@@ -70,13 +70,13 @@ def apply_static_mask(vis, flag, a1, a2, antspos, masks,
         raise ValueError("vis.shape '%s' != flag.shape '%s'"
                          % (vis.shape, flag.shape))
 
-    exp_ant_shape = (flag.shape[0], flag.shape[2] // ncorr)
+    exp_ant_shape = (flag.shape[0], flag.shape[2])
 
     if a1.shape != exp_ant_shape:
         raise ValueError("antenna1 shape mismatch %s != %s"
                          % (a1.shape, exp_ant_shape))
 
-    if a2.shape != (flag.shape[0], flag.shape[2] // ncorr):
+    if a2.shape != (flag.shape[0], flag.shape[2]):
         raise ValueError("antenna2 shape mismatch %s != %s"
                          % (a2.shape, exp_ant_shape))
 
@@ -110,8 +110,7 @@ def apply_static_mask(vis, flag, a1, a2, antspos, masks,
             raise RuntimeError("Your dataset does not support storing "
                                "spectral flags. Maybe run pyxis ms.prep?")
         # Apply flags
-        flag_buffer = flag.view()
-        ant_diff = antspos[a1.flat] - antspos[a2.flat]
+        ant_diff = antspos[a1[0, :].ravel()] - antspos[a2[0, :].ravel()]
         d2 = np.sum(ant_diff**2, axis=1)
 
         # ECEF antenna coordinates are in meters.
@@ -121,23 +120,17 @@ def apply_static_mask(vis, flag, a1, a2, antspos, masks,
         uuvrange = np.inf if uvrange is None else max(uvrange[0], uvrange[1])
         sel = np.argwhere(np.logical_and(d2 >= luvrange**2,
                                          d2 <= uuvrange**2))
-
         # for now all correlations flagged equal
-        mask_corrs = np.repeat(mask, ncorr)
-        mask_corrs = mask_corrs.reshape([nfreq, ncorr])
-        mask_corrs = mask_corrs.transpose(1, 0)  # ncorr, nfreq
-        flag_buffer = flag_buffer.transpose(0, 2, 1)
-        flag_buffer = flag_buffer.reshape(nrow, ncorr, nfreq)
-
+        mask_corrs = np.repeat(mask, ncorr*nbl)
+        mask_corrs = mask_corrs.reshape([nfreq, ncorr*nbl])
         if accumulation_mode == "or":
-            flag_buffer[sel, :, :] |= mask_corrs[None, :, :]
+            flag[:, :, sel] = np.logical_or(flag[:, :, sel],
+                                            mask_corrs[None, :, sel])
         elif accumulation_mode == "override":
-            flag_buffer[sel, :, :] = mask_corrs[None, :, :]
+            flag[:, :, sel] = mask_corrs[None, :, sel]
         else:
             raise ValueError("Static mask accumulation mode not understood - only 'or' or 'override' accepted")
-        flag_buffer = flag_buffer.reshape(ntime, ncorr * nbl, nfreq).transpose(0, 2, 1)
-        assert flag_buffer.shape == tuple([ntime, nfreq, ncorr * nbl])
-    return flag_buffer
+    return flag
 
 def _as_min_dtype(value):
     """Convert a non-negative integer into a numpy scalar of the narrowest

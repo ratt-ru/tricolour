@@ -1,11 +1,14 @@
+#reset_flags:
+#    task: unflag
+#    order: 0
 background_static_mask:
     task: apply_static_mask
-    order: 0
+    order: 1
     accumulation_mode: "or"
-    uvrange: "0~250m"
+    uvrange: ""
 background_flags:
     task: sum_threshold 
-    order: 1
+    order: 2
     outlier_nsigma: 4.5
     windows_time: [1, 2, 4, 8]
     windows_freq: [1, 2, 4, 8]
@@ -23,19 +26,19 @@ background_flags:
     num_major_iterations: 5
 residual_flag:
     task: uvcontsub_flagger
-    order: 2
+    order: 3
     major_cycles: 5
     or_original_from_cycle: 1
     taylor_degrees: 20
     sigma: 5
 short_spacings_static_mask:
     task: apply_static_mask
-    order: 3
+    order: 4
     accumulation_mode: "or"
     uvrange: "0~250m"
 final_sum_threshold:
     task: sum_threshold 
-    order: 4
+    order: 5
     outlier_nsigma: 4.5
     windows_time: [1, 2, 4, 8]
     windows_freq: [1, 2, 4, 8]
@@ -53,4 +56,4 @@ final_sum_threshold:
     num_major_iterations: 1
 combine_with_input_flags:
     task: combine_with_input_flags
-    order: 5
+    order: 6

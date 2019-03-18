@@ -191,6 +191,8 @@ def create_parser():
                    help="Number of channels to dilate as int or string with units")
     p.add_argument("-dc", "--data-column", type=str, default="DATA",
                    help="Name of visibility data column to flag")
+    p.add_argument("-fn", "--field-names", type=str, action='append', default=[],
+                   help="Name(s) of fields to flag. Defaults to flagging all")
     return p
 
 
@@ -262,6 +264,17 @@ def main():
     spw_tab = "::".join((args.ms, "SPECTRAL_WINDOW"))
     sds = list(xds_from_table(spw_tab, group_cols="__row__"))
     antspos = ads[0].POSITION.values
+    fld_tab = "::".join((args.ms, "FIELD"))
+    fds = list(xds_from_table(fld_tab))
+    fieldnames = fds[0].NAME.values
+    if args.field_names != []:
+        if not set(args.field_names) <= set(fieldnames):
+            raise ValueError("One or more fields cannot be found in dataset '{0:s}' "
+                             "You specified {1:s}, but only {2:s} are available".format(
+                             args.ms, ",".join(args.field_names), ",".join(fieldnames)))
+        field_dict = dict([(np.where(fieldnames == fn)[0][0], fn) for fn in args.field_names])
+    else:
+        field_dict = dict([(findx, fn) for findx, fn in enumerate(fieldnames)])
     ddid = ddid_ds[ds.attrs['DATA_DESC_ID']].drop('table_row')
     spw_info = sds[ddid.SPECTRAL_WINDOW_ID.values].drop('table_row')
 
@@ -278,6 +291,9 @@ def main():
 
     # Iterate through each dataset
     for ds, agg_time_counts, row_counts in zip(xds, agg_time, scan_rows):
+        if ds.FIELD_ID not in field_dict:
+            continue
+        log.info("Adding field '{0:s}' to compute graph for processing".format(field_dict[ds.FIELD_ID]))
         row_counts = np.asarray(row_counts)
         ntime, nbl = row_counts.size, row_counts[0]
         nrow, nchan, ncorr = ds.DATA.data.shape
@@ -302,13 +318,10 @@ def main():
         # dimension into groups of 64 baselines
         vis = vis.reshape(ntime, nbl, nchan, ncorr)
         flags = flags.reshape(ntime, nbl, nchan, ncorr)
-        a1 = a1.reshape(ntime, nbl)
-        a2 = a2.reshape(ntime, nbl)
+
         # Rechunk on baseline dimension
         vis = vis.rechunk({1: 64})
         flags = flags.rechunk({1: 64})
-        a1 = a1.rechunk({1: 64})
-        a2 = a2.rechunk({1: 64})
 
         # If we're flagging on polarised intensity,
         # we convert visibilities to polarised intensity
@@ -326,11 +339,17 @@ def main():
             raise ValueError("Invalid flagging Strategy %s" %
                              args.flagging_strategy)
 
+        a1 = a1.repeat(xncorr).reshape(ntime, nbl * xncorr)
+        a2 = a2.repeat(xncorr).reshape(ntime, nbl * xncorr)
+        #a1 = a1.reshape(ntime, nbl)
+        #a2 = a2.reshape(ntime, nbl)
+        a1 = a1.rechunk({1: 64})
+        a2 = a2.rechunk({1: 64})
+
         vis = vis.transpose(0, 2, 1, 3)
         vis = vis.reshape((ntime, nchan, nbl * xncorr))
         flags = flags.transpose(0, 2, 1, 3)
         flags = flags.reshape((ntime, nchan, nbl * xncorr))
-
         # Run the flagger
         original = flags.copy()
         new_flags = flags
@@ -351,6 +370,8 @@ def main():
             elif GD[k].get("task", "unnamed") == "combine_with_input_flags":
                 new_flags = da.logical_or(new_flags,
                                           original)
+            elif GD[k].get("task", "unnamed") == "unflag":
+                new_flags = da.zeros_like(new_flags)
             elif GD[k].get("task", "unnamed") == "apply_static_mask":
                 ("task" in GD[k]) and GD[k].pop("task")
                 ("order" in GD[k]) and GD[k].pop("order")
