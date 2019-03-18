@@ -26,11 +26,12 @@ def flag_data(vis_windows, flag_windows):
                         dtype=vis_windows.dtype)
 
 
-def test_vis_and_flag_packing():
+def test_vis_and_flag_packing(tmpdir):
     na = 7
     ntime = 10
     nchan = 16
     ncorr = 4
+    tmpdir = str(tmpdir)
 
     time = np.linspace(0.1, 0.9, ntime)
     antenna1, antenna2 = np.triu_indices(na, 1)
@@ -55,17 +56,11 @@ def test_vis_and_flag_packing():
     vis = da.from_array(vis, chunks=(10, nchan, ncorr))
     flag = da.from_array(flag, chunks=(10, nchan, ncorr))
 
-    field = 0
-    scan = 0
-    ddid = 0
+    vis_windows = create_vis_windows(ubl, ntime, nchan, ncorr,
+                                     np.complex64, path=tmpdir)
 
-    vis_windows = create_vis_windows(field, scan, ddid, ubl,
-                                     ntime, nchan, ncorr,
-                                     np.complex64)
-
-    flag_windows = create_flag_windows(field, scan, ddid, ubl,
-                                       ntime, nchan, ncorr,
-                                       np.bool)
+    flag_windows = create_flag_windows(ubl, ntime, nchan, ncorr,
+                                       np.bool, path=tmpdir)
 
     _, time_inv = da.unique(time, return_inverse=True)
 

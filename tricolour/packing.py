@@ -2,8 +2,10 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import os
 from os.path import join as pjoin
 import random
+from tempfile import mkdtemp
 
 import dask
 import dask.array as da
@@ -34,11 +36,7 @@ def unique_baselines(ant1, ant2):
     return da.unique(bl)
 
 
-def _create_vis_windows(field, scan, ddid, ubl,
-                        ntime, nchan, ncorr, dtype):
-
-    path = pjoin("tmp", "field-%d" % field, "scan-%d" % scan, "ddid-%d" % ddid)
-
+def _create_vis_windows(ubl, ntime, nchan, ncorr, dtype, path):
     vis = zarr.creation.create(shape=(ubl.shape[0], ntime, nchan, ncorr),
                                chunks=(1, ntime, nchan, ncorr),
                                dtype=dtype,
@@ -55,11 +53,7 @@ def _create_vis_windows(field, scan, ddid, ubl,
     return vis
 
 
-def _create_flag_windows(field, scan, ddid, ubl,
-                         ntime, nchan, ncorr, dtype):
-
-    path = pjoin("tmp", "field-%d" % field, "scan-%d" % scan, "ddid-%d" % ddid)
-
+def _create_flag_windows(ubl, ntime, nchan, ncorr, dtype, path):
     return zarr.creation.create(shape=(ubl.shape[0], ntime, nchan, ncorr),
                                 chunks=(1, ntime, nchan, ncorr),
                                 dtype=dtype,
@@ -71,17 +65,16 @@ def _create_flag_windows(field, scan, ddid, ubl,
                                 store=pjoin(path, "flag"))
 
 
-def create_vis_windows(field, scan, ddid, ubl,
-                       ntime, nchan, ncorr, dtype):
+def create_vis_windows(ubl, ntime, nchan, ncorr, dtype, path=None):
+    if path is None:
+        path = mkdtemp(prefix='tricolour-vis-windows-')
 
-    token = dask.base.tokenize(field, scan, ddid, ubl,
-                               ntime, nchan, ncorr, dtype)
+    token = dask.base.tokenize(ubl, ntime, nchan, ncorr, dtype, path)
 
     name = "create-vis-windows-" + token
     layers = {(name, 0, 0, 0, 0): (_create_vis_windows,
-                                   field, scan, ddid,
                                    ubl, ntime, nchan, ncorr,
-                                   dtype)}
+                                   dtype, path)}
 
     graph = HighLevelGraph.from_collections(name, layers, ())
     chunks = ((ubl.shape[0],), (ntime,), (nchan,), (ncorr,))
@@ -90,17 +83,16 @@ def create_vis_windows(field, scan, ddid, ubl,
     return windows
 
 
-def create_flag_windows(field, scan, ddid, ubl,
-                        ntime, nchan, ncorr, dtype):
+def create_flag_windows(ubl, ntime, nchan, ncorr, dtype, path=None):
+    if path is None:
+        path = mkdtemp(prefix='tricolour-flag-windows-')
 
-    token = dask.base.tokenize(field, scan, ddid, ubl,
-                               ntime, nchan, ncorr, dtype)
+    token = dask.base.tokenize(ubl, ntime, nchan, ncorr, dtype, path)
 
     name = "create-flag-windows-" + token
     layers = {(name, 0, 0, 0, 0): (_create_flag_windows,
-                                   field, scan, ddid,
                                    ubl, ntime, nchan, ncorr,
-                                   dtype)}
+                                   dtype, path)}
 
     graph = HighLevelGraph.from_collections(name, layers, ())
     chunks = ((ubl.shape[0],), (ntime,), (nchan,), (ncorr,))
