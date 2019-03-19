@@ -7,6 +7,7 @@ from __future__ import print_function
 import numpy as np
 import numba
 import re
+import dask.array as da
 
 MAD_NORMAL = 1.4826
 """Ratio between `median absolute deviation`_ and
@@ -15,7 +16,7 @@ standard deviation of a Gaussian distribution.
 """  # noqa
 
 
-def apply_static_mask(vis, flag, a1, a2, antspos, masks,
+def apply_static_mask(flag, a1, a2, antspos, masks,
                       spw_chanlabels, spw_chanwidths, ncorr,
                       accumulation_mode="or", uvrange=""):
     """Interpolates and applies static masks to the data, flagging channels
@@ -23,10 +24,8 @@ def apply_static_mask(vis, flag, a1, a2, antspos, masks,
 
     Parameters
     ----------
-    vis: data ndarray, complex
-        Visibilities, with shape (time, frequency, nbl*ncorr)
     flag : ndarray, bool
-        Flags corresponding to `data`
+        Flags corresponding to visibility data (time, freq, nbl*ncorr)
     a1 : antenna1, int
         Indices for data, with shape (time, nbl*ncorr)
     a2 : antenna2, int
@@ -66,10 +65,6 @@ def apply_static_mask(vis, flag, a1, a2, antspos, masks,
             raise ValueError("Value must be range or blank")
     uvrange = _casa_style_range(uvrange)
 
-    if vis.shape != flag.shape:
-        raise ValueError("vis.shape '%s' != flag.shape '%s'"
-                         % (vis.shape, flag.shape))
-
     exp_ant_shape = (flag.shape[0], flag.shape[2])
 
     if a1.shape != exp_ant_shape:
@@ -95,42 +90,42 @@ def apply_static_mask(vis, flag, a1, a2, antspos, masks,
 
     spw_chanlb = spw_chanlabels - spw_chanwidths * 0.5
     spw_chanub = spw_chanlabels + spw_chanwidths * 0.5
+    flag_shape = flag.shape
+
+    # spectral flags are optional in CASA memo 229
+    if len(flag_shape) != 3:
+        raise RuntimeError("Your dataset does not support storing "
+                           "spectral flags. Maybe run pyxis ms.prep?")
+    # Apply flags
+    ant_diff = antspos[a1[0, :].ravel()] - antspos[a2[0, :].ravel()]
+    d2 = np.sum(ant_diff**2, axis=1)
+
+    # ECEF antenna coordinates are in meters.
+    # The transforms to get it into UV space are just rotations
+    # can just take the euclidian norm here - optimized by not doing sqrt
+    luvrange = 0.0 if uvrange is None else min(uvrange[0], uvrange[1])
+    uuvrange = np.inf if uvrange is None else max(uvrange[0], uvrange[1])
+    sel = np.argwhere(np.logical_and(d2 >= luvrange**2,
+                                     d2 <= uuvrange**2)).flatten()
+    new_flags = flag.compute()
     for mask in masks:
         masked_channels = mask
         # compute overlap of mask and ms spw channels
         mask = np.sum(np.logical_and(masked_channels > spw_chanlb,
                                      masked_channels < spw_chanub),
                       axis=0) > 0
-        num_mschansmasked = len(np.argwhere(mask))
 
-        flag_shape = flag.shape
-
-        # spectral flags are optional in CASA memo 229
-        if len(flag_shape) != 3:
-            raise RuntimeError("Your dataset does not support storing "
-                               "spectral flags. Maybe run pyxis ms.prep?")
-        # Apply flags
-        ant_diff = antspos[a1[0, :].ravel()] - antspos[a2[0, :].ravel()]
-        d2 = np.sum(ant_diff**2, axis=1)
-
-        # ECEF antenna coordinates are in meters.
-        # The transforms to get it into UV space are just rotations
-        # can just take the euclidian norm here - optimized by not doing sqrt
-        luvrange = 0.0 if uvrange is None else min(uvrange[0], uvrange[1])
-        uuvrange = np.inf if uvrange is None else max(uvrange[0], uvrange[1])
-        sel = np.argwhere(np.logical_and(d2 >= luvrange**2,
-                                         d2 <= uuvrange**2))
         # for now all correlations flagged equal
         mask_corrs = np.repeat(mask, ncorr*nbl)
         mask_corrs = mask_corrs.reshape([nfreq, ncorr*nbl])
+        mask_corrs = np.tile(mask_corrs, (ntime, 1, 1))
         if accumulation_mode == "or":
-            flag[:, :, sel] = np.logical_or(flag[:, :, sel],
-                                            mask_corrs[None, :, sel])
+            new_flags[:, :, sel] |= mask_corrs[:, :, sel]
         elif accumulation_mode == "override":
-            flag[:, :, sel] = mask_corrs[None, :, sel]
+            new_flags[:, :, sel].data = mask_corrs[:, :, sel]
         else:
             raise ValueError("Static mask accumulation mode not understood - only 'or' or 'override' accepted")
-    return flag
+    return da.from_array(new_flags, chunks=flag.chunksize)
 
 def _as_min_dtype(value):
     """Convert a non-negative integer into a numpy scalar of the narrowest

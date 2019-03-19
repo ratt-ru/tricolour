@@ -45,8 +45,8 @@ from tricolour.dask_wrappers import (sum_threshold_flagger,
                                      polarised_intensity,
                                      unpolarised_intensity,
                                      check_baseline_ordering,
-                                     uvcontsub_flagger,
-                                     apply_static_mask)
+                                     uvcontsub_flagger)
+from tricolour.flagging import apply_static_mask
 from tricolour.stokes import stokes_corr_map
 from tricolour.mask import collect_masks, load_mask
 
@@ -375,8 +375,7 @@ def main():
             elif GD[k].get("task", "unnamed") == "apply_static_mask":
                 ("task" in GD[k]) and GD[k].pop("task")
                 ("order" in GD[k]) and GD[k].pop("order")
-                new_flags = apply_static_mask(vis,
-                                              new_flags,
+                new_flags = apply_static_mask(new_flags,
                                               a1,
                                               a2,
                                               antspos,

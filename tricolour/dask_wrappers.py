@@ -87,7 +87,7 @@ def uvcontsub_flagger(vis, flag, **kwargs):
                         dtype=flag.dtype)
 
 
-def apply_static_mask(vis, flag, a1, a2, antspos, masks,
+def apply_static_mask(flag, a1, a2, antspos, masks,
                       spw_chanlabels, spw_chanwidths, ncorrs,
                       **kwargs):
     """
@@ -101,24 +101,13 @@ def apply_static_mask(vis, flag, a1, a2, antspos, masks,
     kwargs["spw_chanwidths"] = spw_chanwidths
     kwargs["ncorr"] = ncorrs
 
-    name = "apply-static-mask-" + da.core.tokenize(vis, flag, a1, a2, kwargs)
+    name = "apply-static-mask-" + da.core.tokenize(flag, a1, a2, kwargs)
 
-    layers = db.blockwise(np_apply_static_mask, name, dims,
-                          vis.name, dims,
-                          flag.name, dims,
-                          a1.name, ("row", "corrprod"),
-                          a2.name, ("row", "corrprod"),
-                          numblocks={
-                            vis.name: vis.numblocks,
-                            flag.name: flag.numblocks,
-                            a1.name: a1.numblocks,
-                            a2.name: a2.numblocks,
-                          },
-                          **kwargs)
-
-    graph = HighLevelGraph.from_collections(name, layers, (vis, flag, a1, a2))
-    return da.Array(graph, name, flag.chunks, dtype=flag.dtype)
-
+    return da.blockwise(lambda flag, a1, a2: np_apply_static_mask(flag, a1, a2, **kwargs), dims,
+                          flag, dims,
+                          a1, ("row", "corrprod"),
+                          a2, ("row", "corrprod"),
+                          dtype=flag.dtype)
 
 def unpolarised_intensity(vis, stokes_unpol, stokes_pol):
     """
