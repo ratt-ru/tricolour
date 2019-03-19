@@ -15,6 +15,38 @@ standard deviation of a Gaussian distribution.
 .. _median absolute deviation: https://en.wikipedia.org/wiki/Median_absolute_deviation
 """  # noqa
 
+def flag_autos(flag, a1, a2):
+    """Flags auto-correlations
+
+    Parameters
+    ----------
+    flag : ndarray, bool
+        Flags corresponding to visibility data (time, freq, nbl*ncorr)
+    a1 : antenna1, int
+        Indices for data, with shape (time, nbl*ncorr)
+    a2 : antenna2, int
+        Indices for data, with shape (time, nbl*ncorr)
+    Returns
+    -------
+    out_flags : ndarray, bool
+        Flags corresponding to `data`
+    """
+    exp_ant_shape = (flag.shape[0], flag.shape[2])
+
+    if a1.shape != exp_ant_shape:
+        raise ValueError("antenna1 shape mismatch %s != %s"
+                         % (a1.shape, exp_ant_shape))
+
+    if a2.shape != (flag.shape[0], flag.shape[2]):
+        raise ValueError("antenna2 shape mismatch %s != %s"
+                         % (a2.shape, exp_ant_shape))
+
+    # Select autos
+    a1_single_time = a1[0, :].ravel()
+    a2_single_time = a2[0, :].ravel()
+    sel = (a1_single_time == a2_single_time)
+    flag[:, :, sel] = True
+    return flag
 
 def apply_static_mask(flag, a1, a2, antspos, masks,
                       spw_chanlabels, spw_chanwidths, ncorr,
@@ -97,35 +129,35 @@ def apply_static_mask(flag, a1, a2, antspos, masks,
         raise RuntimeError("Your dataset does not support storing "
                            "spectral flags. Maybe run pyxis ms.prep?")
     # Apply flags
-    ant_diff = antspos[a1[0, :].ravel()] - antspos[a2[0, :].ravel()]
-    d2 = np.sum(ant_diff**2, axis=1)
+    ant_diff = antspos[a1.ravel()] - antspos[a2.ravel()]
+    d2 = 0.5 * np.sum(ant_diff**2, axis=1) #UV distance is twice baseline lenght
 
     # ECEF antenna coordinates are in meters.
     # The transforms to get it into UV space are just rotations
     # can just take the euclidian norm here - optimized by not doing sqrt
     luvrange = 0.0 if uvrange is None else min(uvrange[0], uvrange[1])
     uuvrange = np.inf if uvrange is None else max(uvrange[0], uvrange[1])
-    sel = np.argwhere(np.logical_and(d2 >= luvrange**2,
-                                     d2 <= uuvrange**2)).flatten()
-    new_flags = flag.compute()
-    for mask in masks:
-        masked_channels = mask
-        # compute overlap of mask and ms spw channels
-        mask = np.sum(np.logical_and(masked_channels > spw_chanlb,
-                                     masked_channels < spw_chanub),
-                      axis=0) > 0
 
-        # for now all correlations flagged equal
-        mask_corrs = np.repeat(mask, ncorr*nbl)
-        mask_corrs = mask_corrs.reshape([nfreq, ncorr*nbl])
-        mask_corrs = np.tile(mask_corrs, (ntime, 1, 1))
+    sel = np.logical_and(d2 >= luvrange**2,
+                         d2 <= uuvrange**2).flatten()
+    flag_buffer = flag
+    # for now all correlations flagged equal
+    for mask in masks:
+        masked_channels = np.sum(np.logical_and(mask > spw_chanlb,
+                                                mask < spw_chanub),
+                                axis=0) > 0
+        mask_corrs = np.repeat(masked_channels, ncorr).reshape([nfreq,
+                                                                ncorr]).transpose(1, 0) # ncorr, nfreq
+        flag_buffer = flag_buffer.transpose(0, 2, 1).reshape(nrow, ncorr, nfreq)
         if accumulation_mode == "or":
-            new_flags[:, :, sel] |= mask_corrs[:, :, sel]
+            flag_buffer[sel, :, :] |= mask_corrs[None, :, :]
         elif accumulation_mode == "override":
-            new_flags[:, :, sel].data = mask_corrs[:, :, sel]
+            flag_buffer[sel, :, :] = mask_corrs[None, :, :]
         else:
             raise ValueError("Static mask accumulation mode not understood - only 'or' or 'override' accepted")
-    return da.from_array(new_flags, chunks=flag.chunksize)
+        flag_buffer = flag_buffer.reshape(ntime, ncorr * nbl, nfreq).transpose(0, 2, 1)
+    assert flag_buffer.shape == tuple([ntime, nfreq, ncorr * nbl])
+    return flag_buffer
 
 def _as_min_dtype(value):
     """Convert a non-negative integer into a numpy scalar of the narrowest

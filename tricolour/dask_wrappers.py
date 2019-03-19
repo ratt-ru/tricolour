@@ -14,6 +14,8 @@ import numpy as np
 from .flagging import sum_threshold_flagger as np_sum_threshold_flagger
 from .flagging import uvcontsub_flagger as np_uvcontsub_flagger
 from .flagging import apply_static_mask as np_apply_static_mask
+from .flagging import flag_autos as np_flag_autos
+
 from .stokes import (polarised_intensity as np_polarised_intensity,
                      unpolarised_intensity as np_unpolarised_intensity)
 from .util import check_baseline_ordering as np_check_baseline_ordering
@@ -80,12 +82,22 @@ def uvcontsub_flagger(vis, flag, **kwargs):
     Dask wrapper for :func:`~tricolour.uvcontsub_flagger`
     """
     dims = ("row", "chan", "corr")
+    token = da.core.tokenize(vis, flag, kwargs)
+    name = '-'.join(('flagger', token))
+    dims = ("row", "chan", "corr")
 
-    return da.blockwise(np_uvcontsub_flagger, dims,
-                        vis, dims,
-                        flag, dims,
-                        dtype=flag.dtype)
+    layers = db.blockwise(np_uvcontsub_flagger, name, dims,
+                          vis.name, dims,
+                          flag.name, dims,
+                          numblocks={
+                            vis.name: vis.numblocks,
+                            flag.name: flag.numblocks,
+                          },
+                          **kwargs)
 
+    # Add input graphs to the graph
+    graph = HighLevelGraph.from_collections(name, layers, (vis, flag))
+    return da.Array(graph, name, vis.chunks, dtype=flag.dtype)
 
 def apply_static_mask(flag, a1, a2, antspos, masks,
                       spw_chanlabels, spw_chanwidths, ncorrs,
@@ -102,8 +114,29 @@ def apply_static_mask(flag, a1, a2, antspos, masks,
     kwargs["ncorr"] = ncorrs
 
     name = "apply-static-mask-" + da.core.tokenize(flag, a1, a2, kwargs)
+    layers = db.blockwise(np_apply_static_mask, name, dims,
+                          flag.name, dims,
+                          a1.name, ("row", "corrprod"),
+                          a2.name, ("row", "corrprod"),
+                          numblocks={
+                            flag.name: flag.numblocks,
+                            a1.name: a1.numblocks,
+                            a2.name: a2.numblocks
+                          },
+                          **kwargs)
+    # Add input graphs to the graph
+    graph = HighLevelGraph.from_collections(name, layers, (flag, a1, a2))
+    return da.Array(graph, name, flag.chunks, dtype=flag.dtype)
 
-    return da.blockwise(lambda flag, a1, a2: np_apply_static_mask(flag, a1, a2, **kwargs), dims,
+def flag_autos(flag, a1, a2, **kwargs):
+    """
+    Dask wrapper for :func:`~tricolour.flag_autos`
+    """
+    dims = ("row", "chan", "corrprod")  # corrprod = ncorr * nbl
+
+    name = "flag-autos-" + da.core.tokenize(flag, a1, a2, kwargs)
+
+    return da.blockwise(lambda flag, a1, a2: np_flag_autos(flag, a1, a2, **kwargs), dims,
                           flag, dims,
                           a1, ("row", "corrprod"),
                           a2, ("row", "corrprod"),

@@ -45,8 +45,9 @@ from tricolour.dask_wrappers import (sum_threshold_flagger,
                                      polarised_intensity,
                                      unpolarised_intensity,
                                      check_baseline_ordering,
-                                     uvcontsub_flagger)
-from tricolour.flagging import apply_static_mask
+                                     uvcontsub_flagger,
+                                     flag_autos,
+                                     apply_static_mask)
 from tricolour.stokes import stokes_corr_map
 from tricolour.mask import collect_masks, load_mask
 
@@ -193,6 +194,9 @@ def create_parser():
                    help="Name of visibility data column to flag")
     p.add_argument("-fn", "--field-names", type=str, action='append', default=[],
                    help="Name(s) of fields to flag. Defaults to flagging all")
+    p.add_argument("-dpm", "--disable-post-mortem", action="store_true",
+                   help="Disable the default behaviour of starting the Interactive Python Debugger "
+                        "upon an unhandled exception. This may be necessary for batch pipelining")
     return p
 
 
@@ -200,6 +204,10 @@ def main():
     tic = time.time()
     print_info()
     args = create_parser().parse_args()
+    if args.disable_post_mortem:
+        log.warn("Disabling crash debugging with the Interactive Python Debugger, as per user request")
+        post_mortem_handler.disable_pdb_on_error()
+
     log.info("Will process {0:s} column".format(args.data_column))
     data_column = args.data_column
     masked_channels = [load_mask(fn, dilate=args.dilate_masks) for fn in collect_masks()]
@@ -367,6 +375,13 @@ def main():
                 new_flags = uvcontsub_flagger(vis,
                                               new_flags,
                                               **GD[k])
+            elif GD[k].get("task", "unnamed") == "flag_autos":
+                ("task" in GD[k]) and GD[k].pop("task")
+                ("order" in GD[k]) and GD[k].pop("order")
+                new_flags = flag_autos(new_flags,
+                                       a1,
+                                       a2,
+                                       **GD[k])
             elif GD[k].get("task", "unnamed") == "combine_with_input_flags":
                 new_flags = da.logical_or(new_flags,
                                           original)
@@ -386,7 +401,7 @@ def main():
                                               **GD[k])
 
             else:
-                raise TypeError("Task {0:s} does not name a valid task".format(GD[k].get("task", "unnamed")))
+                raise TypeError("Task '{0:s}' does not name a valid task".format(GD[k].get("task", "unnamed")))
 
         # Reorder flags from katdal-like format back to the MS ordering
         # (ntime*nbl, nchan, ncorr)
