@@ -5,7 +5,7 @@ background_static_mask:
     task: apply_static_mask
     order: 1
     accumulation_mode: "or"
-    uvrange: ""
+    uvrange: "0~350m"
 background_flags:
     task: sum_threshold 
     order: 2
@@ -23,14 +23,14 @@ background_flags:
     flag_all_time_frac: 0.6
     flag_all_freq_frac: 0.8
     rho: 1.3
-    num_major_iterations: 5
+    num_major_iterations: 10
 residual_flag:
     task: uvcontsub_flagger
     order: 3
     major_cycles: 5
     or_original_from_cycle: 1
     taylor_degrees: 20
-    sigma: 5
+    sigma: 4.5
 short_spacings_static_mask:
     task: apply_static_mask
     order: 4

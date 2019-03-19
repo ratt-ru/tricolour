@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+from scipy.ndimage import binary_dilation
 import os
 import sys
 import re
@@ -20,39 +20,48 @@ paths = [
 if 'TRICOLOUR_CONFIG' in os.environ:
     paths.append(os.environ['TRICOLOUR_CONFIG'])
 
+def dilate_mask(mask_chans, mask_flags, dilate):
+    """ Dilates mask array by number of channels indicated in dilate
+
+    Arguments:
+        dilate: dilation channel width in either Hz or number of channels
+        mask_chans: centre frequencies of mask
+        mask_flags: boolean array of mask
+    Returns:
+        dilated_mask: boolean array of shape mask_flags
+    """
+    try:
+        dilate_width = int(dilate)
+    except ValueError:
+        value,units = re.match(r"([\d.]+)([a-zA-Z]+)", dilate, re.I).groups()
+        if units == 'GHz':
+            value = float(value)*1e9
+        elif units == 'MHz':
+            value = float(value)*1e6
+        elif units == 'kHz':
+            value = float(value)*1e3
+        elif units == 'Hz':
+            value = float(value)
+        else:
+            raise ValueError('Unrecognised units for --dilate value::  %s'%units)
+
+        chan_width = mask_chans[1] - mask_chans[0]
+        dilate_width  = int(value/chan_width) + 1
+    dstruct = np.array([True,True,True])
+    return binary_dilation(mask_flags, dstruct, iterations=dilate_width)
+
+
 def load_mask(filename, dilate):
     # Load mask
-    try:
-        mask = np.load(filename)
-        if mask.dtype[0] != np.bool or \
-           mask.dtype[1] != np.float64:
-           raise RuntimeError("Invalid")
-    except:
-        raise RuntimeError("Mask %s is not a valid static mask with labelled channel axis [dtype == (bool, float64)]" % filename)
+    mask = np.load(filename)
+    if mask.dtype[0] != np.bool or \
+       mask.dtype[1] != np.float64:
+       raise ValueError("Mask %s is not a valid static mask with labelled channel axis [dtype == (bool, float64)]" % filename)
     mask_chans = mask["chans"][1]
     mask_flags = mask["mask"][0]
     # Dilate mask
     if dilate:
-        try:
-            dilate_width = int(dilate)
-        except ValueError:
-            value,units = re.match(r"([\d.]+)([a-zA-Z]+)", dilate, re.I).groups()
-            if units == 'GHz':
-                value = float(value)*1e9
-            elif units == 'MHz':
-                value = float(value)*1e6
-            elif units == 'kHz':
-                value = float(value)*1e3
-            elif units == 'Hz':
-                value = float(value)
-            else:
-                raise RuntimeError('Unrecognised units for --dilate value::  %s'%units)
-
-            chan_width = mask_chans[1] - mask_chans[0]
-            dilate_width  = int(value/chan_width) + 1
-        dstruct = np.array([True,True,True])
-        mask_flags = binary_dilation(mask_flags, dstruct, iterations=dilate_width)
-
+        mask_flags = dilate_mask(mask_chans, mask_flags, dilate)
     masked_channels = mask_chans[np.argwhere(mask_flags)]
     tricolour.log.info("Loaded mask {0:s} {1:s} with {2:.2f}% flagged bandwidth between {3:.3f} and {4:.3f} GHz".format(
         filename,

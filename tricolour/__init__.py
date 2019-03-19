@@ -79,8 +79,6 @@ def add_log_handler(hndl):
 # Create the log object
 log, log_filehandler, log_console_handler, log_formatter = create_logger()
 
-global GD
-GD = {}
 DEFAULT_CONFIG = os.path.join(os.path.split(__file__)[0], "conf", "default.yaml")
 
 def print_info():
@@ -129,13 +127,12 @@ def load_config(config_file):
     dict
       Configuration
     """
-    if config_file == "":
+    if config_file == DEFAULT_CONFIG:
         log.warn("User strategy not provided. Will now attempt to find some defaults in the install paths")
     else:
         log.info("Loading in user customized strategy {0:s}".format(config_file))
     config = collect(config_file)
     # Load configuration from file if present
-    global GD
     GD = dict([(k, config[k]) for k in config])
     GD = OrderedDict([(k, GD[k]) for k in sorted(GD.keys(), key=lambda x: GD[x].get("order", 99))])
     def _print_tree(tree, indent=0):
@@ -155,14 +152,14 @@ def load_config(config_file):
     log.info("      END OF CONFIGURATION      ")
     log.info("********************************")
 
-    return config_file, GD
+    return GD
 
 
 def create_parser():
     formatter = argparse.ArgumentDefaultsHelpFormatter
     p = argparse.ArgumentParser(formatter_class=formatter)
     p.add_argument("ms", help="Measurement Set")
-    p.add_argument("-c", "--config", default="",
+    p.add_argument("-c", "--config", default=DEFAULT_CONFIG,
                    required=False, type=load_config,
                    help="YAML config file containing parameters for "
                    "the flagger in the 'sum_threshold' key.")
@@ -211,7 +208,7 @@ def main():
     log.info("Will process {0:s} column".format(args.data_column))
     data_column = args.data_column
     masked_channels = [load_mask(fn, dilate=args.dilate_masks) for fn in collect_masks()]
-    cfg_file, flagger_kwargs = args.config
+    GD = args.config
 
     # Group datasets by these columns
     group_cols = ["FIELD_ID", "DATA_DESC_ID", "SCAN_NUMBER"]
