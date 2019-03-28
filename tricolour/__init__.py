@@ -29,7 +29,7 @@ from dask.diagnostics import (ProgressBar, Profiler,
 
 import numpy as np
 import xarray as xr
-
+import copy
 from xarrayms import xds_from_ms, xds_from_table, xds_to_table
 
 try:
@@ -359,34 +359,43 @@ def main():
         original = flags.copy()
         new_flags = flags
         for k in GD:
-            if GD[k].get("task", "unnamed") == "sum_threshold":
-                ("task" in GD[k]) and GD[k].pop("task")
-                ("order" in GD[k]) and GD[k].pop("order")
+            def _deepcopy_tree(tree):
+                new_tree = {}
+                for k in tree:
+                    if hasattr(tree[k], "__dict__"):
+                        new_tree[k] = _deepcopy_tree(tree[k])
+                    else:
+                        new_tree[k] = copy.deepcopy(tree[k])
+                return new_tree
+            GD_copy = _deepcopy_tree(GD)
+            if GD_copy[k].get("task", "unnamed") == "sum_threshold":
+                ("task" in GD_copy[k]) and GD_copy[k].pop("task")
+                ("order" in GD_copy[k]) and GD_copy[k].pop("order")
                 new_flags = sum_threshold_flagger(vis,
                                                   new_flags,
                                                   chunks,
-                                                  **GD[k])
-            elif GD[k].get("task", "unnamed") == "uvcontsub_flagger":
-                ("task" in GD[k]) and GD[k].pop("task")
-                ("order" in GD[k]) and GD[k].pop("order")
+                                                  **GD_copy[k])
+            elif GD_copy[k].get("task", "unnamed") == "uvcontsub_flagger":
+                ("task" in GD_copy[k]) and GD_copy[k].pop("task")
+                ("order" in GD_copy[k]) and GD_copy[k].pop("order")
                 new_flags = uvcontsub_flagger(vis,
                                               new_flags,
-                                              **GD[k])
-            elif GD[k].get("task", "unnamed") == "flag_autos":
-                ("task" in GD[k]) and GD[k].pop("task")
-                ("order" in GD[k]) and GD[k].pop("order")
+                                              **GD_copy[k])
+            elif GD_copy[k].get("task", "unnamed") == "flag_autos":
+                ("task" in GD_copy[k]) and GD_copy[k].pop("task")
+                ("order" in GD_copy[k]) and GD_copy[k].pop("order")
                 new_flags = flag_autos(new_flags,
                                        a1,
                                        a2,
-                                       **GD[k])
-            elif GD[k].get("task", "unnamed") == "combine_with_input_flags":
+                                       **GD_copy[k])
+            elif GD_copy[k].get("task", "unnamed") == "combine_with_input_flags":
                 new_flags = da.logical_or(new_flags,
                                           original)
-            elif GD[k].get("task", "unnamed") == "unflag":
+            elif GD_copy[k].get("task", "unnamed") == "unflag":
                 new_flags = da.zeros_like(new_flags)
-            elif GD[k].get("task", "unnamed") == "apply_static_mask":
-                ("task" in GD[k]) and GD[k].pop("task")
-                ("order" in GD[k]) and GD[k].pop("order")
+            elif GD_copy[k].get("task", "unnamed") == "apply_static_mask":
+                ("task" in GD_copy[k]) and GD_copy[k].pop("task")
+                ("order" in GD_copy[k]) and GD_copy[k].pop("order")
                 new_flags = apply_static_mask(new_flags,
                                               a1,
                                               a2,
@@ -395,11 +404,10 @@ def main():
                                               chan_freq,
                                               chan_width,
                                               xncorr,
-                                              **GD[k])
+                                              **GD_copy[k])
 
             else:
-                raise TypeError("Task '{0:s}' does not name a valid task".format(GD[k].get("task", "unnamed")))
-
+                raise TypeError("Task '{0:s}' does not name a valid task".format(k))
         # Reorder flags from katdal-like format back to the MS ordering
         # (ntime*nbl, nchan, ncorr)
         new_flags = new_flags.reshape((ntime, nchan, nbl, xncorr))
