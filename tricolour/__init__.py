@@ -301,7 +301,7 @@ def main():
         log.info("Adding field '{0:s}' to compute graph for processing".format(field_dict[ds.FIELD_ID]))
         row_counts = np.asarray(row_counts)
         ntime, nbl = row_counts.size, row_counts[0]
-        nrow, nchan, ncorr = ds.DATA.data.shape
+        nrow, nchan, ncorr = getattr(ds, data_column).data.shape
         chunks = da.from_array(row_counts, chunks=(agg_time_counts,))
 
         # Visibilities from the dataset
