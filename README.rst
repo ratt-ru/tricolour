@@ -33,7 +33,7 @@ By default the installation will provide a default configuration in
 
     <tricolour package installation directory>/conf
 
-The strategy is a yaml dictionary keyed flagger step, e.g.
+The strategy is a yaml dictionary keyed on flagger step, e.g.
 
     reset_flags:
     
