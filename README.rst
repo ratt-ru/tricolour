@@ -21,8 +21,11 @@ Usage
 The default configuration in will be searched for in the following paths:
 
     /usr/etc/tricolour
+    
     <tricolour package installation directory>/conf
+    
     ~/.config/tricolour
+    
     ~/.tricolour
 
 This behaviour can be overwritten with the '-c' argument to the flagger.
