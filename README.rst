@@ -2,8 +2,10 @@
 Tricolour
 =========
 
-Science Data Processing flagging code, wrapped in dask,
+A variant of the Science Data Processing flagging code, wrapped in dask,
 operating on Measurement Sets.
+
+Copyright SDP / RARG, 2018-2019. South African Radio Astronomy Observatory (SARAO)
 
 Installation
 ------------
