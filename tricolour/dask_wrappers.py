@@ -114,19 +114,12 @@ def apply_static_mask(flag, a1, a2, antspos, masks,
     kwargs["ncorr"] = ncorrs
 
     name = "apply-static-mask-" + da.core.tokenize(flag, a1, a2, kwargs)
-    layers = db.blockwise(np_apply_static_mask, name, dims,
-                          flag.name, dims,
-                          a1.name, ("row", "corrprod"),
-                          a2.name, ("row", "corrprod"),
-                          numblocks={
-                            flag.name: flag.numblocks,
-                            a1.name: a1.numblocks,
-                            a2.name: a2.numblocks
-                          },
-                          **kwargs)
-    # Add input graphs to the graph
-    graph = HighLevelGraph.from_collections(name, layers, (flag, a1, a2))
-    return da.Array(graph, name, flag.chunks, dtype=flag.dtype)
+    layers = da.blockwise(lambda flag, a1, a2: np_apply_static_mask(flag, a1, a2, **kwargs), dims,
+                          flag, dims,
+                          a1, ("row", "corrprod"),
+                          a2, ("row", "corrprod"),
+                          dtype=flag.dtype)
+    return layers
 
 def flag_autos(flag, a1, a2, **kwargs):
     """
