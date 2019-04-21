@@ -156,7 +156,7 @@ def load_config(config_file):
     return GD
 
 def _casa_style_range(val):
-    """ returns None or tupple with lower and upper bound """
+    """ returns list of int """
     if not isinstance(val, str):
         raise argparse.ArgumentTypeError("Value must be of type string")
     if val == "":
