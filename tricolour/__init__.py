@@ -7,7 +7,6 @@ from __future__ import division
 from __future__ import print_function
 
 import argparse
-import copy
 import contextlib
 from collections import OrderedDict
 from functools import wraps
@@ -171,6 +170,7 @@ def load_config(config_file):
 
     return GD
 
+
 def _casa_style_range(val):
     """ returns list of int """
     if not isinstance(val, str):
@@ -183,6 +183,7 @@ def _casa_style_range(val):
         return range(*map(int, val.split("~")))
     else:
         raise argparse.ArgumentError("Value must be CASA range or blank")
+
 
 def create_parser():
     formatter = argparse.ArgumentDefaultsHelpFormatter
@@ -240,7 +241,9 @@ def main():
     args = create_parser().parse_args()
 
     if args.scan_numbers != []:
-        log.info("Only considering scans '{0:s}' as per user selection criterion".format(",".join(map(str, args.scan_numbers))))
+        log.info("Only considering scans '{0:s}' as "
+                 "per user selection criterion"
+                 .format(",".join(map(str, args.scan_numbers))))
 
     if args.flagging_strategy == "polarisation":
         log.info("Flagging based on quadrature polarized power")
@@ -355,11 +358,15 @@ def main():
     for ds, agg_time_counts, row_counts in zip(xds, agg_time, scan_rows):
         if ds.FIELD_ID not in field_dict:
             continue
+
         if args.scan_numbers != []:
             if ds.SCAN_NUMBER not in args.scan_numbers:
                 continue
 
-        log.info("Adding field '{0:s}' scan {1:d} to compute graph for processing".format(field_dict[ds.FIELD_ID], ds.SCAN_NUMBER))
+        log.info("Adding field '{0:s}' scan {1:d} to "
+                 "compute graph for processing"
+                 .format(field_dict[ds.FIELD_ID], ds.SCAN_NUMBER))
+
         row_counts = np.asarray(row_counts)
         ntime, nbl = row_counts.size, row_counts[0]
         nrow, nchan, ncorr = getattr(ds, data_column).data.shape
