@@ -324,7 +324,7 @@ def main():
             if ds.SCAN_NUMBER not in args.scan_numbers:
                 continue
 
-        log.info("Adding field '{0:s}' to compute graph for processing".format(field_dict[ds.FIELD_ID]))
+        log.info("Adding field '{0:s}' scan {1:d} to compute graph for processing".format(field_dict[ds.FIELD_ID], ds.SCAN_NUMBER))
         row_counts = np.asarray(row_counts)
         ntime, nbl = row_counts.size, row_counts[0]
         nrow, nchan, ncorr = getattr(ds, data_column).data.shape
@@ -452,17 +452,17 @@ def main():
         writes = xds_to_table(new_ms, args.ms, "FLAG")
         write_computes.append(writes)
 
-        profilers = ([Profiler(), CacheProfiler(), ResourceProfiler()]
-                     if can_profile else [])
-        contexts = [ProgressBar()] + profilers
+    profilers = ([Profiler(), CacheProfiler(), ResourceProfiler()]
+                 if can_profile else [])
+    contexts = [ProgressBar()] + profilers
 
-        with contextlib.nested(*contexts), dask.config.set(pool=pool):
-            dask.compute(write_computes)
+    with contextlib.nested(*contexts), dask.config.set(pool=pool):
+        dask.compute(write_computes)
 
-        if can_profile:
-            visualize(profilers)
-        toc = time.time()
-        elapsed = toc - tic
-        log.info("Data flagged successfully in {0:02.0f}:{1:02.0f}:{2:02.0f} hours".format((elapsed // 60) // 60,
-                                                                                           (elapsed // 60) % 60,
-                                                                                           elapsed % 60))
+    if can_profile:
+        visualize(profilers)
+    toc = time.time()
+    elapsed = toc - tic
+    log.info("Data flagged successfully in {0:02.0f}:{1:02.0f}:{2:02.0f} hours".format((elapsed // 60) // 60,
+                                                                                       (elapsed // 60) % 60,
+                                                                                       elapsed % 60))
