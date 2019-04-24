@@ -48,7 +48,7 @@ def check_baseline_ordering(ant1, ant2, chunks, g):
     return da.Array(graph, name, chunks.chunks, dtype=np.bool)
 
 
-def sum_threshold_flagger(vis, flag, chunks, **kwargs):
+def sum_threshold_flagger(vis, flag, **kwargs):
     """
     Dask wrapper for :func:`~tricolour.flagging.sum_threshold_flagger`
     """
@@ -57,23 +57,21 @@ def sum_threshold_flagger(vis, flag, chunks, **kwargs):
     # while
     # ant1, ant2 and chunks will have the same number of chunks,
     # the size of each chunk is different
-    token = da.core.tokenize(vis, flag, chunks, kwargs)
+    token = da.core.tokenize(vis, flag, kwargs)
     name = 'sum-threshold-flagger-' + token
     dims = ("time", "chan", "corrprod")
 
     layers = db.blockwise(np_sum_threshold_flagger, name, dims,
                           vis.name, dims,
                           flag.name, dims,
-                          chunks.name, ("time",),
                           numblocks={
                               vis.name: vis.numblocks,
                               flag.name: flag.numblocks,
-                              chunks.name: chunks.numblocks
                           },
                           **kwargs)
 
     # Add input graphs to the graph
-    graph = HighLevelGraph.from_collections(name, layers, (vis, flag, chunks))
+    graph = HighLevelGraph.from_collections(name, layers, (vis, flag))
     return da.Array(graph, name, vis.chunks, dtype=flag.dtype)
 
 

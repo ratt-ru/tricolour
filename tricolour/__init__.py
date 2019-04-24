@@ -416,7 +416,7 @@ def main():
                 task_kwargs = GD[k].copy()
                 task_kwargs.pop("task", None)
                 task_kwargs.pop("order", None)
-                new_flags = sum_threshold_flagger(vis, new_flags, chunks,
+                new_flags = sum_threshold_flagger(vis, new_flags,
                                                   **task_kwargs)
             elif GD[k].get("task", "unnamed") == "uvcontsub_flagger":
                 task_kwargs = GD[k].copy()

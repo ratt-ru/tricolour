@@ -1001,7 +1001,7 @@ def uvcontsub_flagger(vis, flags, major_cycles=5,
     return result_flags
 
 
-def sum_threshold_flagger(vis, flags, chunks=None, outlier_nsigma=4.5,
+def sum_threshold_flagger(vis, flags, outlier_nsigma=4.5,
                           windows_time=[1, 2, 4, 8], windows_freq=[1, 2, 4, 8],
                           background_reject=2.0, background_iterations=1,
                           spike_width_time=12.5, spike_width_freq=10.0,
@@ -1036,8 +1036,6 @@ def sum_threshold_flagger(vis, flags, chunks=None, outlier_nsigma=4.5,
         input visibilities
     flags : :class:`numpy.ndarray`
         input flags
-    chunks : :class:`numpy.ndarray`
-        chunking
     outlier_nsigma : float
         Number of sigma to reject outliers when thresholding
     windows_time : array, int
