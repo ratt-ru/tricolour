@@ -20,6 +20,7 @@ paths = [
 if 'TRICOLOUR_CONFIG' in os.environ:
     paths.append(os.environ['TRICOLOUR_CONFIG'])
 
+
 def dilate_mask(mask_chans, mask_flags, dilate):
     """ Dilates mask array by number of channels indicated in dilate
 
@@ -33,21 +34,22 @@ def dilate_mask(mask_chans, mask_flags, dilate):
     try:
         dilate_width = int(dilate)
     except ValueError:
-        value,units = re.match(r"([\d.]+)([a-zA-Z]+)", dilate, re.I).groups()
+        value, units = re.match(r"([\d.]+)([a-zA-Z]+)", dilate, re.I).groups()
         if units == 'GHz':
-            value = float(value)*1e9
+            value = float(value) * 1e9
         elif units == 'MHz':
-            value = float(value)*1e6
+            value = float(value) * 1e6
         elif units == 'kHz':
-            value = float(value)*1e3
+            value = float(value) * 1e3
         elif units == 'Hz':
             value = float(value)
         else:
-            raise ValueError('Unrecognised units for --dilate value::  %s'%units)
+            raise ValueError(
+                'Unrecognised units for --dilate value::  %s' % units)
 
         chan_width = mask_chans[1] - mask_chans[0]
-        dilate_width  = int(value/chan_width) + 1
-    dstruct = np.array([True,True,True])
+        dilate_width = int(value / chan_width) + 1
+    dstruct = np.array([True, True, True])
     return binary_dilation(mask_flags, dstruct, iterations=dilate_width)
 
 
@@ -56,7 +58,8 @@ def load_mask(filename, dilate):
     mask = np.load(filename)
     if mask.dtype[0] != np.bool or \
        mask.dtype[1] != np.float64:
-       raise ValueError("Mask %s is not a valid static mask with labelled channel axis [dtype == (bool, float64)]" % filename)
+        raise ValueError(
+            "Mask %s is not a valid static mask with labelled channel axis [dtype == (bool, float64)]" % filename)
     mask_chans = mask["chans"][1]
     mask_flags = mask["mask"][0]
     # Dilate mask
@@ -71,6 +74,7 @@ def load_mask(filename, dilate):
         np.max(mask_chans) / 1.0e9)
     )
     return masked_channels
+
 
 def collect_masks(filename="", paths=paths):
     """

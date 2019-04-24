@@ -38,9 +38,9 @@ def check_baseline_ordering(ant1, ant2, chunks, g):
                           ant2.name, dims,
                           chunks.name, dims,
                           numblocks={
-                             ant1.name: ant1.numblocks,
-                             ant2.name: ant2.numblocks,
-                             chunks.name: chunks.numblocks,
+                              ant1.name: ant1.numblocks,
+                              ant2.name: ant2.numblocks,
+                              chunks.name: chunks.numblocks,
                           },
                           g=g)
 
@@ -66,9 +66,9 @@ def sum_threshold_flagger(vis, flag, chunks, **kwargs):
                           flag.name, dims,
                           chunks.name, ("row",),
                           numblocks={
-                            vis.name: vis.numblocks,
-                            flag.name: flag.numblocks,
-                            chunks.name: chunks.numblocks
+                              vis.name: vis.numblocks,
+                              flag.name: flag.numblocks,
+                              chunks.name: chunks.numblocks
                           },
                           **kwargs)
 
@@ -90,14 +90,15 @@ def uvcontsub_flagger(vis, flag, **kwargs):
                           vis.name, dims,
                           flag.name, dims,
                           numblocks={
-                            vis.name: vis.numblocks,
-                            flag.name: flag.numblocks,
+                              vis.name: vis.numblocks,
+                              flag.name: flag.numblocks,
                           },
                           **kwargs)
 
     # Add input graphs to the graph
     graph = HighLevelGraph.from_collections(name, layers, (vis, flag))
     return da.Array(graph, name, vis.chunks, dtype=flag.dtype)
+
 
 def apply_static_mask(flag, a1, a2, antspos, masks,
                       spw_chanlabels, spw_chanwidths, ncorrs,
@@ -119,14 +120,15 @@ def apply_static_mask(flag, a1, a2, antspos, masks,
                           a1.name, ("row", "corrprod"),
                           a2.name, ("row", "corrprod"),
                           numblocks={
-                            flag.name: flag.numblocks,
-                            a1.name: a1.numblocks,
-                            a2.name: a2.numblocks
+                              flag.name: flag.numblocks,
+                              a1.name: a1.numblocks,
+                              a2.name: a2.numblocks
                           },
                           **kwargs)
     # Add input graphs to the graph
     graph = HighLevelGraph.from_collections(name, layers, (flag, a1, a2))
     return da.Array(graph, name, flag.chunks, dtype=flag.dtype)
+
 
 def flag_autos(flag, a1, a2, **kwargs):
     """
@@ -137,10 +139,11 @@ def flag_autos(flag, a1, a2, **kwargs):
     name = "flag-autos-" + da.core.tokenize(flag, a1, a2, kwargs)
 
     return da.blockwise(lambda flag, a1, a2: np_flag_autos(flag, a1, a2, **kwargs), dims,
-                          flag, dims,
-                          a1, ("row", "corrprod"),
-                          a2, ("row", "corrprod"),
-                          dtype=flag.dtype)
+                        flag, dims,
+                        a1, ("row", "corrprod"),
+                        a2, ("row", "corrprod"),
+                        dtype=flag.dtype)
+
 
 def unpolarised_intensity(vis, stokes_unpol, stokes_pol):
     """

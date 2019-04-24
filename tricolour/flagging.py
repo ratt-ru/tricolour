@@ -15,6 +15,7 @@ standard deviation of a Gaussian distribution.
 .. _median absolute deviation: https://en.wikipedia.org/wiki/Median_absolute_deviation
 """  # noqa
 
+
 def flag_autos(flag, a1, a2):
     """Flags auto-correlations
 
@@ -47,6 +48,7 @@ def flag_autos(flag, a1, a2):
     sel = (a1_single_time == a2_single_time)
     flag[:, :, sel] = True
     return flag
+
 
 def apply_static_mask(flag, a1, a2, antspos, masks,
                       spw_chanlabels, spw_chanwidths, ncorr,
@@ -92,7 +94,7 @@ def apply_static_mask(flag, a1, a2, antspos, masks,
         if val == "":
             return (0, 1e9)
         elif re.match(r"^(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?~(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?[\s]*[m]?$", val):
-            return map(float,val.replace(" ","").replace("\t","").replace("m","").split("~"))
+            return map(float, val.replace(" ", "").replace("\t", "").replace("m", "").split("~"))
         else:
             raise ValueError("Value must be range or blank")
     uvrange = _casa_style_range(uvrange)
@@ -130,7 +132,8 @@ def apply_static_mask(flag, a1, a2, antspos, masks,
                            "spectral flags. Maybe run pyxis ms.prep?")
     # Apply flags
     ant_diff = antspos[a1.ravel()] - antspos[a2.ravel()]
-    d2 = 0.5 * np.sum(ant_diff**2, axis=1) #UV distance is twice baseline lenght
+    # UV distance is twice baseline lenght
+    d2 = 0.5 * np.sum(ant_diff**2, axis=1)
 
     # ECEF antenna coordinates are in meters.
     # The transforms to get it into UV space are just rotations
@@ -145,19 +148,23 @@ def apply_static_mask(flag, a1, a2, antspos, masks,
     for mask in masks:
         masked_channels = np.sum(np.logical_and(mask > spw_chanlb,
                                                 mask < spw_chanub),
-                                axis=0) > 0
+                                 axis=0) > 0
         mask_corrs = np.repeat(masked_channels, ncorr).reshape([nfreq,
-                                                                ncorr]).transpose(1, 0) # ncorr, nfreq
-        flag_buffer = flag_buffer.transpose(0, 2, 1).reshape(nrow, ncorr, nfreq)
+                                                                ncorr]).transpose(1, 0)  # ncorr, nfreq
+        flag_buffer = flag_buffer.transpose(
+            0, 2, 1).reshape(nrow, ncorr, nfreq)
         if accumulation_mode == "or":
             flag_buffer[sel, :, :] |= mask_corrs[None, :, :]
         elif accumulation_mode == "override":
             flag_buffer[sel, :, :] = mask_corrs[None, :, :]
         else:
-            raise ValueError("Static mask accumulation mode not understood - only 'or' or 'override' accepted")
-        flag_buffer = flag_buffer.reshape(ntime, ncorr * nbl, nfreq).transpose(0, 2, 1)
+            raise ValueError(
+                "Static mask accumulation mode not understood - only 'or' or 'override' accepted")
+        flag_buffer = flag_buffer.reshape(
+            ntime, ncorr * nbl, nfreq).transpose(0, 2, 1)
     assert flag_buffer.shape == tuple([ntime, nfreq, ncorr * nbl])
     return flag_buffer
+
 
 def _as_min_dtype(value):
     """Convert a non-negative integer into a numpy scalar of the narrowest
@@ -933,6 +940,7 @@ def _get_flags_mp(in_data, in_flags, flagger):
     flagger._get_flags(in_data, in_flags, out_flags)
     return out_flags
 
+
 def uvcontsub_flagger(vis, flags, major_cycles=5, or_original_from_cycle=1, taylor_degrees=20, sigma=5):
     """Iteratively fits a low order polynomial to average amplitude, subtracts and clips at sigma
 
@@ -966,7 +974,7 @@ def uvcontsub_flagger(vis, flags, major_cycles=5, or_original_from_cycle=1, tayl
             if np.sum(result_flags[:, :, corr]) == result_flags[:, :, corr].size:
                 continue
             vis[result_flags] = np.nan
-            avgvis=np.nanmean(vis[:, :, corr], axis=0)
+            avgvis = np.nanmean(vis[:, :, corr], axis=0)
             # zero completely flagged channels before taking FFT
             avgvis[np.isnan(avgvis)] = 0.0
             fft = np.fft.fft(avgvis, axis=0)
@@ -974,9 +982,11 @@ def uvcontsub_flagger(vis, flags, major_cycles=5, or_original_from_cycle=1, tayl
             ub = fft.shape[0]
             # clip high frequency components
             fft[np.arange(lb, ub)] = 0
-            # what we're left with is a low order smooth polynomial makeshift fit to the data
+            # what we're left with is a low order smooth polynomial makeshift
+            # fit to the data
             smoothened = np.fft.ifft(fft)
-            absresidual = np.abs(np.abs(vis_orig[:, :, corr] - smoothened[None, :])).real
+            absresidual = np.abs(
+                np.abs(vis_orig[:, :, corr] - smoothened[None, :])).real
             # use prior flags when computing MAD
             flagged_absresidual = absresidual.copy()
             flagged_absresidual[result_flags[:, :, corr]] = np.nan
@@ -991,6 +1001,7 @@ def uvcontsub_flagger(vis, flags, major_cycles=5, or_original_from_cycle=1, tayl
             else:
                 result_flags[:, :, corr] = newflags
     return result_flags
+
 
 def sum_threshold_flagger(vis, flags, chunks=None, outlier_nsigma=4.5,
                           windows_time=[1, 2, 4, 8], windows_freq=[1, 2, 4, 8],

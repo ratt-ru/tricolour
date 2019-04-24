@@ -9,28 +9,38 @@ import time
 import logging
 import logging.handlers
 
+from tricolour.mask import collect_masks, load_mask
+from tricolour.stokes import stokes_corr_map
+from tricolour.dask_wrappers import (sum_threshold_flagger,
+                                     polarised_intensity,
+                                     unpolarised_intensity,
+                                     check_baseline_ordering,
+                                     uvcontsub_flagger,
+                                     flag_autos,
+                                     apply_static_mask)
+from tricolour.config import collect
+from tricolour.util import aggregate_chunks
+from xarrayms import xds_from_ms, xds_from_table, xds_to_table
+import xarray as xr
+import numpy as np
+from dask.diagnostics import (ProgressBar, Profiler,
+                              ResourceProfiler,
+                              CacheProfiler, visualize)
+import dask.array as da
+import dask
+from collections import OrderedDict
+from multiprocessing.pool import ThreadPool, cpu_count
+from functools import wraps
+import os
+import contextlib
+import argparse
+
 __author__ = """Simon Perkins"""
 __email__ = 'sperkins@ska.ac.za'
 __version__ = '0.2.0'
 import tricolour.post_mortem_handler
 post_mortem_handler.enable_pdb_on_error()
-import argparse
-import contextlib
-import os
-from functools import wraps
-import logging
-from multiprocessing.pool import ThreadPool, cpu_count
-from collections import OrderedDict
-import dask
-import dask.array as da
-from dask.diagnostics import (ProgressBar, Profiler,
-                              ResourceProfiler,
-                              CacheProfiler, visualize)
 
-import numpy as np
-import xarray as xr
-
-from xarrayms import xds_from_ms, xds_from_table, xds_to_table
 
 try:
     import bokeh
@@ -39,23 +49,14 @@ except ImportError:
     can_profile = False
 
 
-from tricolour.util import aggregate_chunks
-from tricolour.config import collect
-from tricolour.dask_wrappers import (sum_threshold_flagger,
-                                     polarised_intensity,
-                                     unpolarised_intensity,
-                                     check_baseline_ordering,
-                                     uvcontsub_flagger,
-                                     flag_autos,
-                                     apply_static_mask)
-from tricolour.stokes import stokes_corr_map
-from tricolour.mask import collect_masks, load_mask
-
 TRICOLOUR_LOG = "tricolor.log"
+
+
 def create_logger():
     """ Create a console logger """
     log = logging.getLogger("tricolour")
-    cfmt = logging.Formatter(('%(name)s - %(asctime)s %(levelname)s - %(message)s'))
+    cfmt = logging.Formatter(
+        ('%(name)s - %(asctime)s %(levelname)s - %(message)s'))
     log.setLevel(logging.DEBUG)
     filehandler = logging.FileHandler(TRICOLOUR_LOG)
     filehandler.setFormatter(cfmt)
@@ -70,22 +71,27 @@ def create_logger():
 
     return log, filehandler, console, cfmt
 
+
 def remove_log_handler(hndl):
     log.removeHandler(hndl)
+
 
 def add_log_handler(hndl):
     log.addHandler(hndl)
 
+
 # Create the log object
 log, log_filehandler, log_console_handler, log_formatter = create_logger()
 
-DEFAULT_CONFIG = os.path.join(os.path.split(__file__)[0], "conf", "default.yaml")
+DEFAULT_CONFIG = os.path.join(os.path.split(
+    __file__)[0], "conf", "default.yaml")
+
 
 def print_info():
-    RED='\033[0;31m'
-    WHITE='\033[0;37m'
-    BLUE='\033[0;34m'
-    RESET='\033[0m'
+    RED = '\033[0;31m'
+    WHITE = '\033[0;37m'
+    BLUE = '\033[0;34m'
+    RESET = '\033[0m'
     log.info("""
 ***********************************************************************************************************************************************
 {0:s} ▄▄▄▄▄▄▄▄▄▄▄ {1:s} ▄▄▄▄▄▄▄▄▄▄▄{2:s}  ▄▄▄▄▄▄▄▄▄▄▄{3:s}  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄            ▄▄▄▄▄▄▄▄▄▄▄  ▄         ▄  ▄▄▄▄▄▄▄▄▄▄▄
@@ -112,7 +118,8 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ***********************************************************************************************************************************************
-""".format(BLUE, WHITE, RED, RESET)) # make it Frenchy
+""".format(BLUE, WHITE, RED, RESET))  # make it Frenchy
+
 
 def load_config(config_file):
     """
@@ -128,22 +135,28 @@ def load_config(config_file):
       Configuration
     """
     if config_file == DEFAULT_CONFIG:
-        log.warn("User strategy not provided. Will now attempt to find some defaults in the install paths")
+        log.warn(
+            "User strategy not provided. Will now attempt to find some defaults in the install paths")
     else:
-        log.info("Loading in user customized strategy {0:s}".format(config_file))
+        log.info(
+            "Loading in user customized strategy {0:s}".format(config_file))
     config = collect(config_file)
     # Load configuration from file if present
     GD = dict([(k, config[k]) for k in config])
-    GD = OrderedDict([(k, GD[k]) for k in sorted(GD.keys(), key=lambda x: GD[x].get("order", 99))])
+    GD = OrderedDict([(k, GD[k]) for k in sorted(
+        GD.keys(), key=lambda x: GD[x].get("order", 99))])
+
     def _print_tree(tree, indent=0):
         for k in tree:
             if isinstance(tree[k], dict) or isinstance(tree[k], OrderedDict):
-                log.info(('\t' * indent) + "Step {0:s} (type '{1:s}')".format(k, tree[k].get("task", "Task is nameless")))
+                log.info(('\t' * indent) + "Step {0:s} (type '{1:s}')".format(
+                    k, tree[k].get("task", "Task is nameless")))
                 _print_tree(tree[k], indent + 1)
             elif k == "order" or k == "task":
                 continue
             else:
-                log.info(('\t' * indent) + "{0:s}:{1:s}".format(k.ljust(30), str(tree[k])))
+                log.info(('\t' * indent) +
+                         "{0:s}:{1:s}".format(k.ljust(30), str(tree[k])))
     log.info("********************************")
     log.info("   BEGINNING OF CONFIGURATION   ")
     log.info("********************************")
@@ -202,12 +215,14 @@ def main():
     print_info()
     args = create_parser().parse_args()
     if args.disable_post_mortem:
-        log.warn("Disabling crash debugging with the Interactive Python Debugger, as per user request")
+        log.warn(
+            "Disabling crash debugging with the Interactive Python Debugger, as per user request")
         post_mortem_handler.disable_pdb_on_error()
 
     log.info("Will process {0:s} column".format(args.data_column))
     data_column = args.data_column
-    masked_channels = [load_mask(fn, dilate=args.dilate_masks) for fn in collect_masks()]
+    masked_channels = [load_mask(fn, dilate=args.dilate_masks)
+                       for fn in collect_masks()]
     GD = args.config
 
     # Group datasets by these columns
@@ -253,7 +268,8 @@ def main():
 
     # Reopen the datasets using the aggregated row ordering
     xds = list(xds_from_ms(args.ms,
-                           columns=(data_column, "FLAG", "ANTENNA1", "ANTENNA2"),
+                           columns=(data_column, "FLAG",
+                                    "ANTENNA1", "ANTENNA2"),
                            group_cols=group_cols,
                            index_cols=index_cols,
                            chunks=[{"row": r} for r in agg_row]))
@@ -276,8 +292,9 @@ def main():
         if not set(args.field_names) <= set(fieldnames):
             raise ValueError("One or more fields cannot be found in dataset '{0:s}' "
                              "You specified {1:s}, but only {2:s} are available".format(
-                             args.ms, ",".join(args.field_names), ",".join(fieldnames)))
-        field_dict = dict([(np.where(fieldnames == fn)[0][0], fn) for fn in args.field_names])
+                                 args.ms, ",".join(args.field_names), ",".join(fieldnames)))
+        field_dict = dict([(np.where(fieldnames == fn)[0][0], fn)
+                           for fn in args.field_names])
     else:
         field_dict = dict([(findx, fn) for findx, fn in enumerate(fieldnames)])
     ddid = ddid_ds[ds.attrs['DATA_DESC_ID']].drop('table_row')
@@ -298,7 +315,8 @@ def main():
     for ds, agg_time_counts, row_counts in zip(xds, agg_time, scan_rows):
         if ds.FIELD_ID not in field_dict:
             continue
-        log.info("Adding field '{0:s}' to compute graph for processing".format(field_dict[ds.FIELD_ID]))
+        log.info("Adding field '{0:s}' to compute graph for processing".format(
+            field_dict[ds.FIELD_ID]))
         row_counts = np.asarray(row_counts)
         ntime, nbl = row_counts.size, row_counts[0]
         nrow, nchan, ncorr = ds.DATA.data.shape
@@ -398,7 +416,8 @@ def main():
                                               **GD[k])
 
             else:
-                raise TypeError("Task '{0:s}' does not name a valid task".format(GD[k].get("task", "unnamed")))
+                raise TypeError("Task '{0:s}' does not name a valid task".format(
+                    GD[k].get("task", "unnamed")))
 
         # Reorder flags from katdal-like format back to the MS ordering
         # (ntime*nbl, nchan, ncorr)
@@ -422,7 +441,6 @@ def main():
                      if can_profile else [])
         contexts = [ProgressBar()] + profilers
 
-
         pool = ThreadPool(args.nworkers)
 
         with contextlib.nested(*contexts), dask.config.set(pool=pool):
@@ -433,5 +451,6 @@ def main():
         toc = time.time()
         elapsed = toc - tic
         log.info("Data flagged successfully in {0:02.0f}:{1:02.0f}:{2:02.0f} hours".format((elapsed // 60) // 60,
-                                                                                           (elapsed // 60) % 60,
+                                                                                           (elapsed //
+                                                                                            60) % 60,
                                                                                            elapsed % 60))
