@@ -21,9 +21,11 @@ def flag_data(vis_windows, flag_windows):
     def _flag_data(vis_windows, flag_windows):
         return flag_windows
 
-    return da.blockwise(_flag_data, ("bl", "time", "chan", "corr"),
-                        vis_windows, ("bl", "time", "chan", "corr"),
-                        flag_windows, ("bl", "time", "chan", "corr"),
+    dims = ("time", "chan", "bl", "corr")
+
+    return da.blockwise(_flag_data, dims,
+                        vis_windows, dims,
+                        flag_windows, dims,
                         dtype=vis_windows.dtype)
 
 
