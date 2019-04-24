@@ -5,9 +5,26 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-import time
+
+import argparse
+import contextlib
+from collections import OrderedDict
+from functools import wraps
 import logging
 import logging.handlers
+from multiprocessing.pool import ThreadPool, cpu_count
+import os
+import time
+
+import dask
+import dask.array as da
+from dask.diagnostics import (ProgressBar, Profiler,
+                              ResourceProfiler,
+                              CacheProfiler, visualize)
+import numpy as np
+import xarray as xr
+from xarrayms import xds_from_ms, xds_from_table, xds_to_table
+
 
 from tricolour.mask import collect_masks, load_mask
 from tricolour.stokes import stokes_corr_map
@@ -20,27 +37,13 @@ from tricolour.dask_wrappers import (sum_threshold_flagger,
                                      apply_static_mask)
 from tricolour.config import collect
 from tricolour.util import aggregate_chunks
-from xarrayms import xds_from_ms, xds_from_table, xds_to_table
-import xarray as xr
-import numpy as np
-from dask.diagnostics import (ProgressBar, Profiler,
-                              ResourceProfiler,
-                              CacheProfiler, visualize)
-import dask.array as da
-import dask
-from collections import OrderedDict
-from multiprocessing.pool import ThreadPool, cpu_count
-from functools import wraps
-import os
-import contextlib
-import argparse
+import tricolour.post_mortem_handler
 
 __author__ = """Simon Perkins"""
 __email__ = 'sperkins@ska.ac.za'
 __version__ = '0.2.0'
-import tricolour.post_mortem_handler
-post_mortem_handler.enable_pdb_on_error()
 
+post_mortem_handler.enable_pdb_on_error()
 
 try:
     import bokeh
@@ -49,16 +52,13 @@ except ImportError:
     can_profile = False
 
 
-TRICOLOUR_LOG = "tricolor.log"
-
-
 def create_logger():
     """ Create a console logger """
     log = logging.getLogger("tricolour")
     cfmt = logging.Formatter(
         ('%(name)s - %(asctime)s %(levelname)s - %(message)s'))
     log.setLevel(logging.DEBUG)
-    filehandler = logging.FileHandler(TRICOLOUR_LOG)
+    filehandler = logging.FileHandler("tricolour.log")
     filehandler.setFormatter(cfmt)
     log.addHandler(filehandler)
     log.setLevel(logging.INFO)
@@ -118,7 +118,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ***********************************************************************************************************************************************
-""".format(BLUE, WHITE, RED, RESET))  # make it Frenchy
+""".format(BLUE, WHITE, RED, RESET))  # noqa make it Frenchy
 
 
 def load_config(config_file):
@@ -135,12 +135,13 @@ def load_config(config_file):
       Configuration
     """
     if config_file == DEFAULT_CONFIG:
-        log.warn(
-            "User strategy not provided. Will now attempt to find some defaults in the install paths")
+        log.warn("User strategy not provided. Will now attempt to "
+                 "find some defaults in the install paths")
     else:
-        log.info(
-            "Loading in user customized strategy {0:s}".format(config_file))
+        log.info("Loading custom user strategy {0:s}".format(config_file))
+
     config = collect(config_file)
+
     # Load configuration from file if present
     GD = dict([(k, config[k]) for k in config])
     GD = OrderedDict([(k, GD[k]) for k in sorted(
@@ -157,6 +158,7 @@ def load_config(config_file):
             else:
                 log.info(('\t' * indent) +
                          "{0:s}:{1:s}".format(k.ljust(30), str(tree[k])))
+
     log.info("********************************")
     log.info("   BEGINNING OF CONFIGURATION   ")
     log.info("********************************")
@@ -199,24 +201,31 @@ def create_parser():
                    "Many workers can also affect memory usage "
                    "on systems with many cores.")
     p.add_argument("-dm", "--dilate-masks", type=str, default=None,
-                   help="Number of channels to dilate as int or string with units")
+                   help="Number of channels to dilate as int "
+                        "or string with units")
     p.add_argument("-dc", "--data-column", type=str, default="DATA",
                    help="Name of visibility data column to flag")
-    p.add_argument("-fn", "--field-names", type=str, action='append', default=[],
+    p.add_argument("-fn", "--field-names", type=str, action='append',
+                   default=[],
                    help="Name(s) of fields to flag. Defaults to flagging all")
     p.add_argument("-dpm", "--disable-post-mortem", action="store_true",
-                   help="Disable the default behaviour of starting the Interactive Python Debugger "
-                        "upon an unhandled exception. This may be necessary for batch pipelining")
+                   help="Disable the default behaviour of starting "
+                        "the Interactive Python Debugger upon an "
+                        "unhandled exception. "
+                        "This may be necessary for batch pipelining")
     return p
 
 
 def main():
     tic = time.time()
+
     print_info()
+
     args = create_parser().parse_args()
+
     if args.disable_post_mortem:
-        log.warn(
-            "Disabling crash debugging with the Interactive Python Debugger, as per user request")
+        log.warn("Disabling crash debugging with the "
+                 "Interactive Python Debugger, as per user request")
         post_mortem_handler.disable_pdb_on_error()
 
     log.info("Will process {0:s} column".format(args.data_column))
@@ -288,15 +297,22 @@ def main():
     fld_tab = "::".join((args.ms, "FIELD"))
     fds = list(xds_from_table(fld_tab))
     fieldnames = fds[0].NAME.values
+
     if args.field_names != []:
         if not set(args.field_names) <= set(fieldnames):
-            raise ValueError("One or more fields cannot be found in dataset '{0:s}' "
-                             "You specified {1:s}, but only {2:s} are available".format(
-                                 args.ms, ",".join(args.field_names), ",".join(fieldnames)))
+            raise ValueError("One or more fields cannot be "
+                             "found in dataset '{0:s}' "
+                             "You specified {1:s}, but "
+                             "only {2:s} are available".format(
+                                args.ms,
+                                ",".join(args.field_names),
+                                ",".join(fieldnames)))
+
         field_dict = dict([(np.where(fieldnames == fn)[0][0], fn)
                            for fn in args.field_names])
     else:
         field_dict = dict([(findx, fn) for findx, fn in enumerate(fieldnames)])
+
     ddid = ddid_ds[ds.attrs['DATA_DESC_ID']].drop('table_row')
     spw_info = sds[ddid.SPECTRAL_WINDOW_ID.values].drop('table_row')
 
@@ -364,8 +380,6 @@ def main():
 
         a1 = a1.repeat(xncorr).reshape(ntime, nbl * xncorr)
         a2 = a2.repeat(xncorr).reshape(ntime, nbl * xncorr)
-        #a1 = a1.reshape(ntime, nbl)
-        #a2 = a2.reshape(ntime, nbl)
         a1 = a1.rechunk({1: 64})
         a2 = a2.rechunk({1: 64})
 
@@ -376,35 +390,33 @@ def main():
         # Run the flagger
         original = flags.copy()
         new_flags = flags
+
         for k in GD:
             if GD[k].get("task", "unnamed") == "sum_threshold":
-                ("task" in GD[k]) and GD[k].pop("task")
-                ("order" in GD[k]) and GD[k].pop("order")
-                new_flags = sum_threshold_flagger(vis,
-                                                  new_flags,
-                                                  chunks,
-                                                  **GD[k])
+                task_kwargs = GD[k].copy()
+                task_kwargs.pop("task", None)
+                task_kwargs.pop("order", None)
+                new_flags = sum_threshold_flagger(vis, new_flags, chunks,
+                                                  **task_kwargs)
             elif GD[k].get("task", "unnamed") == "uvcontsub_flagger":
-                ("task" in GD[k]) and GD[k].pop("task")
-                ("order" in GD[k]) and GD[k].pop("order")
-                new_flags = uvcontsub_flagger(vis,
-                                              new_flags,
-                                              **GD[k])
+                task_kwargs = GD[k].copy()
+                task_kwargs.pop("task", None)
+                task_kwargs.pop("order", None)
+                new_flags = uvcontsub_flagger(vis, new_flags, **task_kwargs)
             elif GD[k].get("task", "unnamed") == "flag_autos":
-                ("task" in GD[k]) and GD[k].pop("task")
-                ("order" in GD[k]) and GD[k].pop("order")
-                new_flags = flag_autos(new_flags,
-                                       a1,
-                                       a2,
-                                       **GD[k])
+                task_kwargs = GD[k].copy()
+                task_kwargs.pop("task", None)
+                task_kwargs.pop("order", None)
+
+                new_flags = flag_autos(new_flags, a1, a2, **task_kwargs)
             elif GD[k].get("task", "unnamed") == "combine_with_input_flags":
-                new_flags = da.logical_or(new_flags,
-                                          original)
+                new_flags = da.logical_or(new_flags, original)
             elif GD[k].get("task", "unnamed") == "unflag":
                 new_flags = da.zeros_like(new_flags)
             elif GD[k].get("task", "unnamed") == "apply_static_mask":
-                ("task" in GD[k]) and GD[k].pop("task")
-                ("order" in GD[k]) and GD[k].pop("order")
+                task_kwargs = GD[k].copy()
+                task_kwargs.pop("task", None)
+                task_kwargs.pop("order", None)
                 new_flags = apply_static_mask(new_flags,
                                               a1,
                                               a2,
@@ -413,11 +425,11 @@ def main():
                                               chan_freq,
                                               chan_width,
                                               xncorr,
-                                              **GD[k])
+                                              **task_kwargs)
 
             else:
-                raise TypeError("Task '{0:s}' does not name a valid task".format(
-                    GD[k].get("task", "unnamed")))
+                raise ValueError("Task '{0:s}' does not name a valid task"
+                                 .format(GD[k].get("task", "unnamed")))
 
         # Reorder flags from katdal-like format back to the MS ordering
         # (ntime*nbl, nchan, ncorr)
@@ -437,20 +449,24 @@ def main():
         writes = xds_to_table(new_ms, args.ms, "FLAG")
         write_computes.append(writes)
 
-        profilers = ([Profiler(), CacheProfiler(), ResourceProfiler()]
-                     if can_profile else [])
-        contexts = [ProgressBar()] + profilers
+    profilers = ([Profiler(), CacheProfiler(), ResourceProfiler()]
+                 if can_profile else [])
+    contexts = [ProgressBar()] + profilers
 
-        pool = ThreadPool(args.nworkers)
+    pool = ThreadPool(args.nworkers)
 
-        with contextlib.nested(*contexts), dask.config.set(pool=pool):
-            dask.compute(write_computes)
+    with contextlib.nested(*contexts), dask.config.set(pool=pool):
+        dask.compute(write_computes)
 
-        if can_profile:
-            visualize(profilers)
-        toc = time.time()
-        elapsed = toc - tic
-        log.info("Data flagged successfully in {0:02.0f}:{1:02.0f}:{2:02.0f} hours".format((elapsed // 60) // 60,
-                                                                                           (elapsed //
-                                                                                            60) % 60,
-                                                                                           elapsed % 60))
+    if can_profile:
+        visualize(profilers)
+
+    toc = time.time()
+
+    elapsed = toc - tic
+
+    log.info("Data flagged successfully in "
+             "{0:02.0f}h{1:02.0f}m{2:02.0f}s"
+             .format((elapsed // 60) // 60,
+                     (elapsed // 60) % 60,
+                     elapsed % 60))
