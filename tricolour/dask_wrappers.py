@@ -149,8 +149,8 @@ def unpolarised_intensity(vis, stokes_unpol, stokes_pol):
     def _wrapper(vis, stokes_unpol=None, stokes_pol=None):
         return np_unpolarised_intensity(vis, stokes_unpol, stokes_pol)
 
-    return da.blockwise(_wrapper, ("time", "bl", "chan", "corr"),
-                        vis, ("time", "bl", "chan", "corr"),
+    return da.blockwise(_wrapper, ("row", "chan", "corr"),
+                        vis, ("row", "chan", "corr"),
                         stokes_unpol=stokes_unpol,
                         stokes_pol=stokes_pol,
                         adjust_chunks={"corr": 1},
@@ -165,8 +165,8 @@ def polarised_intensity(vis, stokes_pol):
     def _wrapper(vis, stokes_pol=None):
         return np_polarised_intensity(vis, stokes_pol)
 
-    return da.blockwise(_wrapper, ("time", "bl", "chan", "corr"),
-                        vis, ("time", "bl", "chan", "corr"),
+    return da.blockwise(_wrapper, ("row", "chan", "corr"),
+                        vis, ("row", "chan", "corr"),
                         stokes_pol=stokes_pol,
                         adjust_chunks={"corr": 1},
                         dtype=vis.dtype)
