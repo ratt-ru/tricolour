@@ -7,12 +7,14 @@ from __future__ import division
 from __future__ import print_function
 
 import argparse
+import copy
 import contextlib
 from collections import OrderedDict
 from functools import wraps
 import logging
 import logging.handlers
 from multiprocessing.pool import ThreadPool, cpu_count
+import re
 import os
 import time
 
@@ -169,6 +171,18 @@ def load_config(config_file):
 
     return GD
 
+def _casa_style_range(val):
+    """ returns list of int """
+    if not isinstance(val, str):
+        raise argparse.ArgumentTypeError("Value must be of type string")
+    if val == "":
+        return []
+    elif re.match(r"^(\d+)(\W*,\W*\d)*$", val):
+        return range(*map(int, [v.strip() for v in val.split(",")]))
+    elif re.match(r"^(\d+)~(\d+)$", val):
+        return range(*map(int, val.split("~")))
+    else:
+        raise argparse.ArgumentError("Value must be CASA range or blank")
 
 def create_parser():
     formatter = argparse.ArgumentDefaultsHelpFormatter
@@ -208,6 +222,8 @@ def create_parser():
     p.add_argument("-fn", "--field-names", type=str, action='append',
                    default=[],
                    help="Name(s) of fields to flag. Defaults to flagging all")
+    p.add_argument("-sn", "--scan-numbers", type=_casa_style_range, default=[],
+                   help="Scan numbers to flag (casa style range like 5~9)")
     p.add_argument("-dpm", "--disable-post-mortem", action="store_true",
                    help="Disable the default behaviour of starting "
                         "the Interactive Python Debugger upon an "
@@ -222,6 +238,14 @@ def main():
     print_info()
 
     args = create_parser().parse_args()
+
+    if args.scan_numbers != []:
+        log.info("Only considering scans '{0:s}' as per user selection criterion".format(",".join(map(str, args.scan_numbers))))
+
+    if args.flagging_strategy == "polarisation":
+        log.info("Flagging based on quadrature polarized power")
+    else:
+        log.info("Flagging per correlation ('standard' mode)")
 
     if args.disable_post_mortem:
         log.warn("Disabling crash debugging with the "
@@ -331,11 +355,14 @@ def main():
     for ds, agg_time_counts, row_counts in zip(xds, agg_time, scan_rows):
         if ds.FIELD_ID not in field_dict:
             continue
-        log.info("Adding field '{0:s}' to compute graph for processing".format(
-            field_dict[ds.FIELD_ID]))
+        if args.scan_numbers != []:
+            if ds.SCAN_NUMBER not in args.scan_numbers:
+                continue
+
+        log.info("Adding field '{0:s}' scan {1:d} to compute graph for processing".format(field_dict[ds.FIELD_ID], ds.SCAN_NUMBER))
         row_counts = np.asarray(row_counts)
         ntime, nbl = row_counts.size, row_counts[0]
-        nrow, nchan, ncorr = ds.DATA.data.shape
+        nrow, nchan, ncorr = getattr(ds, data_column).data.shape
         chunks = da.from_array(row_counts, chunks=(agg_time_counts,))
 
         # Visibilities from the dataset

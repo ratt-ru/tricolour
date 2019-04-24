@@ -86,7 +86,6 @@ def apply_static_mask(flag, a1, a2, antspos, masks,
     out_flags : ndarray, bool
         Flags corresponding to `data`
     """
-
     def _casa_style_range(val):
         """ returns None or tupple with lower and upper bound """
         if not isinstance(val, str):
@@ -131,9 +130,8 @@ def apply_static_mask(flag, a1, a2, antspos, masks,
         raise RuntimeError("Your dataset does not support storing "
                            "spectral flags. Maybe run pyxis ms.prep?")
     # Apply flags
-    ant_diff = antspos[a1.ravel()] - antspos[a2.ravel()]
-    # UV distance is twice baseline lenght
-    d2 = 0.5 * np.sum(ant_diff**2, axis=1)
+    ant_diff = antspos[a1.reshape(ntime, nbl, ncorr)[:, :, 0].ravel()] - antspos[a2.reshape(ntime, nbl, ncorr)[:, :, 0].ravel()]
+    d2 = 0.5 * np.sum(ant_diff**2, axis=1) #UV distance is twice baseline lenght
 
     # ECEF antenna coordinates are in meters.
     # The transforms to get it into UV space are just rotations
@@ -142,7 +140,7 @@ def apply_static_mask(flag, a1, a2, antspos, masks,
     uuvrange = np.inf if uvrange is None else max(uvrange[0], uvrange[1])
 
     sel = np.logical_and(d2 >= luvrange**2,
-                         d2 <= uuvrange**2).flatten()
+                         d2 <= uuvrange**2)
     flag_buffer = flag
     # for now all correlations flagged equal
     for mask in masks:
