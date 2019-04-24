@@ -58,13 +58,13 @@ def sum_threshold_flagger(vis, flag, chunks, **kwargs):
     # ant1, ant2 and chunks will have the same number of chunks,
     # the size of each chunk is different
     token = da.core.tokenize(vis, flag, chunks, kwargs)
-    name = '-'.join(('flagger', token))
-    dims = ("row", "chan", "corr")
+    name = 'sum-threshold-flagger-' + token
+    dims = ("time", "chan", "corrprod")
 
     layers = db.blockwise(np_sum_threshold_flagger, name, dims,
                           vis.name, dims,
                           flag.name, dims,
-                          chunks.name, ("row",),
+                          chunks.name, ("time",),
                           numblocks={
                               vis.name: vis.numblocks,
                               flag.name: flag.numblocks,
@@ -81,10 +81,8 @@ def uvcontsub_flagger(vis, flag, **kwargs):
     """
     Dask wrapper for :func:`~tricolour.uvcontsub_flagger`
     """
-    dims = ("row", "chan", "corr")
-    token = da.core.tokenize(vis, flag, kwargs)
-    name = '-'.join(('flagger', token))
-    dims = ("row", "chan", "corr")
+    name = 'uvcontsub-flagger-' + da.core.tokenize(vis, flag, kwargs)
+    dims = ("time", "chan", "corrprod")
 
     layers = db.blockwise(np_uvcontsub_flagger, name, dims,
                           vis.name, dims,
