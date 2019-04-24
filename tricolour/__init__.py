@@ -37,7 +37,7 @@ from tricolour.dask_wrappers import (sum_threshold_flagger,
                                      flag_autos,
                                      apply_static_mask)
 from tricolour.config import collect
-from tricolour.util import aggregate_chunks
+from tricolour.util import aggregate_chunks, casa_style_range
 import tricolour.post_mortem_handler
 
 __author__ = """Simon Perkins"""
@@ -171,20 +171,6 @@ def load_config(config_file):
     return GD
 
 
-def _casa_style_range(val):
-    """ returns list of int """
-    if not isinstance(val, str):
-        raise argparse.ArgumentTypeError("Value must be of type string")
-    if val == "":
-        return []
-    elif re.match(r"^(\d+)(\W*,\W*\d)*$", val):
-        return range(*map(int, [v.strip() for v in val.split(",")]))
-    elif re.match(r"^(\d+)~(\d+)$", val):
-        return range(*map(int, val.split("~")))
-    else:
-        raise argparse.ArgumentError("Value must be CASA range or blank")
-
-
 def create_parser():
     formatter = argparse.ArgumentDefaultsHelpFormatter
     p = argparse.ArgumentParser(formatter_class=formatter)
@@ -223,7 +209,7 @@ def create_parser():
     p.add_argument("-fn", "--field-names", type=str, action='append',
                    default=[],
                    help="Name(s) of fields to flag. Defaults to flagging all")
-    p.add_argument("-sn", "--scan-numbers", type=_casa_style_range, default=[],
+    p.add_argument("-sn", "--scan-numbers", type=casa_style_range, default=[],
                    help="Scan numbers to flag (casa style range like 5~9)")
     p.add_argument("-dpm", "--disable-post-mortem", action="store_true",
                    help="Disable the default behaviour of starting "

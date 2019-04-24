@@ -6,8 +6,11 @@ from __future__ import print_function
 
 import numpy as np
 import numba
-import re
+
 import dask.array as da
+
+from tricolour.util import casa_style_range
+
 
 MAD_NORMAL = 1.4826
 """Ratio between `median absolute deviation`_ and
@@ -86,17 +89,7 @@ def apply_static_mask(flag, a1, a2, antspos, masks,
     out_flags : ndarray, bool
         Flags corresponding to `data`
     """
-    def _casa_style_range(val):
-        """ returns None or tupple with lower and upper bound """
-        if not isinstance(val, str):
-            raise argparse.ArgumentTypeError("Value must be of type string")
-        if val == "":
-            return (0, 1e9)
-        elif re.match(r"^(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?~(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?[\s]*[m]?$", val):
-            return map(float, val.replace(" ", "").replace("\t", "").replace("m", "").split("~"))
-        else:
-            raise ValueError("Value must be range or blank")
-    uvrange = _casa_style_range(uvrange)
+    uvrange = casa_style_range(uvrange)
 
     exp_ant_shape = (flag.shape[0], flag.shape[2])
 
@@ -939,8 +932,11 @@ def _get_flags_mp(in_data, in_flags, flagger):
     return out_flags
 
 
-def uvcontsub_flagger(vis, flags, major_cycles=5, or_original_from_cycle=1, taylor_degrees=20, sigma=5):
-    """Iteratively fits a low order polynomial to average amplitude, subtracts and clips at sigma
+def uvcontsub_flagger(vis, flags, major_cycles=5,
+                      or_original_from_cycle=1, taylor_degrees=20,
+                      sigma=5):
+    """Iteratively fits a low order polynomial to average amplitude,
+    subtracts and clips at sigma
 
     Parameters
     ----------
@@ -951,9 +947,11 @@ def uvcontsub_flagger(vis, flags, major_cycles=5, or_original_from_cycle=1, tayl
     major_cycles: int
         Number of time to repeat fit and clip
     or_original_from_cycle: int
-        Only start element-wise ORing previous flags from this cycle, 1 therefore discard starting flags
+        Only start element-wise ORing previous flags from this cycle,
+        1 therefore discard starting flags
     taylor_degrees: int
-        Number of terms in taylor expansion of trig functions (i.e first # number of fourier components)
+        Number of terms in taylor expansion of trig functions
+        (i.e first # number of fourier components)
     sigma: float
         Sigma to clip residuals
     Returns
@@ -963,14 +961,17 @@ def uvcontsub_flagger(vis, flags, major_cycles=5, or_original_from_cycle=1, tayl
     """
 
     # vis of shape row, chan, corr
-    assert(vis.shape == flags.shape, "vis and flags must have the same shape")
+    if vis.shape != flags.shape:
+        raise ValueError("vis and flags must have the same shape")
+
     result_flags = flags.copy()
     vis_orig = vis.copy()
     for mi in range(major_cycles):
         for corr in range(vis.shape[2]):
             # correlation all flagged then skip, nothing can be done
-            if np.sum(result_flags[:, :, corr]) == result_flags[:, :, corr].size:
+            if result_flags[:, :, corr].sum() == result_flags[:, :, corr].size:
                 continue
+
             vis[result_flags] = np.nan
             avgvis = np.nanmean(vis[:, :, corr], axis=0)
             # zero completely flagged channels before taking FFT
@@ -988,16 +989,15 @@ def uvcontsub_flagger(vis, flags, major_cycles=5, or_original_from_cycle=1, tayl
             # use prior flags when computing MAD
             flagged_absresidual = absresidual.copy()
             flagged_absresidual[result_flags[:, :, corr]] = np.nan
-            #mad = np.nanmedian(np.abs(flagged_absresidual - np.nanmedian(flagged_absresidual, axis=1)[:, None]), axis=1)
             std = np.nanstd(flagged_absresidual, axis=1)
             # discard old flags and flag based on MAD
-            #newflags = absresidual > sigma * mad[:, None] * MAD_NORMAL
             newflags = absresidual > sigma * std[:, None]
             if mi >= or_original_from_cycle:
-                result_flags[:, :, corr] = np.logical_or(result_flags[:, :, corr],
-                                                         newflags)
+                orred_flags = np.logical_or(result_flags[:, :, corr], newflags)
+                result_flags[:, :, corr] = orred_flags
             else:
                 result_flags[:, :, corr] = newflags
+
     return result_flags
 
 

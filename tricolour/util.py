@@ -4,6 +4,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import re
+
 import numpy as np
 
 
@@ -119,3 +121,20 @@ def aggregate_chunks(chunks, max_chunks, return_groups=False):
     agg_chunks = tuple(tuple(ac) for ac in agg_chunks)
 
     return agg_chunks[0] if singleton else agg_chunks
+
+
+def casa_style_range(val):
+    """ returns list of ints """
+    if not isinstance(val, str):
+        raise argparse.ArgumentTypeError("Value must be of type string")
+    if val == "":
+        return (0, 1e9)
+    elif re.match(r"^(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?~"
+                  r"(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?[\s]*[m]?$", val):
+
+        return map(float, val.replace(" ", "")
+                             .replace("\t", "")
+                             .replace("m", "")
+                             .split("~"))
+    else:
+        raise ValueError("Value must be range or blank")
