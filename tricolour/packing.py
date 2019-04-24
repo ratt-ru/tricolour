@@ -38,25 +38,23 @@ def unique_baselines(ant1, ant2):
 
 
 def _create_vis_windows(ubl, ntime, nchan, ncorr, dtype, path):
-    vis = zarr.creation.create(shape=(ubl.shape[0], ntime, nchan, ncorr),
-                               chunks=(1, ntime, nchan, ncorr),
+    vis = zarr.creation.create(shape=(ntime, nchan, ubl.shape[0], ncorr),
+                               chunks=(ntime, nchan, 1, ncorr),
                                dtype=dtype,
                                synchronizer=zarr.ThreadSynchronizer(),
                                overwrite=True,
                                # https://github.com/zarr-developers/zarr/issues/244
                                # Set values post-creation
-                               fill_value=None,
+                               fill_value=0 + 0j,
                                read_only=False,
                                store=pjoin(path, "vis"))
-
-    vis[:] = 0
 
     return vis
 
 
 def _create_flag_windows(ubl, ntime, nchan, ncorr, dtype, path):
-    return zarr.creation.create(shape=(ubl.shape[0], ntime, nchan, ncorr),
-                                chunks=(1, ntime, nchan, ncorr),
+    return zarr.creation.create(shape=(ntime, nchan, ubl.shape[0], ncorr),
+                                chunks=(ntime, nchan, 1, ncorr),
                                 dtype=dtype,
                                 synchronizer=zarr.ThreadSynchronizer(),
                                 overwrite=True,
@@ -78,7 +76,7 @@ def create_vis_windows(ubl, ntime, nchan, ncorr, dtype, path=None):
                                    dtype, path)}
 
     graph = HighLevelGraph.from_collections(name, layers, ())
-    chunks = ((ubl.shape[0],), (ntime,), (nchan,), (ncorr,))
+    chunks = ((ntime,), (nchan,), (ubl.shape[0],), (ncorr,))
     windows = da.Array(graph, name, chunks, dtype=dtype)
 
     return windows
@@ -96,7 +94,7 @@ def create_flag_windows(ubl, ntime, nchan, ncorr, dtype, path=None):
                                    dtype, path)}
 
     graph = HighLevelGraph.from_collections(name, layers, ())
-    chunks = ((ubl.shape[0],), (ntime,), (nchan,), (ncorr,))
+    chunks = ((ntime,), (nchan,), (ubl.shape[0],), (ncorr,))
     windows = da.Array(graph, name, chunks, dtype=dtype)
 
     return windows
@@ -115,7 +113,7 @@ def _pack_data(time_inv, ubl,
     vis_windows = vis_windows[0][0]
     flag_windows = flag_windows[0][0]
 
-    assert vis_windows.shape[0] == flag_windows.shape[0] == ubl.shape[0]
+    assert vis_windows.shape[2] == flag_windows.shape[2] == ubl.shape[0]
 
     for bl, (a1, a2) in sorted(enumerate(ubl), key=lambda k: random.random()):
         valid = (a1 == ant1) & (a2 == ant2)
@@ -128,12 +126,12 @@ def _pack_data(time_inv, ubl,
         # Assign contiguous time range of values to the windows
         if np.all(np.diff(time_idx) == 1):
             start, end = time_idx[0], time_idx[-1] + 1
-            vis_windows.oindex[bl, start:end, :, :] = data[valid, :, :]
-            flag_windows.oindex[bl, start:end, :, :] = flag[valid, :, :]
+            vis_windows.oindex[start:end, :, bl, :] = data[valid, :, :]
+            flag_windows.oindex[start:end, :, bl, :] = flag[valid, :, :]
         # Non-contiguous case
         else:
-            vis_windows.oindex[bl, time_idx, :, :] = data[valid, :, :]
-            flag_windows.oindex[bl, time_idx, :, :] = flag[valid, :, :]
+            vis_windows.oindex[time_idx, :, bl, :] = data[valid, :, :]
+            flag_windows.oindex[time_idx, :, bl, :] = flag[valid, :, :]
 
     return np.array([[[True]]])
 
@@ -147,7 +145,7 @@ def pack_data(time_inv, ubl,
               data, flags,
               vis_windows, flag_windows):
 
-    window_shape = ("bl", "time", "chan", "corr")
+    window_shape = ("time", "chan", "bl", "corr")
 
     packing = da.blockwise(_pack_data, ("row", "chan", "corr"),
                            time_inv, ("row", ),
@@ -176,10 +174,10 @@ def pack_data(time_inv, ubl,
 def _unpack_data(antenna1, antenna2, time_inv, ubl, windows):
     windows = windows[0][0]
 
-    assert windows.shape[0] == ubl.shape[0]
+    assert windows.shape[2] == ubl.shape[0]
 
     # (row, chan, corr)
-    data_shape = (antenna1.shape[0],) + windows.shape[2:]
+    data_shape = (antenna1.shape[0],) + (windows.shape[1], windows.shape[3])
     data = np.zeros(data_shape, dtype=windows.dtype)
 
     for bl, (a1, a2) in sorted(enumerate(ubl), key=lambda k: random.random()):
@@ -193,10 +191,10 @@ def _unpack_data(antenna1, antenna2, time_inv, ubl, windows):
         # Assign contiguous time range of values from the windows
         if np.all(np.diff(time_idx) == 1):
             start, end = time_idx[0], time_idx[-1] + 1
-            data[valid, :, :] = windows.oindex[bl, start:end, :, :]
+            data[valid, :, :] = windows.oindex[start:end, :, bl, :]
         # Non-contiguous case
         else:
-            data[valid, :, :] = windows.oindex[bl, time_idx, :, :]
+            data[valid, :, :] = windows.oindex[time_idx, :, bl, :]
 
     return data
 
@@ -207,5 +205,5 @@ def unpack_data(antenna1, antenna2, time_inv, ubl, flag_windows):
                         antenna2, ("row",),
                         time_inv, ("row",),
                         ubl, None,
-                        flag_windows, ("bl", "time", "chan", "corr"),
+                        flag_windows, ("time", "chan", "bl", "corr"),
                         dtype=flag_windows.dtype)
