@@ -59,7 +59,7 @@ def sum_threshold_flagger(vis, flag, **kwargs):
     # the size of each chunk is different
     token = da.core.tokenize(vis, flag, kwargs)
     name = 'sum-threshold-flagger-' + token
-    dims = ("time", "chan", "corrprod")
+    dims = ("time", "chan", "bl", "corr")
 
     layers = db.blockwise(np_sum_threshold_flagger, name, dims,
                           vis.name, dims,
@@ -79,8 +79,8 @@ def uvcontsub_flagger(vis, flag, **kwargs):
     """
     Dask wrapper for :func:`~tricolour.uvcontsub_flagger`
     """
-    name = 'uvcontsub-flagger-' + da.core.tokenize(vis, flag, kwargs)
-    dims = ("time", "chan", "corrprod")
+    name = 'uvcontsub-flagger-' + da.core.tokenize(vis, flag, **kwargs)
+    dims = ("time", "chan", "bl", "corr")
 
     layers = db.blockwise(np_uvcontsub_flagger, name, dims,
                           vis.name, dims,
@@ -96,48 +96,46 @@ def uvcontsub_flagger(vis, flag, **kwargs):
     return da.Array(graph, name, vis.chunks, dtype=flag.dtype)
 
 
-def apply_static_mask(flag, a1, a2, antspos, masks,
-                      spw_chanlabels, spw_chanwidths, ncorrs,
+def apply_static_mask(flag, ubl, antspos, masks,
+                      spw_chanlabels, spw_chanwidths,
                       **kwargs):
     """
     Dask wrapper for :func:`~tricolour.apply_static_mask`
     """
-    dims = ("row", "chan", "corrprod")  # corrprod = ncorr * nbl
+    dims = ("time", "chan", "bl", "corr")  # corrprod = ncorr * nbl
 
-    kwargs["antspos"] = antspos
-    kwargs["masks"] = masks
-    kwargs["spw_chanlabels"] = spw_chanlabels
-    kwargs["spw_chanwidths"] = spw_chanwidths
-    kwargs["ncorr"] = ncorrs
+    name = "apply-static-mask-" + da.core.tokenize(flag, ubl,
+                                                   antspos, masks,
+                                                   spw_chanlabels,
+                                                   spw_chanwidths,
+                                                   **kwargs)
 
-    name = "apply-static-mask-" + da.core.tokenize(flag, a1, a2, kwargs)
     layers = db.blockwise(np_apply_static_mask, name, dims,
                           flag.name, dims,
-                          a1.name, ("row", "corrprod"),
-                          a2.name, ("row", "corrprod"),
-                          numblocks={
-                              flag.name: flag.numblocks,
-                              a1.name: a1.numblocks,
-                              a2.name: a2.numblocks
-                          },
+                          ubl, None,
+                          antspos, None,
+                          masks, None,
+                          spw_chanlabels, None,
+                          spw_chanwidths, None,
+                          numblocks={flag.name: flag.numblocks},
                           **kwargs)
+
     # Add input graphs to the graph
-    graph = HighLevelGraph.from_collections(name, layers, (flag, a1, a2))
+    graph = HighLevelGraph.from_collections(name, layers, (flag,))
     return da.Array(graph, name, flag.chunks, dtype=flag.dtype)
 
 
-def flag_autos(flag, a1, a2, **kwargs):
+def flag_autos(flag, ubl, **kwargs):
     """
     Dask wrapper for :func:`~tricolour.flag_autos`
     """
-    dims = ("row", "chan", "corrprod")  # corrprod = ncorr * nbl
+    dims = ("time", "chan", "bl", "corr")
 
-    name = "flag-autos-" + da.core.tokenize(flag, a1, a2, kwargs)
+    name = "flag-autos-" + da.core.tokenize(flag, ubl, kwargs)
 
-    return da.blockwise(lambda flag, a1, a2: np_flag_autos(flag, a1, a2, **kwargs), dims,
+    return da.blockwise(np_flag_autos, dims,
                         flag, dims,
-                        a1, ("row", "corrprod"),
-                        a2, ("row", "corrprod"),
+                        ubl, None,
                         dtype=flag.dtype)
 
 

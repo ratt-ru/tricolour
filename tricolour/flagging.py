@@ -9,6 +9,13 @@ import numba
 
 import dask.array as da
 
+try:
+    import zarr
+except ImportError:
+    have_zarr = False
+else:
+    have_zarr = True
+
 from tricolour.util import casa_style_range
 
 
@@ -19,42 +26,37 @@ standard deviation of a Gaussian distribution.
 """  # noqa
 
 
-def flag_autos(flag, a1, a2):
-    """Flags auto-correlations
+def flag_autos(flags, ubl):
+    """
+    Flags auto-correlations
 
     Parameters
     ----------
-    flag : ndarray, bool
-        Flags corresponding to visibility data (time, freq, nbl*ncorr)
-    a1 : antenna1, int
-        Indices for data, with shape (time, nbl*ncorr)
-    a2 : antenna2, int
-        Indices for data, with shape (time, nbl*ncorr)
+    flags : :class:`numpy.ndarray`
+        Flags corresponding to visibility data
+        of shape :code:`(time, chan, bl, corr)`
+    ubl : :class:`numpy.ndarray`
+        Unique baselines of shape :code:`(bl, 2)`
+
     Returns
     -------
     out_flags : ndarray, bool
         Flags corresponding to `data`
     """
-    exp_ant_shape = (flag.shape[0], flag.shape[2])
+    if flags.shape[2] != ubl.shape[0]:
+        raise ValueError("flag and ubl shape mismatch %s != %s"
+                         % (flags.shape[2], ubl.shape[0]))
 
-    if a1.shape != exp_ant_shape:
-        raise ValueError("antenna1 shape mismatch %s != %s"
-                         % (a1.shape, exp_ant_shape))
+    out_flags = flags.copy()
+    # Flag auto-correlations
+    sel = ubl[:, 0] == ubl[:, 1]
+    out_flags[:, :, sel, :] = True
 
-    if a2.shape != (flag.shape[0], flag.shape[2]):
-        raise ValueError("antenna2 shape mismatch %s != %s"
-                         % (a2.shape, exp_ant_shape))
-
-    # Select autos
-    a1_single_time = a1[0, :].ravel()
-    a2_single_time = a2[0, :].ravel()
-    sel = (a1_single_time == a2_single_time)
-    flag[:, :, sel] = True
-    return flag
+    return out_flags
 
 
-def apply_static_mask(flag, a1, a2, antspos, masks,
-                      spw_chanlabels, spw_chanwidths, ncorr,
+def apply_static_mask(flag, ubl, antspos, masks,
+                      spw_chanlabels, spw_chanwidths,
                       accumulation_mode="or", uvrange=""):
     """Interpolates and applies static masks to the data, flagging channels
     that spans over frequencies included in the mask
@@ -62,11 +64,9 @@ def apply_static_mask(flag, a1, a2, antspos, masks,
     Parameters
     ----------
     flag : ndarray, bool
-        Flags corresponding to visibility data (time, freq, nbl*ncorr)
-    a1 : antenna1, int
-        Indices for data, with shape (time, nbl*ncorr)
-    a2 : antenna2, int
-        Indices for data, with shape (time, nbl*ncorr)
+        Flags corresponding to visibility data (time, freq, bl, corr)
+    ubl : :class:`numpy.ndarray`
+        Unique baselines of shape :code:`(bl, 2)`
     antspos: ndarray, float
         antenna ECEF positions, as defined in CASA MEMO 229 ::ANTENNA,
         of shape (nant, 3)
@@ -87,74 +87,50 @@ def apply_static_mask(flag, a1, a2, antspos, masks,
     Returns
     -------
     out_flags : ndarray, bool
-        Flags corresponding to `data`
+        Flags corresponding to `flag`
     """
     uvrange = casa_style_range(uvrange)
 
-    exp_ant_shape = (flag.shape[0], flag.shape[2])
-
-    if a1.shape != exp_ant_shape:
-        raise ValueError("antenna1 shape mismatch %s != %s"
-                         % (a1.shape, exp_ant_shape))
-
-    if a2.shape != (flag.shape[0], flag.shape[2]):
-        raise ValueError("antenna2 shape mismatch %s != %s"
-                         % (a2.shape, exp_ant_shape))
-
-    nfreq = flag.shape[1]
-    ntime = flag.shape[0]
-    nbl = flag.shape[2] // ncorr
-    nrow = nbl * ntime
-
-    if ntime * nbl * nfreq * ncorr != flag.size:
-        raise ValueError("Invalid Dimensions. Possibly ncorr is wrong")
-
-    # Check each dataset for compatibility before applying
-    msants = {}
-    msddidsel = []
-    ms_masks = []
+    if flag.shape[2] != ubl.shape[0]:
+        raise ValueError("flag and ubl shape mismatch %s != %s"
+                         % (flag.shape[2], ubl.shape[0]))
 
     spw_chanlb = spw_chanlabels - spw_chanwidths * 0.5
     spw_chanub = spw_chanlabels + spw_chanwidths * 0.5
-    flag_shape = flag.shape
 
-    # spectral flags are optional in CASA memo 229
-    if len(flag_shape) != 3:
-        raise RuntimeError("Your dataset does not support storing "
-                           "spectral flags. Maybe run pyxis ms.prep?")
-    # Apply flags
-    ant_diff = antspos[a1.reshape(ntime, nbl, ncorr)[:, :, 0].ravel()] - antspos[a2.reshape(ntime, nbl, ncorr)[:, :, 0].ravel()]
-    d2 = 0.5 * np.sum(ant_diff**2, axis=1) #UV distance is twice baseline lenght
+    # Work out the baseline length
+    bl_length = antspos[ubl[:, 0]] - antspos[ubl[:, 1]]
+    # UV distance is twice baseline length
+    d2 = 0.5 * np.sum(bl_length**2, axis=1)
 
     # ECEF antenna coordinates are in meters.
     # The transforms to get it into UV space are just rotations
     # can just take the euclidian norm here - optimized by not doing sqrt
     luvrange = 0.0 if uvrange is None else min(uvrange[0], uvrange[1])
     uuvrange = np.inf if uvrange is None else max(uvrange[0], uvrange[1])
+    bl_sel = np.logical_and(d2 >= luvrange**2, d2 <= uuvrange**2)
+    out_flags = flag.copy()
 
-    sel = np.logical_and(d2 >= luvrange**2,
-                         d2 <= uuvrange**2)
-    flag_buffer = flag
-    # for now all correlations flagged equal
     for mask in masks:
-        masked_channels = np.sum(np.logical_and(mask > spw_chanlb,
-                                                mask < spw_chanub),
-                                 axis=0) > 0
-        mask_corrs = np.repeat(masked_channels, ncorr).reshape([nfreq,
-                                                                ncorr]).transpose(1, 0)  # ncorr, nfreq
-        flag_buffer = flag_buffer.transpose(
-            0, 2, 1).reshape(nrow, ncorr, nfreq)
+        if mask.ndim != 2 and mask.shape[1] != 1:
+            raise ValueError("masks.shape != (dim, 1)")
+
+        lower_mask = mask[:, :] > spw_chanlb[None, :]
+        upper_mask = mask[:, :] < spw_chanub[None, :]
+        masked_channels = np.logical_and(lower_mask, upper_mask)
+        masked_channels = masked_channels.sum(axis=0) > 0
+
+        # All correlations flagged equally at the moment
         if accumulation_mode == "or":
-            flag_buffer[sel, :, :] |= mask_corrs[None, :, :]
+            out_flags[:, :, bl_sel, :] |= masked_channels[None, :, None, None]
         elif accumulation_mode == "override":
-            flag_buffer[sel, :, :] = mask_corrs[None, :, :]
+            out_flags[:, :, bl_sel, :] = masked_channels[None, :, None, None]
         else:
-            raise ValueError(
-                "Static mask accumulation mode not understood - only 'or' or 'override' accepted")
-        flag_buffer = flag_buffer.reshape(
-            ntime, ncorr * nbl, nfreq).transpose(0, 2, 1)
-    assert flag_buffer.shape == tuple([ntime, nfreq, ncorr * nbl])
-    return flag_buffer
+            raise ValueError("Invalid accumulation_mode '%s'. "
+                             "Should be 'or' or 'override'"
+                             % accumulation_mode)
+
+    return out_flags
 
 
 def _as_min_dtype(value):
@@ -964,16 +940,31 @@ def uvcontsub_flagger(vis, flags, major_cycles=5,
     if vis.shape != flags.shape:
         raise ValueError("vis and flags must have the same shape")
 
+    ntime, nfreq, nbl, ncorr = vis.shape
+
+    if have_zarr and isinstance(vis, zarr.Array):
+        vis = np.asarray(vis)
+
+    if have_zarr and isinstance(flags, zarr.Array):
+        flags = np.asarray(flags)
+
+    vis = vis.reshape(ntime, nfreq, nbl*ncorr)
+    flags = flags.reshape(ntime, nfreq, nbl*ncorr)
+
+    vis.flags.writeable = False
+    flags.flags.writeable = False
+
+    vis_scratch = vis.copy()
     result_flags = flags.copy()
-    vis_orig = vis.copy()
+
     for mi in range(major_cycles):
         for corr in range(vis.shape[2]):
             # correlation all flagged then skip, nothing can be done
             if result_flags[:, :, corr].sum() == result_flags[:, :, corr].size:
                 continue
 
-            vis[result_flags] = np.nan
-            avgvis = np.nanmean(vis[:, :, corr], axis=0)
+            vis_scratch[result_flags] = np.nan
+            avgvis = np.nanmean(vis_scratch[:, :, corr], axis=0)
             # zero completely flagged channels before taking FFT
             avgvis[np.isnan(avgvis)] = 0.0
             fft = np.fft.fft(avgvis, axis=0)
@@ -984,14 +975,14 @@ def uvcontsub_flagger(vis, flags, major_cycles=5,
             # what we're left with is a low order smooth polynomial makeshift
             # fit to the data
             smoothened = np.fft.ifft(fft)
-            absresidual = np.abs(
-                np.abs(vis_orig[:, :, corr] - smoothened[None, :])).real
+            absresidual = np.abs(vis[:, :, corr] - smoothened[None, :]).real
             # use prior flags when computing MAD
             flagged_absresidual = absresidual.copy()
             flagged_absresidual[result_flags[:, :, corr]] = np.nan
             std = np.nanstd(flagged_absresidual, axis=1)
             # discard old flags and flag based on MAD
             newflags = absresidual > sigma * std[:, None]
+
             if mi >= or_original_from_cycle:
                 orred_flags = np.logical_or(result_flags[:, :, corr], newflags)
                 result_flags[:, :, corr] = orred_flags
@@ -1073,6 +1064,18 @@ def sum_threshold_flagger(vis, flags, outlier_nsigma=4.5,
         Number of flagging iterations to run
     """
 
+    # Collapse baseline and correlation dimensions together
+    ntime, nchan, nbl, ncorr = vis.shape
+
+    if have_zarr and isinstance(vis, zarr.Array):
+        vis = np.asarray(vis)
+
+    if have_zarr and isinstance(flags, zarr.Array):
+        flags = np.asarray(flags)
+
+    vis = vis.reshape(ntime, nchan, nbl*ncorr)
+    flags = flags.reshape(ntime, nchan, nbl*ncorr)
+
     windows_freq = np.asarray(windows_freq, dtype=np.float32)
     windows_freq = np.ceil(windows_freq) / average_freq
     windows_freq = np.unique(windows_freq.astype(np.int_))
@@ -1108,7 +1111,8 @@ def sum_threshold_flagger(vis, flags, outlier_nsigma=4.5,
             rho)
         iter_flags = np.logical_or(iter_flags,
                                    out_flags)
-    return out_flags
+
+    return out_flags.reshape(ntime, nchan, nbl, ncorr)
 
 
 class SumThresholdFlagger(object):

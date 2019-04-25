@@ -58,7 +58,7 @@ def _create_flag_windows(ubl, ntime, nchan, ncorr, dtype, path):
                                 dtype=dtype,
                                 synchronizer=zarr.ThreadSynchronizer(),
                                 overwrite=True,
-                                # Flagged by default
+                                # Unflagged by default
                                 fill_value=0,
                                 read_only=False,
                                 store=pjoin(path, "flag"))

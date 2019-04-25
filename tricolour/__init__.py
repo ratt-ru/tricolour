@@ -36,6 +36,13 @@ from tricolour.dask_wrappers import (sum_threshold_flagger,
                                      uvcontsub_flagger,
                                      flag_autos,
                                      apply_static_mask)
+
+from tricolour.packing import (unique_baselines,
+                               create_vis_windows,
+                               create_flag_windows,
+                               pack_data,
+                               unpack_data)
+
 from tricolour.config import collect
 from tricolour.util import aggregate_chunks, casa_style_range
 import tricolour.post_mortem_handler
@@ -241,7 +248,7 @@ def main():
                  "Interactive Python Debugger, as per user request")
         post_mortem_handler.disable_pdb_on_error()
 
-    log.info("Will process {0:s} column".format(args.data_column))
+    log.info("Flagging on the {0:s} column".format(args.data_column))
     data_column = args.data_column
     masked_channels = [load_mask(fn, dilate=args.dilate_masks)
                        for fn in collect_masks()]
@@ -252,64 +259,28 @@ def main():
     # Index datasets by these columns
     index_cols = ['TIME']
 
-    xds = list(xds_from_ms(args.ms,
-                           columns=("TIME", "ANTENNA1", "ANTENNA2"),
-                           group_cols=group_cols,
-                           index_cols=index_cols,
-                           chunks={"row": 1e9}))
-
-    # Find the unique times and their row counts
-    utime_counts = [da.unique(ds.TIME.data, return_counts=True)
-                    for i, ds in enumerate(xds)]
-    utime_counts = dask.compute(utime_counts)[0]
-    scan_rows = tuple(counts for _, counts in utime_counts)
-    scan_chunks = [da.from_array(rc, chunks=ut.size)
-                   for ut, rc in utime_counts]
-    assert len(scan_rows) == len(xds)
-
-    # Ensure that baseline ordering is consistent per timestep
-    dask.compute([check_baseline_ordering(ds.ANTENNA1.data,
-                                          ds.ANTENNA2.data,
-                                          chunks,
-                                          g=g)
-                  for g, (ds, chunks)
-                  in enumerate(zip(xds, scan_chunks))])
-
-    # Determine how many rows we should handle at once.
-    # The row chunk sizes in scan rows already correspond to
-    # single timesteps, so choose the maximum supplied either by the user
-    # or discovered intrinsically in the data itself
-    row_chunks = max(args.row_chunks, max(c.max() for c in scan_rows))
-
-    # Aggregate time and rows together into chunks that
-    # are at least len(counts) in time or counts in rows,
-    # whichever gets reached first
-    agg_time, agg_row = zip(*[aggregate_chunks(((1,) * len(counts), counts),
-                                               (len(counts), row_chunks))
-                              for utime, counts in utime_counts])
-
     # Reopen the datasets using the aggregated row ordering
     xds = list(xds_from_ms(args.ms,
                            columns=(data_column, "FLAG",
-                                    "ANTENNA1", "ANTENNA2"),
+                                    "TIME", "ANTENNA1", "ANTENNA2"),
                            group_cols=group_cols,
                            index_cols=index_cols,
-                           chunks=[{"row": r} for r in agg_row]))
+                           chunks={"row": args.row_chunks}))
 
     # Get datasets for DATA_DESCRIPTION and POLARIZATION,
     # partitioned by row
     data_desc_tab = "::".join((args.ms, "DATA_DESCRIPTION"))
     ddid_ds = list(xds_from_table(data_desc_tab, group_cols="__row__"))
     pol_tab = "::".join((args.ms, "POLARIZATION"))
-    pds = list(xds_from_table(pol_tab, group_cols="__row__"))
+    pol_ds = list(xds_from_table(pol_tab, group_cols="__row__"))
     ant_tab = "::".join((args.ms, "ANTENNA"))
     ads = list(xds_from_table(ant_tab))
     spw_tab = "::".join((args.ms, "SPECTRAL_WINDOW"))
-    sds = list(xds_from_table(spw_tab, group_cols="__row__"))
+    spw_ds = list(xds_from_table(spw_tab, group_cols="__row__"))
     antspos = ads[0].POSITION.values
     fld_tab = "::".join((args.ms, "FIELD"))
-    fds = list(xds_from_table(fld_tab))
-    fieldnames = fds[0].NAME.values
+    field_ds = list(xds_from_table(fld_tab))
+    fieldnames = field_ds[0].NAME.values
 
     if args.field_names != []:
         if not set(args.field_names) <= set(fieldnames):
@@ -326,149 +297,132 @@ def main():
     else:
         field_dict = dict([(findx, fn) for findx, fn in enumerate(fieldnames)])
 
-    ddid = ddid_ds[ds.attrs['DATA_DESC_ID']].drop('table_row')
-    spw_info = sds[ddid.SPECTRAL_WINDOW_ID.values].drop('table_row')
-
-    # Add data from the POLARIZATION table into the dataset
-    def _add_pol_data(ds):
-        ddid = ddid_ds[ds.attrs['DATA_DESC_ID']].drop('table_row')
-        pol = pds[ddid.POLARIZATION_ID.values].drop('table_row')
-        return ds.assign(CORR_TYPE=pol.CORR_TYPE,
-                         CORR_PRODUCT=pol.CORR_PRODUCT)
-
-    xds = [_add_pol_data(ds) for ds in xds]
-
     write_computes = []
 
     # Iterate through each dataset
-    for ds, agg_time_counts, row_counts in zip(xds, agg_time, scan_rows):
+    for ds in xds:
         if ds.FIELD_ID not in field_dict:
             continue
 
-        if args.scan_numbers != []:
-            if ds.SCAN_NUMBER not in args.scan_numbers:
-                continue
+        if args.scan_numbers != [] and ds.SCAN_NUMBER not in args.scan_numbers:
+            continue
 
         log.info("Adding field '{0:s}' scan {1:d} to "
                  "compute graph for processing"
                  .format(field_dict[ds.FIELD_ID], ds.SCAN_NUMBER))
 
-        row_counts = np.asarray(row_counts)
-        ntime, nbl = row_counts.size, row_counts[0]
+        ddid = ddid_ds[ds.attrs['DATA_DESC_ID']]
+        spw_info = spw_ds[ddid.SPECTRAL_WINDOW_ID.values]
+        pol_info = pol_ds[ddid.POLARIZATION_ID.values]
+
         nrow, nchan, ncorr = getattr(ds, data_column).data.shape
-        chunks = da.from_array(row_counts, chunks=(agg_time_counts,))
 
         # Visibilities from the dataset
         vis = getattr(ds, data_column).data
-        a1 = ds.ANTENNA1.data
-        a2 = ds.ANTENNA2.data
+        antenna1 = ds.ANTENNA1.data
+        antenna2 = ds.ANTENNA2.data
         chan_freq = spw_info.CHAN_FREQ.values
         chan_width = spw_info.CHAN_WIDTH.values
 
         # Generate unflagged defaults if we should ignore existing flags
         # otherwise take flags from the dataset
-        if args.ignore_flags == True:  # noqa
+        if args.ignore_flags is True:
             flags = da.full_like(vis, False, dtype=np.bool)
         else:
             flags = ds.FLAG.data
-
-        # Reorder vis and flags into katdal-like format
-        # (ntime, nchan, ncorrprod). Chunk the corrprod
-        # dimension into groups of 64 baselines
-        vis = vis.reshape(ntime, nbl, nchan, ncorr)
-        flags = flags.reshape(ntime, nbl, nchan, ncorr)
-
-        # Rechunk on baseline dimension
-        vis = vis.rechunk({1: 64})
-        flags = flags.rechunk({1: 64})
 
         # If we're flagging on polarised intensity,
         # we convert visibilities to polarised intensity
         # and any flagged correlation will flag the entire visibility
         if args.flagging_strategy == "polarisation":
-            corr_type = ds.CORR_TYPE.data.compute().tolist()
+            corr_type = pol_info.CORR_TYPE.data.compute().tolist()
             stokes_map = stokes_corr_map(corr_type)
             stokes_pol = tuple(v for k, v in stokes_map.items() if k != 'I')
             vis = polarised_intensity(vis, stokes_pol)
-            flags = da.any(flags, axis=3, keepdims=True)
+            flags = da.any(flags, axis=2, keepdims=True)
             xncorr = 1
         elif args.flagging_strategy == "standard":
             xncorr = ncorr
         else:
-            raise ValueError("Invalid flagging Strategy %s" %
+            raise ValueError("Invalid flagging strategy '%s'" %
                              args.flagging_strategy)
 
-        a1 = a1.repeat(xncorr).reshape(ntime, nbl * xncorr)
-        a2 = a2.repeat(xncorr).reshape(ntime, nbl * xncorr)
-        a1 = a1.rechunk({1: 64})
-        a2 = a2.rechunk({1: 64})
+        ubl = unique_baselines(antenna1, antenna2)
+        utime, time_inv = da.unique(ds.TIME.data, return_inverse=True)
+        utime, ubl = dask.compute(utime, ubl)
+        ubl = ubl.view(np.int32).reshape(-1, 2)
+        ntime = utime.shape[0]
 
-        vis = vis.transpose(0, 2, 1, 3)
-        vis = vis.reshape((ntime, nchan, nbl * xncorr))
-        flags = flags.transpose(0, 2, 1, 3)
-        flags = flags.reshape((ntime, nchan, nbl * xncorr))
+        vis_windows = create_vis_windows(ubl, ntime, nchan, xncorr,
+                                         dtype=vis.dtype, path=None)
+
+        flag_windows = create_flag_windows(ubl, ntime, nchan, xncorr,
+                                           dtype=flags.dtype, path=None)
+
+        vis_windows, flag_windows = pack_data(time_inv, ubl,
+                                              antenna1, antenna2,
+                                              vis, flags,
+                                              vis_windows, flag_windows)
+
+        original = flag_windows
+
         # Run the flagger
-        original = flags.copy()
-        new_flags = flags
-
         for k in GD:
             if GD[k].get("task", "unnamed") == "sum_threshold":
                 task_kwargs = GD[k].copy()
                 task_kwargs.pop("task", None)
                 task_kwargs.pop("order", None)
-                new_flags = sum_threshold_flagger(vis, new_flags,
-                                                  **task_kwargs)
+                flag_windows = sum_threshold_flagger(vis_windows, flag_windows,
+                                                     **task_kwargs)
             elif GD[k].get("task", "unnamed") == "uvcontsub_flagger":
                 task_kwargs = GD[k].copy()
                 task_kwargs.pop("task", None)
                 task_kwargs.pop("order", None)
-                new_flags = uvcontsub_flagger(vis, new_flags, **task_kwargs)
+                flag_windows = uvcontsub_flagger(vis_windows, flag_windows,
+                                                 **task_kwargs)
             elif GD[k].get("task", "unnamed") == "flag_autos":
                 task_kwargs = GD[k].copy()
                 task_kwargs.pop("task", None)
                 task_kwargs.pop("order", None)
-
-                new_flags = flag_autos(new_flags, a1, a2, **task_kwargs)
+                flag_windows = flag_autos(flag_windows, ubl,
+                                          **task_kwargs)
             elif GD[k].get("task", "unnamed") == "combine_with_input_flags":
-                new_flags = da.logical_or(new_flags, original)
+                flag_windows = da.logical_or(flag_windows, original)
             elif GD[k].get("task", "unnamed") == "unflag":
-                new_flags = da.zeros_like(new_flags)
+                flag_windows = da.zeros_like(flag_windows)
             elif GD[k].get("task", "unnamed") == "apply_static_mask":
                 task_kwargs = GD[k].copy()
                 task_kwargs.pop("task", None)
                 task_kwargs.pop("order", None)
-                new_flags = apply_static_mask(new_flags,
-                                              a1,
-                                              a2,
-                                              antspos,
-                                              masked_channels,
-                                              chan_freq,
-                                              chan_width,
-                                              xncorr,
-                                              **task_kwargs)
+                flag_windows = apply_static_mask(flag_windows,
+                                                 ubl,
+                                                 antspos,
+                                                 masked_channels,
+                                                 chan_freq,
+                                                 chan_width,
+                                                 **task_kwargs)
 
             else:
                 raise ValueError("Task '{0:s}' does not name a valid task"
                                  .format(GD[k].get("task", "unnamed")))
 
-        # Reorder flags from katdal-like format back to the MS ordering
-        # (ntime*nbl, nchan, ncorr)
-        new_flags = new_flags.reshape((ntime, nchan, nbl, xncorr))
-        new_flags = new_flags.transpose(0, 2, 1, 3)
-        new_flags = new_flags.reshape((-1, nchan, xncorr))
+        unpacked_flags = unpack_data(antenna1, antenna2, time_inv,
+                                     ubl, flag_windows)
 
         # Polarised flagging, broadcast the single correlation
         # back to the full correlation range (all flagged)
         if args.flagging_strategy == "polarisation":
-            new_flags = da.broadcast_to(new_flags, (ntime * nbl, nchan, ncorr))
+            unpacked_flags = da.broadcast_to(unpacked_flags,
+                                             (nrow, nchan, ncorr))
 
-        # Make a single chunk for the write back to disk
-        new_flags = new_flags.rechunk(new_flags.shape)
-        new_ms = ds.assign(FLAG=xr.DataArray(new_flags, dims=ds.FLAG.dims))
+        # Create new dataset containing new flags
+        new_ms = ds.assign(FLAG=xr.DataArray(unpacked_flags, dims=ds.FLAG.dims))
 
+        # Write back to original dataset
         writes = xds_to_table(new_ms, args.ms, "FLAG")
         write_computes.append(writes)
 
+    # Create dask contexts
     profilers = ([Profiler(), CacheProfiler(), ResourceProfiler()]
                  if can_profile else [])
     contexts = [ProgressBar()] + profilers
