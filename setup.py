@@ -21,7 +21,7 @@ requirements = [
     'ruamel.yaml >= 0.15.37',
     'scipy >= 1.2.0',
     'xarray-ms >= 0.1.3',
-    'zarr >= 2.2.0'
+    'zarr >= 2.3.1'
 ]
 
 setup_requirements = ['pytest-runner', ]
