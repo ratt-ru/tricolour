@@ -7,6 +7,8 @@ from __future__ import print_function
 import dask.array as da
 import numpy as np
 from numpy.testing import assert_array_almost_equal
+import pytest
+import zarr
 
 from tricolour.packing import (unique_baselines,
                                create_vis_windows,
@@ -29,7 +31,8 @@ def flag_data(vis_windows, flag_windows):
                         dtype=vis_windows.dtype)
 
 
-def test_vis_and_flag_packing(tmpdir):
+@pytest.mark.parametrize("backend", ["numpy", "zarr"])
+def test_vis_and_flag_packing(tmpdir, backend):
     na = 7
     ntime = 10
     nchan = 16
@@ -39,6 +42,7 @@ def test_vis_and_flag_packing(tmpdir):
     time = np.linspace(0.1, 0.9, ntime)
     antenna1, antenna2 = (a.astype(np.int32) for a in np.triu_indices(na, 1))
     nbl = antenna1.size
+    bl_chunks = nbl // 4
 
     antenna1 = np.tile(antenna1, ntime)
     antenna2 = np.tile(antenna2, ntime)
@@ -59,18 +63,23 @@ def test_vis_and_flag_packing(tmpdir):
 
     ubl = unique_baselines(antenna1, antenna2)
     ubl = ubl.compute().view(np.int32).reshape(-1, 2)
+    ubl = da.from_array(ubl, chunks=bl_chunks)
 
-    vis_windows = create_vis_windows(ubl, ntime, nchan, ncorr,
-                                     np.complex64, path=tmpdir)
+    vis_win_obj = create_vis_windows(ntime, nchan, ubl.shape[0], ncorr,
+                                     bl_chunks, np.complex64,
+                                     backend=backend, path=tmpdir)
 
-    flag_windows = create_flag_windows(ubl, ntime, nchan, ncorr,
-                                       np.bool, path=tmpdir)
+    flag_win_obj = create_flag_windows(ntime, nchan, ubl.shape[0], ncorr,
+                                       bl_chunks, np.bool,
+                                       backend=backend, path=tmpdir)
 
     _, time_inv = da.unique(time, return_inverse=True)
 
-    vis_windows, flag_windows = pack_data(time_inv, ubl, antenna1, antenna2,
+    vis_windows, flag_windows = pack_data(time_inv, ubl,
+                                          antenna1, antenna2,
                                           vis, flag,
-                                          vis_windows, flag_windows)
+                                          vis_win_obj, flag_win_obj,
+                                          ntime)
 
     flag_windows = flag_data(vis_windows, flag_windows)
 
@@ -80,8 +89,23 @@ def test_vis_and_flag_packing(tmpdir):
     unpacked_vis = unpack_data(antenna1, antenna2, time_inv,
                                ubl, vis_windows)
 
-    result = da.compute(vis, flag, unpacked_vis, unpacked_flags)
-    vis, flag, unpacked_vis, unpacked_flags = result
+    result = da.compute(vis_win_obj, flag_win_obj,
+                        vis, flag,
+                        unpacked_vis, unpacked_flags)
+
+    (vis_win_obj, flag_win_obj,
+     vis, flag,
+     unpacked_vis, unpacked_flags) = result
+
+    # Check that we've created the correct type of backend object
+    if backend == "numpy":
+        assert isinstance(vis_win_obj, np.ndarray)
+        assert isinstance(flag_win_obj, np.ndarray)
+    elif backend == "zarr":
+        assert isinstance(vis_win_obj, zarr.Array)
+        assert isinstance(flag_win_obj, zarr.Array)
+    else:
+        raise ValueError("Unhandled backend '%s'" % backend)
 
     assert_array_almost_equal(flag, unpacked_flags)
     assert_array_almost_equal(vis, unpacked_vis)
