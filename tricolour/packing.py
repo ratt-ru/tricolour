@@ -40,6 +40,9 @@ def unique_baselines(ant1, ant2):
 def _create_vis_windows(ntime, nchan, nbl, ncorr, bl_chunks,
                         dtype, backend, path):
     if backend == "zarr":
+        if path is None:
+            path = mkdtemp(prefix='tricolour-vis-windows-')
+
         vis = zarr.creation.create(shape=(ntime, nchan, nbl, ncorr),
                                    chunks=(ntime, nchan, bl_chunks, ncorr),
                                    dtype=dtype,
@@ -60,6 +63,9 @@ def _create_flag_windows(ntime, nchan, nbl, ncorr, bl_chunks,
                          dtype, backend, path):
 
     if backend == "zarr":
+        if path is None:
+            path = mkdtemp(prefix='tricolour-flag-windows-')
+
         return zarr.creation.create(shape=(ntime, nchan, nbl, ncorr),
                                     chunks=(ntime, nchan, bl_chunks, ncorr),
                                     dtype=dtype,
@@ -77,8 +83,6 @@ def _create_flag_windows(ntime, nchan, nbl, ncorr, bl_chunks,
 
 def create_vis_windows(ntime, nchan, nbl, ncorr, bl_chunks,
                        dtype, backend="numpy", path=None):
-    if backend == "zarr" and path is None:
-        path = mkdtemp(prefix='tricolour-vis-windows-')
 
     token = dask.base.tokenize(ntime, nchan, nbl, ncorr,
                                bl_chunks, dtype, path)
@@ -97,9 +101,6 @@ def create_vis_windows(ntime, nchan, nbl, ncorr, bl_chunks,
 
 def create_flag_windows(ntime, nchan, nbl, ncorr, bl_chunks,
                         dtype, backend="numpy", path=None):
-    if backend == "zarr" and path is None:
-        path = mkdtemp(prefix='tricolour-flag-windows-')
-
     token = dask.base.tokenize(ntime, nchan, nbl, ncorr,
                                bl_chunks, dtype, path)
 
