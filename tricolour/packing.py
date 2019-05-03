@@ -11,6 +11,7 @@ import dask
 import dask.array as da
 from dask.highlevelgraph import HighLevelGraph
 import numpy as np
+from numcodecs import Blosc
 import zarr
 
 
@@ -43,8 +44,12 @@ def _create_vis_windows(ntime, nchan, nbl, ncorr, bl_chunks,
         if path is None:
             path = mkdtemp(prefix='tricolour-vis-windows-')
 
+        compressor = Blosc(cname='zstd', clevel=1, shuffle=Blosc.SHUFFLE)
+
+        bl_chunks = 1
         vis = zarr.creation.create(shape=(ntime, nchan, nbl, ncorr),
                                    chunks=(ntime, nchan, bl_chunks, ncorr),
+                                   compressor=compressor,
                                    dtype=dtype,
                                    synchronizer=zarr.ThreadSynchronizer(),
                                    overwrite=True,
@@ -66,8 +71,13 @@ def _create_flag_windows(ntime, nchan, nbl, ncorr, bl_chunks,
         if path is None:
             path = mkdtemp(prefix='tricolour-flag-windows-')
 
+        compressor = Blosc(cname='zstd', clevel=1, shuffle=Blosc.SHUFFLE)
+
+        bl_chunks = 1
+
         return zarr.creation.create(shape=(ntime, nchan, nbl, ncorr),
                                     chunks=(ntime, nchan, bl_chunks, ncorr),
+                                    compressor=compressor,
                                     dtype=dtype,
                                     synchronizer=zarr.ThreadSynchronizer(),
                                     overwrite=True,
@@ -94,7 +104,7 @@ def create_vis_windows(ntime, nchan, nbl, ncorr, bl_chunks,
 
     graph = HighLevelGraph.from_collections(name, layers, ())
     chunks = ((0,),)  # One chunk containing single zarr array object
-    windows = da.Array(graph, name, chunks, dtype=np.object)
+    windows = da.Array(graph, name, chunks, dtype=dtype)
 
     return windows
 
@@ -111,7 +121,7 @@ def create_flag_windows(ntime, nchan, nbl, ncorr, bl_chunks,
 
     graph = HighLevelGraph.from_collections(name, layers, ())
     chunks = ((0,),)  # One chunk containing single zarr array object
-    windows = da.Array(graph, name, chunks, dtype=np.object)
+    windows = da.Array(graph, name, chunks, dtype=dtype)
 
     return windows
 
