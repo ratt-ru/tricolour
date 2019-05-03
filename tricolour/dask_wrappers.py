@@ -96,6 +96,15 @@ def uvcontsub_flagger(vis, flag, **kwargs):
     return da.Array(graph, name, vis.chunks, dtype=flag.dtype)
 
 
+def _apply_static_mask_wrapper(flag, ubl, antspos, masks,
+                               spw_chanlabels, spw_chanwidths,
+                               **kwargs):
+
+    return np_apply_static_mask(flag, ubl[0], antspos, masks,
+                                spw_chanlabels, spw_chanwidths,
+                                **kwargs)
+
+
 def apply_static_mask(flag, ubl, antspos, masks,
                       spw_chanlabels, spw_chanwidths,
                       **kwargs):
@@ -104,25 +113,19 @@ def apply_static_mask(flag, ubl, antspos, masks,
     """
     dims = ("time", "chan", "bl", "corr")  # corrprod = ncorr * nbl
 
-    name = "apply-static-mask-" + da.core.tokenize(flag, ubl,
-                                                   antspos, masks,
-                                                   spw_chanlabels,
-                                                   spw_chanwidths,
-                                                   **kwargs)
+    return da.blockwise(_apply_static_mask_wrapper, dims,
+                        flag, dims,
+                        ubl, ("bl", "bl-comp"),
+                        antspos, None,
+                        masks, None,
+                        spw_chanlabels, None,
+                        spw_chanwidths, None,
+                        dtype=flag.dtype,
+                        **kwargs)
 
-    layers = db.blockwise(np_apply_static_mask, name, dims,
-                          flag.name, dims,
-                          ubl, None,
-                          antspos, None,
-                          masks, None,
-                          spw_chanlabels, None,
-                          spw_chanwidths, None,
-                          numblocks={flag.name: flag.numblocks},
-                          **kwargs)
 
-    # Add input graphs to the graph
-    graph = HighLevelGraph.from_collections(name, layers, (flag,))
-    return da.Array(graph, name, flag.chunks, dtype=flag.dtype)
+def _flag_autos_wrapper(flag, ubl):
+    return np_flag_autos(flag, ubl[0])
 
 
 def flag_autos(flag, ubl, **kwargs):
@@ -131,11 +134,9 @@ def flag_autos(flag, ubl, **kwargs):
     """
     dims = ("time", "chan", "bl", "corr")
 
-    name = "flag-autos-" + da.core.tokenize(flag, ubl, kwargs)
-
     return da.blockwise(np_flag_autos, dims,
                         flag, dims,
-                        ubl, None,
+                        ubl, ("bl", "bl-comp"),
                         dtype=flag.dtype)
 
 

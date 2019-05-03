@@ -43,6 +43,8 @@ def flag_autos(flags, ubl):
     out_flags : ndarray, bool
         Flags corresponding to `data`
     """
+    ubl = ubl[0]
+
     if flags.shape[2] != ubl.shape[0]:
         raise ValueError("flag and ubl shape mismatch %s != %s"
                          % (flags.shape[2], ubl.shape[0]))
@@ -989,7 +991,7 @@ def uvcontsub_flagger(vis, flags, major_cycles=5,
             else:
                 result_flags[:, :, corr] = newflags
 
-    return result_flags
+    return result_flags.reshape(ntime, nfreq, nbl, ncorr)
 
 
 def sum_threshold_flagger(vis, flags, outlier_nsigma=4.5,
@@ -1066,12 +1068,6 @@ def sum_threshold_flagger(vis, flags, outlier_nsigma=4.5,
 
     # Collapse baseline and correlation dimensions together
     ntime, nchan, nbl, ncorr = vis.shape
-
-    if have_zarr and isinstance(vis, zarr.Array):
-        vis = np.asarray(vis)
-
-    if have_zarr and isinstance(flags, zarr.Array):
-        flags = np.asarray(flags)
 
     vis = vis.reshape(ntime, nchan, nbl*ncorr)
     flags = flags.reshape(ntime, nchan, nbl*ncorr)
