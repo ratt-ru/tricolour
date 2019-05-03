@@ -202,6 +202,8 @@ def create_parser():
                    "Smaller and larger numbers will tend to "
                    "respectively decrease or increase both memory usage "
                    "and computational efficiency")
+    p.add_argument("-bc", "--baseline-chunks", type=int, default=16,
+                   help="Number of baselines in a window chunk")
     p.add_argument("-nw", "--nworkers", type=int, default=cpu_count() * 2,
                    help="Number of workers (threads) to use. "
                    "By default, set to twice the "
@@ -223,6 +225,18 @@ def create_parser():
                         "the Interactive Python Debugger upon an "
                         "unhandled exception. "
                         "This may be necessary for batch pipelining")
+    p.add_argument("-wb", "--window-backend", choices=["numpy", "zarr-disk"],
+                   default="numpy",
+                   help="Visibility and flag data is re-ordered from a "
+                        "MS row ordering into time-frequency windows "
+                        "ordered by baseline. "
+                        "For smaller problems, it may be possible to pack "
+                        "a couple of scans worth of visibility data into "
+                        "memory, but for larger problem sizes, it is "
+                        "necessary to reorder the data on disk.")
+    p.add_argument("-td", "--temporary-directory", default=None,
+                   help="Directory Location of Temporary data")
+
     return p
 
 
@@ -352,17 +366,24 @@ def main():
         utime, ubl = dask.compute(utime, ubl)
         ubl = ubl.view(np.int32).reshape(-1, 2)
         ntime = utime.shape[0]
+        ubl = da.from_array(ubl, chunks=(args.baseline_chunks, 2))
+        nbl = ubl.shape[0]
 
-        vis_windows = create_vis_windows(ubl, ntime, nchan, xncorr,
-                                         dtype=vis.dtype, path=None)
+        vis_win_obj = create_vis_windows(ntime, nchan, nbl, xncorr,
+                                         dtype=vis.dtype,
+                                         backend=args.window_backend,
+                                         path=args.temporary_directory)
 
-        flag_windows = create_flag_windows(ubl, ntime, nchan, xncorr,
-                                           dtype=flags.dtype, path=None)
+        flag_win_obj = create_flag_windows(ntime, nchan, nbl, xncorr,
+                                           dtype=flags.dtype,
+                                           backend=args.window_backend,
+                                           path=args.temporary_directory)
 
         vis_windows, flag_windows = pack_data(time_inv, ubl,
                                               antenna1, antenna2,
                                               vis, flags,
-                                              vis_windows, flag_windows)
+                                              vis_win_obj, flag_win_obj,
+                                              ntime)
 
         original = flag_windows
 
@@ -416,10 +437,11 @@ def main():
                                              (nrow, nchan, ncorr))
 
         # Create new dataset containing new flags
-        new_ms = ds.assign(FLAG=xr.DataArray(unpacked_flags, dims=ds.FLAG.dims))
+        xarray_flags = xr.DataArray(unpacked_flags, dims=ds.FLAG.dims)
+        new_ds = ds.assign(FLAG=xarray_flags)
 
         # Write back to original dataset
-        writes = xds_to_table(new_ms, args.ms, "FLAG")
+        writes = xds_to_table(new_ds, args.ms, "FLAG")
         write_computes.append(writes)
 
     # Create dask contexts

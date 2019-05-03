@@ -31,7 +31,7 @@ def flag_data(vis_windows, flag_windows):
                         dtype=vis_windows.dtype)
 
 
-@pytest.mark.parametrize("backend", ["numpy", "zarr"])
+@pytest.mark.parametrize("backend", ["numpy", "zarr-disk"])
 def test_vis_and_flag_packing(tmpdir, backend):
     na = 7
     ntime = 10
@@ -68,11 +68,11 @@ def test_vis_and_flag_packing(tmpdir, backend):
     ubl = da.from_array(ubl, chunks=bl_chunks)
 
     vis_win_obj = create_vis_windows(ntime, nchan, ubl.shape[0], ncorr,
-                                     bl_chunks, np.complex64,
+                                     np.complex64,
                                      backend=backend, path=tmpdir)
 
     flag_win_obj = create_flag_windows(ntime, nchan, ubl.shape[0], ncorr,
-                                       bl_chunks, np.bool,
+                                       np.bool,
                                        backend=backend, path=tmpdir)
 
     _, time_inv = da.unique(time, return_inverse=True)
@@ -103,7 +103,7 @@ def test_vis_and_flag_packing(tmpdir, backend):
     if backend == "numpy":
         assert isinstance(vis_win_obj, np.ndarray)
         assert isinstance(flag_win_obj, np.ndarray)
-    elif backend == "zarr":
+    elif backend == "zarr-disk":
         assert isinstance(vis_win_obj, zarr.Array)
         assert isinstance(flag_win_obj, zarr.Array)
     else:

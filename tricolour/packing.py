@@ -38,17 +38,16 @@ def unique_baselines(ant1, ant2):
     return da.unique(bl)
 
 
-def _create_vis_windows(ntime, nchan, nbl, ncorr, bl_chunks,
+def _create_vis_windows(ntime, nchan, nbl, ncorr,
                         dtype, backend, path):
-    if backend == "zarr":
+    if backend == "zarr-disk":
         if path is None:
             path = mkdtemp(prefix='tricolour-vis-windows-')
 
         compressor = Blosc(cname='zstd', clevel=1, shuffle=Blosc.SHUFFLE)
 
-        bl_chunks = 1
         vis = zarr.creation.create(shape=(ntime, nchan, nbl, ncorr),
-                                   chunks=(ntime, nchan, bl_chunks, ncorr),
+                                   chunks=(ntime, nchan, 1, ncorr),
                                    compressor=compressor,
                                    dtype=dtype,
                                    synchronizer=zarr.ThreadSynchronizer(),
@@ -64,19 +63,17 @@ def _create_vis_windows(ntime, nchan, nbl, ncorr, bl_chunks,
     return vis
 
 
-def _create_flag_windows(ntime, nchan, nbl, ncorr, bl_chunks,
+def _create_flag_windows(ntime, nchan, nbl, ncorr,
                          dtype, backend, path):
 
-    if backend == "zarr":
+    if backend == "zarr-disk":
         if path is None:
             path = mkdtemp(prefix='tricolour-flag-windows-')
 
         compressor = Blosc(cname='zstd', clevel=1, shuffle=Blosc.SHUFFLE)
 
-        bl_chunks = 1
-
         return zarr.creation.create(shape=(ntime, nchan, nbl, ncorr),
-                                    chunks=(ntime, nchan, bl_chunks, ncorr),
+                                    chunks=(ntime, nchan, 1, ncorr),
                                     compressor=compressor,
                                     dtype=dtype,
                                     synchronizer=zarr.ThreadSynchronizer(),
@@ -91,16 +88,16 @@ def _create_flag_windows(ntime, nchan, nbl, ncorr, bl_chunks,
         raise ValueError("Invalid backend '%s'" % backend)
 
 
-def create_vis_windows(ntime, nchan, nbl, ncorr, bl_chunks,
+def create_vis_windows(ntime, nchan, nbl, ncorr,
                        dtype, backend="numpy", path=None):
 
     token = dask.base.tokenize(ntime, nchan, nbl, ncorr,
-                               bl_chunks, dtype, path)
+                               backend, dtype, path)
 
     name = "create-vis-windows-" + token
     layers = {(name, 0): (_create_vis_windows,
                           ntime, nchan, nbl, ncorr,
-                          bl_chunks, dtype, backend, path)}
+                          dtype, backend, path)}
 
     graph = HighLevelGraph.from_collections(name, layers, ())
     chunks = ((0,),)  # One chunk containing single zarr array object
@@ -109,15 +106,15 @@ def create_vis_windows(ntime, nchan, nbl, ncorr, bl_chunks,
     return windows
 
 
-def create_flag_windows(ntime, nchan, nbl, ncorr, bl_chunks,
+def create_flag_windows(ntime, nchan, nbl, ncorr,
                         dtype, backend="numpy", path=None):
     token = dask.base.tokenize(ntime, nchan, nbl, ncorr,
-                               bl_chunks, dtype, path)
+                               backend, dtype, path)
 
     name = "create-flag-windows-" + token
     layers = {(name, 0): (_create_flag_windows,
                           ntime, nchan, nbl, ncorr,
-                          bl_chunks, dtype, backend, path)}
+                          dtype, backend, path)}
 
     graph = HighLevelGraph.from_collections(name, layers, ())
     chunks = ((0,),)  # One chunk containing single zarr array object
