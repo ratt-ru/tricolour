@@ -42,7 +42,6 @@ def test_vis_and_flag_packing(tmpdir, backend):
     time = np.linspace(0.1, 0.9, ntime)
     antenna1, antenna2 = (a.astype(np.int32) for a in np.triu_indices(na, 1))
     nbl = antenna1.size
-    bl_chunks = nbl // 4
 
     antenna1 = np.tile(antenna1, ntime)
     antenna2 = np.tile(antenna2, ntime)
@@ -55,11 +54,14 @@ def test_vis_and_flag_packing(tmpdir, backend):
 
     flag = np.random.randint(0, 2, (nrow, nchan, ncorr))
 
-    antenna1 = da.from_array(antenna1, chunks=10)
-    antenna2 = da.from_array(antenna2, chunks=10)
-    time = da.from_array(time, chunks=10)
-    vis = da.from_array(vis, chunks=(10, nchan, ncorr))
-    flag = da.from_array(flag, chunks=(10, nchan, ncorr))
+    bl_chunks = nbl // 4
+    row_chunks = 10
+
+    antenna1 = da.from_array(antenna1, chunks=row_chunks)
+    antenna2 = da.from_array(antenna2, chunks=row_chunks)
+    time = da.from_array(time, chunks=row_chunks)
+    vis = da.from_array(vis, chunks=(row_chunks, nchan, ncorr))
+    flag = da.from_array(flag, chunks=(row_chunks, nchan, ncorr))
 
     ubl = unique_baselines(antenna1, antenna2)
     ubl = ubl.compute().view(np.int32).reshape(-1, 2)
