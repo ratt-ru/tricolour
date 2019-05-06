@@ -9,7 +9,6 @@ from functools import wraps
 from dask.highlevelgraph import HighLevelGraph
 import dask.array as da
 import dask.blockwise as db
-import numpy as np
 
 from .flagging import sum_threshold_flagger as np_sum_threshold_flagger
 from .flagging import uvcontsub_flagger as np_uvcontsub_flagger
@@ -18,34 +17,6 @@ from .flagging import flag_autos as np_flag_autos
 
 from .stokes import (polarised_intensity as np_polarised_intensity,
                      unpolarised_intensity as np_unpolarised_intensity)
-from .util import check_baseline_ordering as np_check_baseline_ordering
-
-
-def check_baseline_ordering(ant1, ant2, chunks, g):
-    """
-    Dask wrapper for :func:`~tricolour.util.check_baseline_ordering`
-    """
-
-    # We use top rather than atop because, while
-    # ant1, ant2 and chunks will have the same number of chunks,
-    # the size of each chunk is different
-    token = da.core.tokenize(ant1, ant2, chunks, g)
-    name = '-'.join(("check-baseline-ordering", token))
-    dims = ("row",)
-
-    layers = db.blockwise(np_check_baseline_ordering, name, dims,
-                          ant1.name, dims,
-                          ant2.name, dims,
-                          chunks.name, dims,
-                          numblocks={
-                              ant1.name: ant1.numblocks,
-                              ant2.name: ant2.numblocks,
-                              chunks.name: chunks.numblocks,
-                          },
-                          g=g)
-
-    graph = HighLevelGraph.from_collections(name, layers, (ant1, ant2, chunks))
-    return da.Array(graph, name, chunks.chunks, dtype=np.bool)
 
 
 def sum_threshold_flagger(vis, flag, **kwargs):

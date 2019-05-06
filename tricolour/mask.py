@@ -1,13 +1,16 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-from scipy.ndimage import binary_dilation
+
 import os
 import sys
 import re
 import numpy as np
-from toolz import merge
+
+from scipy.ndimage import binary_dilation
+
 import tricolour
+
 paths = [
     '/etc/tricolour',
     os.path.join(sys.prefix, 'etc', 'tricolour'),
@@ -56,23 +59,30 @@ def dilate_mask(mask_chans, mask_flags, dilate):
 def load_mask(filename, dilate):
     # Load mask
     mask = np.load(filename)
-    if mask.dtype[0] != np.bool or \
-       mask.dtype[1] != np.float64:
-        raise ValueError(
-            "Mask %s is not a valid static mask with labelled channel axis [dtype == (bool, float64)]" % filename)
+
+    if mask.dtype[0] != np.bool or mask.dtype[1] != np.float64:
+        raise ValueError("Mask %s is not a valid static mask "
+                         "with labelled channel axis "
+                         "[dtype == (bool, float64)]" % filename)
+
     mask_chans = mask["chans"][1]
     mask_flags = mask["mask"][0]
+
     # Dilate mask
     if dilate:
         mask_flags = dilate_mask(mask_chans, mask_flags, dilate)
+
     masked_channels = mask_chans[np.argwhere(mask_flags)]
-    tricolour.log.info("Loaded mask {0:s} {1:s} with {2:.2f}% flagged bandwidth between {3:.3f} and {4:.3f} GHz".format(
-        filename,
-        "(dilated)" if dilate else "(non-dilated)",
-        float(masked_channels.size) / float(mask_chans.size) * 100.0,
-        np.min(mask_chans) / 1.0e9,
-        np.max(mask_chans) / 1.0e9)
-    )
+
+    tricolour.log.info("Loaded mask {0:s} {1:s} with {2:.2f}% "
+                       "flagged bandwidth between {3:.3f} "
+                       "and {4:.3f} GHz".format(
+                            filename,
+                            "(dilated)" if dilate else "(non-dilated)",
+                            100.0 * masked_channels.size / mask_chans.size,
+                            np.min(mask_chans) / 1.0e9,
+                            np.max(mask_chans) / 1.0e9))
+
     return masked_channels
 
 
@@ -90,7 +100,6 @@ def collect_masks(filename="", paths=paths):
     search paths
     """
     if filename == "":
-        configs = []
 
         file_paths = []
         file_exts = ('.staticmask', '.npy')
@@ -100,13 +109,12 @@ def collect_masks(filename="", paths=paths):
             if os.path.exists(path):
                 if os.path.isdir(path):
                     file_paths.extend(sorted([
-                        os.path.join(path, p)
-                        for p in os.listdir(path)
+                        os.path.join(path, p) for p in os.listdir(path)
                         if os.path.splitext(p)[1].lower() in file_exts
                     ]))
                 else:
                     file_paths.append(path)
-        configs = []
+
         for fp in file_paths:
             tricolour.log.info("Found static mask file {0:s}".format(fp))
     else:

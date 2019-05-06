@@ -8,7 +8,8 @@ class UserInputError(Exception):
 
 
 def _exc_handler(type, value, tb):
-    if hasattr(sys, 'ps1') or not sys.stderr.isatty() or type is SyntaxError or type is UserInputError:
+    if (hasattr(sys, 'ps1') or not sys.stderr.isatty() or
+            type is SyntaxError or type is UserInputError):
         # we are in interactive mode or we don't have a tty-like
         # device, so we call the default hook
         sys.__excepthook__(type, value, tb)

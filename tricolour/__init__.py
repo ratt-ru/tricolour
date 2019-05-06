@@ -9,11 +9,9 @@ from __future__ import print_function
 import argparse
 import contextlib
 from collections import OrderedDict
-from functools import wraps
 import logging
 import logging.handlers
 from multiprocessing.pool import ThreadPool, cpu_count
-import re
 import os
 import time
 
@@ -31,8 +29,6 @@ from tricolour.mask import collect_masks, load_mask
 from tricolour.stokes import stokes_corr_map
 from tricolour.dask_wrappers import (sum_threshold_flagger,
                                      polarised_intensity,
-                                     unpolarised_intensity,
-                                     check_baseline_ordering,
                                      uvcontsub_flagger,
                                      flag_autos,
                                      apply_static_mask)
@@ -44,8 +40,8 @@ from tricolour.packing import (unique_baselines,
                                unpack_data)
 
 from tricolour.config import collect
-from tricolour.util import aggregate_chunks, casa_style_range
-import tricolour.post_mortem_handler
+from tricolour.util import casa_style_range
+import tricolour.post_mortem_handler as post_mortem_handler
 
 __author__ = """Simon Perkins"""
 __email__ = 'sperkins@ska.ac.za'
@@ -54,7 +50,7 @@ __version__ = '0.2.0'
 post_mortem_handler.enable_pdb_on_error()
 
 try:
-    import bokeh
+    import bokeh  # noqa
     can_profile = True
 except ImportError:
     can_profile = False

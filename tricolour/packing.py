@@ -2,7 +2,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import os
 from os.path import join as pjoin
 import random
 from tempfile import mkdtemp
@@ -13,6 +12,24 @@ from dask.highlevelgraph import HighLevelGraph
 import numpy as np
 from numcodecs import Blosc
 import zarr
+
+
+def _debug_inputs(data):
+    if isinstance(data, np.ndarray):
+        return (data.shape, data.dtype)
+    elif isinstance(data, list):
+        return [_debug_inputs(d) for d in data]
+    elif isinstance(data, tuple):
+        return tuple(_debug_inputs(d) for d in data)
+    elif isinstance(data, dict):
+        return {k: _debug_inputs(v) for k, v in data.items()}
+    else:
+        return type(data)
+
+
+def _print(data):
+    from pprint import pprint
+    pprint(_debug_inputs(data))
 
 
 def unique_baselines(ant1, ant2):

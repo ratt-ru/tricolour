@@ -64,7 +64,7 @@ def stokes_corr_map(corr_types):
         .. code-block:: python
 
             stokes = a*(s1*vis[:,:,c1] + s2*vis[:,:,c2])
-    """
+    """  # noqa
     corr_type_set = set(corr_types)
     corr_maps = {}
 
