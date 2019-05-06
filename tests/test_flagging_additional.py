@@ -85,7 +85,7 @@ def test_apply_static_mask(wsrt_ants, unique_baselines,
     chan_widths[-1] = chan_widths[0]
 
     mask_one = np.asarray([chan_freqs[2] + 128.,
-                           chan_freqs[10] - 64.])[:, None]
+                           chan_freqs[10]])[:, None]
 
     mask_two = np.asarray([chan_freqs[4] - 64,
                            chan_freqs[11] + 64,
