@@ -36,7 +36,7 @@ def flag_autos(flags, ubl):
         Flags corresponding to visibility data
         of shape :code:`(time, chan, bl, corr)`
     ubl : :class:`numpy.ndarray`
-        Unique baselines of shape :code:`(bl, 2)`
+        Unique baselines of shape :code:`(bl, 3)`
 
     Returns
     -------
@@ -51,7 +51,7 @@ def flag_autos(flags, ubl):
 
     out_flags = flags.copy()
     # Flag auto-correlations
-    sel = ubl[:, 0] == ubl[:, 1]
+    sel = ubl[:, 1] == ubl[:, 2]
     out_flags[:, :, sel, :] = True
 
     return out_flags
@@ -68,7 +68,7 @@ def apply_static_mask(flag, ubl, antspos, masks,
     flag : ndarray, bool
         Flags corresponding to visibility data (time, freq, bl, corr)
     ubl : :class:`numpy.ndarray`
-        Unique baselines of shape :code:`(bl, 2)`
+        Unique baselines of shape :code:`(bl, 3)`
     antspos: ndarray, float
         antenna ECEF positions, as defined in CASA MEMO 229 ::ANTENNA,
         of shape (nant, 3)
@@ -101,7 +101,7 @@ def apply_static_mask(flag, ubl, antspos, masks,
     spw_chanub = spw_chanlabels + spw_chanwidths * 0.5
 
     # Work out the baseline length
-    bl_length = antspos[ubl[:, 0]] - antspos[ubl[:, 1]]
+    bl_length = antspos[ubl[:, 1]] - antspos[ubl[:, 2]]
     # UV distance is twice baseline length
     d2 = 0.5 * np.sum(bl_length**2, axis=1)
 
