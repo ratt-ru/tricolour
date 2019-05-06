@@ -58,7 +58,7 @@ def flag_autos(flags, ubl):
 
 
 def apply_static_mask(flag, ubl, antspos, masks,
-                      spw_chanlabels, spw_chanwidths,
+                      chan_freqs, chan_widths,
                       accumulation_mode="or", uvrange=""):
     """Interpolates and applies static masks to the data, flagging channels
     that spans over frequencies included in the mask
@@ -75,9 +75,9 @@ def apply_static_mask(flag, ubl, antspos, masks,
     masks: list of lists
         nested lists of masked channels, each inner list
         corresponding to a mask
-    spw_chanlabels: ndarray, float
+    chan_freqs: ndarray, float
         Centre frequencies corresponding to data of shape nfreq
-    spw_chanwidths: ndarray, float
+    chan_widths: ndarray, float
         Channel widths corresponding to data of shape nfreq
     ncorr: float
         Number of feed correlations corresponding to data
@@ -97,8 +97,8 @@ def apply_static_mask(flag, ubl, antspos, masks,
         raise ValueError("flag and ubl shape mismatch %s != %s"
                          % (flag.shape[2], ubl.shape[0]))
 
-    spw_chanlb = spw_chanlabels - spw_chanwidths * 0.5
-    spw_chanub = spw_chanlabels + spw_chanwidths * 0.5
+    spw_chanlb = chan_freqs - chan_widths * 0.5
+    spw_chanub = chan_freqs + chan_widths * 0.5
 
     # Work out the baseline length
     bl_length = antspos[ubl[:, 1]] - antspos[ubl[:, 2]]
@@ -117,7 +117,7 @@ def apply_static_mask(flag, ubl, antspos, masks,
         if mask.ndim != 2 and mask.shape[1] != 1:
             raise ValueError("masks.shape != (dim, 1)")
 
-        lower_mask = mask[:, :] > spw_chanlb[None, :]
+        lower_mask = mask[:, :] >= spw_chanlb[None, :]
         upper_mask = mask[:, :] < spw_chanub[None, :]
         masked_channels = np.logical_and(lower_mask, upper_mask)
         masked_channels = masked_channels.sum(axis=0) > 0

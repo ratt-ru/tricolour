@@ -8,6 +8,8 @@ import argparse
 import six
 import re
 
+import numpy as np
+
 
 def aggregate_chunks(chunks, max_chunks, return_groups=False):
     """
@@ -85,7 +87,7 @@ def casa_style_range(val, argparse=False):
     if not isinstance(val, six.string_types):
         raise RangeException("Value must be a string")
     if val == "":
-        return (0, 1e9)
+        return (0, np.inf)
     elif re.match(r"^(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?~"
                   r"(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?[\s]*[m]?$", val):
 
