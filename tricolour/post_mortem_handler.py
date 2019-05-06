@@ -23,7 +23,6 @@ def _exc_handler(type, value, tb):
         import pdb
         # we are NOT in interactive mode, print the exception...
         traceback.print_exception(type, value, tb)
-        print
         # ...then start the debugger in post-mortem mode.
         # pdb.pm() # deprecated
         pdb.post_mortem(tb)  # more "modern"
