@@ -9,13 +9,6 @@ import numba
 
 import dask.array as da
 
-try:
-    import zarr
-except ImportError:
-    have_zarr = False
-else:
-    have_zarr = True
-
 from tricolour.util import casa_style_range
 
 
@@ -943,12 +936,6 @@ def uvcontsub_flagger(vis, flags, major_cycles=5,
         raise ValueError("vis and flags must have the same shape")
 
     ntime, nfreq, nbl, ncorr = vis.shape
-
-    if have_zarr and isinstance(vis, zarr.Array):
-        vis = np.asarray(vis)
-
-    if have_zarr and isinstance(flags, zarr.Array):
-        flags = np.asarray(flags)
 
     vis = vis.reshape(ntime, nfreq, nbl*ncorr)
     flags = flags.reshape(ntime, nfreq, nbl*ncorr)
