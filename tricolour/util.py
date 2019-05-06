@@ -5,6 +5,7 @@ from __future__ import division
 from __future__ import print_function
 
 import argparse
+import six
 import re
 
 
@@ -77,10 +78,12 @@ def aggregate_chunks(chunks, max_chunks, return_groups=False):
     return agg_chunks[0] if singleton else agg_chunks
 
 
-def casa_style_range(val):
+def casa_style_range(val, argparse=False):
     """ returns list of ints """
-    if not isinstance(val, str):
-        raise argparse.ArgumentTypeError("Value must be of type string")
+    RangeException = argparse.ArgumentTypeError if argparse else ValueError
+
+    if not isinstance(val, six.string_types):
+        raise RangeException("Value must be a string")
     if val == "":
         return (0, 1e9)
     elif re.match(r"^(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?~"
@@ -91,4 +94,4 @@ def casa_style_range(val):
                              .replace("m", "")
                              .split("~"))
     else:
-        raise ValueError("Value must be range or blank")
+        raise RangeException("Value must be range or blank")

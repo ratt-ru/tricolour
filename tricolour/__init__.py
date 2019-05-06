@@ -9,6 +9,7 @@ from __future__ import print_function
 import argparse
 import contextlib
 from collections import OrderedDict
+from functools import partial
 import logging
 import logging.handlers
 from multiprocessing.pool import ThreadPool, cpu_count
@@ -214,7 +215,9 @@ def create_parser():
     p.add_argument("-fn", "--field-names", type=str, action='append',
                    default=[],
                    help="Name(s) of fields to flag. Defaults to flagging all")
-    p.add_argument("-sn", "--scan-numbers", type=casa_style_range, default=[],
+    p.add_argument("-sn", "--scan-numbers",
+                   type=partial(casa_style_range, argparse=True),
+                   default=[],
                    help="Scan numbers to flag (casa style range like 5~9)")
     p.add_argument("-dpm", "--disable-post-mortem", action="store_true",
                    help="Disable the default behaviour of starting "
