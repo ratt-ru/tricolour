@@ -15,12 +15,12 @@ with open('HISTORY.rst') as history_file:
     history = history_file.read()
 
 requirements = [
-    'dask[array] >= 1.1.4',
+    'dask[array] >= 1.1.0',
     'numpy >= 1.14.0',
-    'numba >= 0.42.0',
+    'numba >= 0.43.0',
     'ruamel.yaml >= 0.15.37',
     'scipy >= 1.2.0',
-    'xarray-ms >= 0.1.3',
+    'xarray-ms >= 0.1.4',
     'zarr >= 2.3.1'
 ]
 
