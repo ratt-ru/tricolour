@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from tricolour.flagging import flag_autos, apply_static_mask
+from tricolour.util import casa_style_range
 
 
 @pytest.fixture
@@ -37,6 +38,13 @@ def baselines(wsrt_ants):
 
 
 @pytest.fixture
+def squared_baseline_lengths(wsrt_ants, unique_baselines):
+    ubl = unique_baselines
+    diff = (wsrt_ants[ubl[:, 1]] - wsrt_ants[ubl[:, 2]])
+    return (diff**2).sum(axis=1)
+
+
+@pytest.fixture
 def unique_baselines(baselines):
     ubl = np.unique(np.stack(baselines, axis=1), axis=1)
     bl_range = np.arange(ubl.shape[0])[:, None]
@@ -62,7 +70,8 @@ def test_flag_autos(unique_baselines):
     assert np.all(new_flags[:, :, sel, :] == 1)
 
 
-def test_apply_static_mask(wsrt_ants, unique_baselines):
+def test_apply_static_mask(wsrt_ants, unique_baselines,
+                           squared_baseline_lengths):
     ntime = 10
     nchan = 16
     ncorr = 4
@@ -123,3 +132,30 @@ def test_apply_static_mask(wsrt_ants, unique_baselines):
 
     assert np.all(new_flags[:, chan_sel, :, :] == 1)
     assert np.all(new_flags[:, ~chan_sel, :, :] == 0)
+
+    # Test Baseline range selection
+    min_range = 1e3
+    max_range = 2e4
+    uvrange = "%f~%f" % (min_range, max_range)
+
+    new_flags = apply_static_mask(flags, ubl, wsrt_ants,
+                                  [mask_one, mask_two],
+                                  chan_freqs, chan_widths,
+                                  accumulation_mode="or",
+                                  uvrange=uvrange)
+
+    # Check that only last mask's flags applied
+    chan_sel = np.zeros(chan_freqs.shape[0], dtype=np.bool)
+    chan_sel[[2, 10, 4, 11, 5]] = True
+
+    # Select baselines base on the uvrange
+    sqrd_bl_len = 0.5 * squared_baseline_lengths
+    bl_sel = np.logical_and(sqrd_bl_len > min_range**2,
+                            sqrd_bl_len < max_range**2)
+
+    # Everything inside the selection is flagged
+    idx = np.ix_(np.arange(ntime), chan_sel, bl_sel, np.arange(ncorr))
+    assert np.all(new_flags[idx] == 1)
+    # Everything outside the selection is fine
+    idx = np.ix_(np.arange(ntime), ~chan_sel, ~bl_sel, np.arange(ncorr))
+    assert np.all(new_flags[idx] == 0)
