@@ -75,12 +75,13 @@ def _create_window(name, ntime, nchan, nbl, ncorr,
         raise ValueError("Invalid backend '%s'" % backend)
 
 
-def _create_window_dask(name, ntime, nchan, nbl, ncorr,
+def _create_window_dask(name, ntime, nchan, nbl, ncorr, token,
                         dtype, backend="numpy", path=None):
     if backend == "zarr-disk" and path is None:
         path = mkdtemp(prefix='-'.join(('tricolour', name, 'windows', '')))
 
-    token = dask.base.tokenize(name, ntime, nchan, nbl, ncorr,
+    # Include name and token in new token
+    token = dask.base.tokenize(name, ntime, nchan, nbl, ncorr, token,
                                dtype, backend, path)
 
     collection_name = '-'.join(("create", name, "windows", token))
@@ -93,16 +94,16 @@ def _create_window_dask(name, ntime, nchan, nbl, ncorr,
     return da.Array(graph, collection_name, chunks, dtype=np.object)
 
 
-def create_vis_windows(ntime, nchan, nbl, ncorr,
+def create_vis_windows(ntime, nchan, nbl, ncorr, token,
                        dtype, backend="numpy", path=None):
 
-    return _create_window_dask("vis", ntime, nchan, nbl, ncorr,
+    return _create_window_dask("vis", ntime, nchan, nbl, ncorr, token,
                                dtype, backend, path)
 
 
-def create_flag_windows(ntime, nchan, nbl, ncorr,
+def create_flag_windows(ntime, nchan, nbl, ncorr, token,
                         dtype, backend="numpy", path=None):
-    return _create_window_dask("flag", ntime, nchan, nbl, ncorr,
+    return _create_window_dask("flag", ntime, nchan, nbl, ncorr, token,
                                dtype, backend, path)
 
 
@@ -184,12 +185,16 @@ def pack_data(time_inv, ubl,
 
     bl_index = da.arange(nbl, chunks=ubl.chunks[0])
 
-    vis_win_obj = create_vis_windows(ntime, nchan, nbl, ncorr,
+    token = dask.base.tokenize(time_inv, ubl, antenna1, antenna2,
+                               data, flags, ntime, backend, path,
+                               return_objs)
+
+    vis_win_obj = create_vis_windows(ntime, nchan, nbl, ncorr, token,
                                      dtype=data.dtype,
                                      backend=backend,
                                      path=path)
 
-    flag_win_obj = create_flag_windows(ntime, nchan, nbl, ncorr,
+    flag_win_obj = create_flag_windows(ntime, nchan, nbl, ncorr, token,
                                        dtype=flags.dtype,
                                        backend=backend,
                                        path=path)
