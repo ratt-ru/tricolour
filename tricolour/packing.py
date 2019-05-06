@@ -90,7 +90,7 @@ def _create_window_dask(name, ntime, nchan, nbl, ncorr,
 
     graph = HighLevelGraph.from_collections(collection_name, layers, ())
     chunks = ((0,),)  # One chunk containing single zarr array object
-    return da.Array(graph, collection_name, chunks, dtype=dtype)
+    return da.Array(graph, collection_name, chunks, dtype=np.object)
 
 
 def create_vis_windows(ntime, nchan, nbl, ncorr,
@@ -174,13 +174,25 @@ def _packed_windows(dummy_result, ubl, bl_index, window):
 
 def pack_data(time_inv, ubl,
               antenna1, antenna2,
-              data, flags,
-              vis_windows, flag_windows,
-              ntime):
+              data, flags, ntime,
+              backend="numpy", path=None,
+              return_objs=False):
 
     window_shape = ("time", "chan", "bl", "corr")
+    nchan, ncorr = data.shape[1:3]
+    nbl = ubl.shape[0]
 
-    bl_index = da.arange(ubl.shape[0], chunks=ubl.chunks[0])
+    bl_index = da.arange(nbl, chunks=ubl.chunks[0])
+
+    vis_win_obj = create_vis_windows(ntime, nchan, nbl, ncorr,
+                                     dtype=data.dtype,
+                                     backend=backend,
+                                     path=path)
+
+    flag_win_obj = create_flag_windows(ntime, nchan, nbl, ncorr,
+                                       dtype=flags.dtype,
+                                       backend=backend,
+                                       path=path)
 
     # Pack data into our window objects
     packing = da.blockwise(_pack_data, ("row", "chan", "corr"),
@@ -191,8 +203,8 @@ def pack_data(time_inv, ubl,
                            antenna2, ("row",),
                            data, ("row", "chan", "corr"),
                            flags, ("row", "chan", "corr"),
-                           vis_windows, ("windim",),
-                           flag_windows, ("windim",),
+                           vis_win_obj, ("windim",),
+                           flag_win_obj, ("windim",),
                            dtype=np.bool)
 
     # Expose visibility data at it's full resolution
@@ -200,17 +212,20 @@ def pack_data(time_inv, ubl,
                                packing, ("row", "chan", "corr"),
                                ubl, ("bl", "bl-comp"),
                                bl_index, ("bl",),
-                               vis_windows, ("windim",),
+                               vis_win_obj, ("windim",),
                                new_axes={"time": ntime},
-                               dtype=vis_windows.dtype)
+                               dtype=data.dtype)
 
     flag_windows = da.blockwise(_packed_windows, window_shape,
                                 packing, ("row", "chan", "corr"),
                                 ubl, ("bl", "bl-comp"),
                                 bl_index, ("bl",),
-                                flag_windows, ("windim",),
+                                flag_win_obj, ("windim",),
                                 new_axes={"time": ntime},
-                                dtype=flag_windows.dtype)
+                                dtype=flags.dtype)
+
+    if return_objs:
+        return vis_windows, flag_windows, vis_win_obj, flag_win_obj
 
     return vis_windows, flag_windows
 

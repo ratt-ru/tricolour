@@ -67,21 +67,14 @@ def test_vis_and_flag_packing(tmpdir, backend):
     ubl = ubl.compute().view(np.int32).reshape(-1, 2)
     ubl = da.from_array(ubl, chunks=bl_chunks)
 
-    vis_win_obj = create_vis_windows(ntime, nchan, ubl.shape[0], ncorr,
-                                     np.complex64,
-                                     backend=backend, path=tmpdir)
-
-    flag_win_obj = create_flag_windows(ntime, nchan, ubl.shape[0], ncorr,
-                                       np.bool,
-                                       backend=backend, path=tmpdir)
-
     _, time_inv = da.unique(time, return_inverse=True)
 
-    vis_windows, flag_windows = pack_data(time_inv, ubl,
-                                          antenna1, antenna2,
-                                          vis, flag,
-                                          vis_win_obj, flag_win_obj,
-                                          ntime)
+    result = pack_data(time_inv, ubl, antenna1, antenna2,
+                       vis, flag, ntime,
+                       backend=backend, path=tmpdir,
+                       return_objs=True)
+
+    vis_windows, flag_windows, vis_win_obj, flag_win_obj = result
 
     flag_windows = flag_data(vis_windows, flag_windows)
 
@@ -91,12 +84,9 @@ def test_vis_and_flag_packing(tmpdir, backend):
     unpacked_vis = unpack_data(antenna1, antenna2, time_inv,
                                ubl, vis_windows)
 
-    result = da.compute(vis_win_obj, flag_win_obj,
-                        vis, flag,
+    result = da.compute(vis, flag, vis_win_obj, flag_win_obj,
                         unpacked_vis, unpacked_flags)
-
-    (vis_win_obj, flag_win_obj,
-     vis, flag,
+    (vis, flag, vis_win_obj, flag_win_obj,
      unpacked_vis, unpacked_flags) = result
 
     # Check that we've created the correct type of backend object

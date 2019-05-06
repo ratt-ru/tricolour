@@ -35,8 +35,6 @@ from tricolour.dask_wrappers import (sum_threshold_flagger,
                                      apply_static_mask)
 
 from tricolour.packing import (unique_baselines,
-                               create_vis_windows,
-                               create_flag_windows,
                                pack_data,
                                unpack_data)
 
@@ -368,21 +366,11 @@ def main():
         ubl = da.from_array(ubl, chunks=(args.baseline_chunks, 2))
         nbl = ubl.shape[0]
 
-        vis_win_obj = create_vis_windows(ntime, nchan, nbl, xncorr,
-                                         dtype=vis.dtype,
-                                         backend=args.window_backend,
-                                         path=args.temporary_directory)
-
-        flag_win_obj = create_flag_windows(ntime, nchan, nbl, xncorr,
-                                           dtype=flags.dtype,
-                                           backend=args.window_backend,
-                                           path=args.temporary_directory)
-
         vis_windows, flag_windows = pack_data(time_inv, ubl,
                                               antenna1, antenna2,
-                                              vis, flags,
-                                              vis_win_obj, flag_win_obj,
-                                              ntime)
+                                              vis, flags, ntime,
+                                              backend=args.window_backend,
+                                              path=args.temporary_directory)
 
         original = flag_windows
 
