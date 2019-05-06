@@ -362,13 +362,14 @@ def main():
         utime, time_inv = da.unique(ds.TIME.data, return_inverse=True)
         utime, ubl = dask.compute(utime, ubl)
         ubl = ubl.view(np.int32).reshape(-1, 2)
-        ntime = utime.shape[0]
-        ubl = da.from_array(ubl, chunks=(args.baseline_chunks, 2))
-        nbl = ubl.shape[0]
+        # Stack the baseline index with the unique baselines
+        bl_range = np.arange(ubl.shape[0], dtype=ubl.dtype)[:, None]
+        ubl = np.concatenate([bl_range, ubl], axis=1)
+        ubl = da.from_array(ubl, chunks=(args.baseline_chunks, 3))
 
         vis_windows, flag_windows = pack_data(time_inv, ubl,
                                               antenna1, antenna2,
-                                              vis, flags, ntime,
+                                              vis, flags, utime.shape[0],
                                               backend=args.window_backend,
                                               path=args.temporary_directory)
 

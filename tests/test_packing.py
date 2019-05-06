@@ -65,7 +65,10 @@ def test_vis_and_flag_packing(tmpdir, backend):
 
     ubl = unique_baselines(antenna1, antenna2)
     ubl = ubl.compute().view(np.int32).reshape(-1, 2)
-    ubl = da.from_array(ubl, chunks=bl_chunks)
+    # Stack the baseline index with the unique baselines
+    bl_range = np.arange(ubl.shape[0], dtype=ubl.dtype)[:, None]
+    ubl = np.concatenate([bl_range, ubl], axis=1)
+    ubl = da.from_array(ubl, chunks=(bl_chunks, 3))
 
     _, time_inv = da.unique(time, return_inverse=True)
 

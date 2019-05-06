@@ -111,7 +111,7 @@ def _rand_sort(key):
     return random.random()
 
 
-def _pack_data(time_inv, ubl, bl_index,
+def _pack_data(time_inv, ubl,
                ant1, ant2, data, flag,
                vis_windows, flag_windows):
 
@@ -141,8 +141,8 @@ def _pack_data(time_inv, ubl, bl_index,
     # elements of a list.
     # The outer loop is a loop over each chunk, while the inner loop
     # a loop over the baselines in each chunk
-    for bl_idx_list, bl_list in zip(bl_index, ubl):
-        for bl, (a1, a2) in zip(bl_idx_list, bl_list[0]):
+    for bl_list in ubl:
+        for bl, a1, a2 in bl_list[0]:
             valid = (a1 == ant1) & (a2 == ant2)
             time_idx = time_inv[valid]
 
@@ -164,8 +164,9 @@ def _pack_data(time_inv, ubl, bl_index,
     return np.array([[[True]]])
 
 
-def _packed_windows(dummy_result, ubl, bl_index, window):
+def _packed_windows(dummy_result, ubl, window):
     window = window[0]
+    bl_index = ubl[0][:, 0]
 
     if np.all(np.diff(bl_index) == 1):
         bl_index = slice(bl_index[0], bl_index[-1] + 1)
@@ -182,8 +183,6 @@ def pack_data(time_inv, ubl,
     window_shape = ("time", "chan", "bl", "corr")
     nchan, ncorr = data.shape[1:3]
     nbl = ubl.shape[0]
-
-    bl_index = da.arange(nbl, chunks=ubl.chunks[0])
 
     token = dask.base.tokenize(time_inv, ubl, antenna1, antenna2,
                                data, flags, ntime, backend, path,
@@ -203,7 +202,6 @@ def pack_data(time_inv, ubl,
     packing = da.blockwise(_pack_data, ("row", "chan", "corr"),
                            time_inv, ("row", ),
                            ubl, ("bl", "bl-comp"),
-                           bl_index, ("bl",),
                            antenna1, ("row",),
                            antenna2, ("row",),
                            data, ("row", "chan", "corr"),
@@ -216,7 +214,6 @@ def pack_data(time_inv, ubl,
     vis_windows = da.blockwise(_packed_windows, window_shape,
                                packing, ("row", "chan", "corr"),
                                ubl, ("bl", "bl-comp"),
-                               bl_index, ("bl",),
                                vis_win_obj, ("windim",),
                                new_axes={"time": ntime},
                                dtype=data.dtype)
@@ -224,7 +221,6 @@ def pack_data(time_inv, ubl,
     flag_windows = da.blockwise(_packed_windows, window_shape,
                                 packing, ("row", "chan", "corr"),
                                 ubl, ("bl", "bl-comp"),
-                                bl_index, ("bl",),
                                 flag_win_obj, ("windim",),
                                 new_axes={"time": ntime},
                                 dtype=flags.dtype)
@@ -243,7 +239,11 @@ def _unpack_data(antenna1, antenna2, time_inv, ubl, windows):
     data = np.zeros(data_shape, dtype=exemplar.dtype)
 
     for baselines, window in zip(ubl, windows[0]):
-        for bl, (a1, a2) in enumerate(baselines[0]):
+        baselines = baselines[0]
+        bl_min = baselines[:, 0].min()
+        for bl, a1, a2 in baselines:
+            # Normalise the baseline index within this baseline chunk
+            bl = bl - bl_min
             valid = (a1 == antenna1) & (a2 == antenna2)
             time_idx = time_inv[valid]
 
