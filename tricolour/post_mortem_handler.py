@@ -1,3 +1,7 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import sys
 
 pdb_advise = "Unexpected error. Dropping you into pdb for a post-mortem."
@@ -14,7 +18,7 @@ def _exc_handler(type, value, tb):
         # device, so we call the default hook
         sys.__excepthook__(type, value, tb)
     else:
-        print pdb_advise
+        print(pdb_advise)
         import traceback
         import pdb
         # we are NOT in interactive mode, print the exception...
