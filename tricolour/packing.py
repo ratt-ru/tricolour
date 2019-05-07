@@ -56,7 +56,7 @@ def unique_baselines(ant1, ant2):
 
 
 def _create_window(name, ntime, nchan, nbl, ncorr,
-                   dtype, token, backend="numpy", path=None):
+                   dtype, default, token, backend="numpy", path=None):
     if backend == "zarr-disk":
         compressor = Blosc(cname='zstd', clevel=1, shuffle=Blosc.SHUFFLE)
 
@@ -66,7 +66,7 @@ def _create_window(name, ntime, nchan, nbl, ncorr,
                                     dtype=dtype,
                                     synchronizer=zarr.ThreadSynchronizer(),
                                     overwrite=True,
-                                    fill_value=0,
+                                    fill_value=default,
                                     read_only=False,
                                     store=pjoin(path, "-".join((name, token))))
     elif backend == "numpy":
@@ -76,18 +76,18 @@ def _create_window(name, ntime, nchan, nbl, ncorr,
 
 
 def _create_window_dask(name, ntime, nchan, nbl, ncorr, token,
-                        dtype, backend="numpy", path=None):
+                        dtype, default=0, backend="numpy", path=None):
     if backend == "zarr-disk" and path is None:
         path = mkdtemp(prefix='-'.join(('tricolour', name, 'windows', '')))
 
     # Include name and token in new token
     token = dask.base.tokenize(name, ntime, nchan, nbl, ncorr, token,
-                               dtype, backend, path)
+                               dtype, default, backend, path)
 
     collection_name = '-'.join(("create", name, "windows", token))
     layers = {(collection_name, 0): (_create_window, name,
                                      ntime, nchan, nbl, ncorr,
-                                     dtype, token, backend, path)}
+                                     dtype, default, token, backend, path)}
 
     graph = HighLevelGraph.from_collections(collection_name, layers, ())
     chunks = ((0,),)  # One chunk containing single zarr array object
@@ -95,16 +95,17 @@ def _create_window_dask(name, ntime, nchan, nbl, ncorr, token,
 
 
 def create_vis_windows(ntime, nchan, nbl, ncorr, token,
-                       dtype, backend="numpy", path=None):
+                       dtype, default=0 + 0j,
+                       backend="numpy", path=None):
 
     return _create_window_dask("vis", ntime, nchan, nbl, ncorr, token,
-                               dtype, backend, path)
+                               dtype, default, backend, path)
 
 
 def create_flag_windows(ntime, nchan, nbl, ncorr, token,
-                        dtype, backend="numpy", path=None):
+                        dtype, default=1, backend="numpy", path=None):
     return _create_window_dask("flag", ntime, nchan, nbl, ncorr, token,
-                               dtype, backend, path)
+                               dtype, default, backend, path)
 
 
 def _rand_sort(key):
