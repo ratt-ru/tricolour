@@ -72,8 +72,6 @@ def apply_static_mask(flag, ubl, antspos, masks,
         Centre frequencies corresponding to data of shape nfreq
     chan_widths: ndarray, float
         Channel widths corresponding to data of shape nfreq
-    ncorr: float
-        Number of feed correlations corresponding to data
     accumulation_mode: str
         Either 'or' or 'override' - element-wise ORs masked channels
         or replaces respectively
