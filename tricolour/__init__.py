@@ -380,19 +380,22 @@ def main():
                 task_kwargs = GD[k].copy()
                 task_kwargs.pop("task", None)
                 task_kwargs.pop("order", None)
-                flag_windows = sum_threshold_flagger(vis_windows, flag_windows,
-                                                     **task_kwargs)
+                new_flags = sum_threshold_flagger(vis_windows, flag_windows,
+                                                  **task_kwargs)
+                flag_windows = da.logical_or(new_flags, flag_windows)
             elif GD[k].get("task", "unnamed") == "uvcontsub_flagger":
                 task_kwargs = GD[k].copy()
                 task_kwargs.pop("task", None)
                 task_kwargs.pop("order", None)
-                flag_windows = uvcontsub_flagger(vis_windows, flag_windows,
-                                                 **task_kwargs)
+                new_flags = uvcontsub_flagger(vis_windows, flag_windows,
+                                              **task_kwargs)
+                flag_windows = da.logical_or(new_flags, flag_windows)
             elif GD[k].get("task", "unnamed") == "flag_autos":
                 task_kwargs = GD[k].copy()
                 task_kwargs.pop("task", None)
                 task_kwargs.pop("order", None)
-                flag_windows = flag_autos(flag_windows, ubl, **task_kwargs)
+                new_flags = flag_autos(flag_windows, ubl, **task_kwargs)
+                flag_window = da.logical_or(new_flags, flag_windows)
             elif GD[k].get("task", "unnamed") == "combine_with_input_flags":
                 flag_windows = da.logical_or(flag_windows, original)
             elif GD[k].get("task", "unnamed") == "unflag":
@@ -401,13 +404,14 @@ def main():
                 task_kwargs = GD[k].copy()
                 task_kwargs.pop("task", None)
                 task_kwargs.pop("order", None)
-                flag_windows = apply_static_mask(flag_windows,
-                                                 ubl,
-                                                 antspos,
-                                                 masked_channels,
-                                                 chan_freq,
-                                                 chan_width,
-                                                 **task_kwargs)
+                new_flags = apply_static_mask(flag_windows,
+                                              ubl,
+                                              antspos,
+                                              masked_channels,
+                                              chan_freq,
+                                              chan_width,
+                                              **task_kwargs)
+                flag_windows = da.logical_or(new_flags, flag_windows)
 
             else:
                 raise ValueError("Task '{0:s}' does not name a valid task"
