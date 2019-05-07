@@ -26,7 +26,7 @@ requirements = [
 
 setup_requirements = ['pytest-runner', ]
 
-test_requirements = ['pytest', 'nose', 'scipy']
+test_requirements = ['pytest']
 
 setup(
     author="Simon Perkins",
