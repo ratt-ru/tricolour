@@ -392,8 +392,7 @@ def main():
                 task_kwargs = GD[k].copy()
                 task_kwargs.pop("task", None)
                 task_kwargs.pop("order", None)
-                flag_windows = flag_autos(flag_windows, ubl,
-                                          **task_kwargs)
+                flag_windows = flag_autos(flag_windows, ubl, **task_kwargs)
             elif GD[k].get("task", "unnamed") == "combine_with_input_flags":
                 flag_windows = da.logical_or(flag_windows, original)
             elif GD[k].get("task", "unnamed") == "unflag":
