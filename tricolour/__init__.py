@@ -351,9 +351,8 @@ def main():
             stokes_pol = tuple(v for k, v in stokes_map.items() if k != 'I')
             vis = polarised_intensity(vis, stokes_pol)
             flags = da.any(flags, axis=2, keepdims=True)
-            xncorr = 1
         elif args.flagging_strategy == "standard":
-            xncorr = ncorr
+            pass
         else:
             raise ValueError("Invalid flagging strategy '%s'" %
                              args.flagging_strategy)
