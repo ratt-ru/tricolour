@@ -39,8 +39,8 @@ def baselines(wsrt_ants):
 
 @pytest.fixture
 def squared_baseline_lengths(wsrt_ants, unique_baselines):
-    ubl = unique_baselines
-    diff = (wsrt_ants[ubl[:, 1]] - wsrt_ants[ubl[:, 2]])
+    _, ant1, ant2 = unique_baselines.T
+    diff = (wsrt_ants[ant1] - wsrt_ants[ant2])
     return (diff**2).sum(axis=1)
 
 
