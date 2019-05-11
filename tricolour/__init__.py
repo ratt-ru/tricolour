@@ -276,21 +276,21 @@ def main():
                                     "TIME", "ANTENNA1", "ANTENNA2"),
                            group_cols=group_cols,
                            index_cols=index_cols,
-                           chunks={"row": args.row_chunks}))
+                           chunks={"row": args.row_chunks}, ack=False))
 
     # Get datasets for DATA_DESCRIPTION and POLARIZATION,
     # partitioned by row
     data_desc_tab = "::".join((args.ms, "DATA_DESCRIPTION"))
-    ddid_ds = list(xds_from_table(data_desc_tab, group_cols="__row__"))
+    ddid_ds = list(xds_from_table(data_desc_tab, group_cols="__row__", ack=False))
     pol_tab = "::".join((args.ms, "POLARIZATION"))
-    pol_ds = list(xds_from_table(pol_tab, group_cols="__row__"))
+    pol_ds = list(xds_from_table(pol_tab, group_cols="__row__", ack=False))
     ant_tab = "::".join((args.ms, "ANTENNA"))
     ads = list(xds_from_table(ant_tab))
     spw_tab = "::".join((args.ms, "SPECTRAL_WINDOW"))
-    spw_ds = list(xds_from_table(spw_tab, group_cols="__row__"))
+    spw_ds = list(xds_from_table(spw_tab, group_cols="__row__", ack=False))
     antspos = ads[0].POSITION.values
     fld_tab = "::".join((args.ms, "FIELD"))
-    field_ds = list(xds_from_table(fld_tab))
+    field_ds = list(xds_from_table(fld_tab, ack=False))
     fieldnames = field_ds[0].NAME.values
 
     if args.field_names != []:
@@ -372,7 +372,7 @@ def main():
                                               backend=args.window_backend,
                                               path=args.temporary_directory)
 
-        original = flag_windows
+        original = flag_windows.copy()
 
         # Run the flagger
         for k in GD:
@@ -395,7 +395,7 @@ def main():
                 task_kwargs.pop("task", None)
                 task_kwargs.pop("order", None)
                 new_flags = flag_autos(flag_windows, ubl, **task_kwargs)
-                flag_window = da.logical_or(new_flags, flag_windows)
+                flag_windows = da.logical_or(new_flags, flag_windows)
             elif GD[k].get("task", "unnamed") == "combine_with_input_flags":
                 flag_windows = da.logical_or(flag_windows, original)
             elif GD[k].get("task", "unnamed") == "unflag":

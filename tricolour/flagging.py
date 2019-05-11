@@ -29,13 +29,15 @@ def flag_autos(flags, ubl):
         Flags corresponding to visibility data
         of shape :code:`(time, chan, bl, corr)`
     ubl : :class:`numpy.ndarray`
-        Unique baselines of shape :code:`(bl, 3)`
+        unique baseline pairs corresponding to row (blindx, a1indx, a2indx)
+        of shape :code:`(bl, 3)`
 
     Returns
     -------
     out_flags : ndarray, bool
         Flags corresponding to `data`
     """
+    
     ubl = ubl[0]
 
     if flags.shape[2] != ubl.shape[0]:
