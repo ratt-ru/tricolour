@@ -339,6 +339,7 @@ def main():
         # otherwise take flags from the dataset
         if args.ignore_flags is True:
             flags = da.full_like(vis, False, dtype=np.bool)
+            log.warn("!!!NOTE: COMPLETELY IGNORING MEASUREMENT SET FLAGS AS PER -IF FLAG REQUEST!!!")
         else:
             flags = ds.FLAG.data
 
@@ -382,6 +383,7 @@ def main():
                 task_kwargs.pop("order", None)
                 new_flags = sum_threshold_flagger(vis_windows, flag_windows,
                                                   **task_kwargs)
+                # sum threshold builds upon any flags that came previous
                 flag_windows = da.logical_or(new_flags, flag_windows)
             elif GD[k].get("task", "unnamed") == "uvcontsub_flagger":
                 task_kwargs = GD[k].copy()
@@ -389,7 +391,12 @@ def main():
                 task_kwargs.pop("order", None)
                 new_flags = uvcontsub_flagger(vis_windows, flag_windows,
                                               **task_kwargs)
-                flag_windows = da.logical_or(new_flags, flag_windows)
+                # this task discards previous flags by default during its
+                # second iteration. The original flags from MS should be or'd
+                # back in afterwards. Flags from steps prior to this one serves
+                # only as a "initial guess"
+                ###flag_windows = da.logical_or(new_flags, flag_windows)
+                flag_windows = new_flags
             elif GD[k].get("task", "unnamed") == "flag_autos":
                 task_kwargs = GD[k].copy()
                 task_kwargs.pop("task", None)
@@ -397,6 +404,8 @@ def main():
                 new_flags = flag_autos(flag_windows, ubl, **task_kwargs)
                 flag_windows = da.logical_or(new_flags, flag_windows)
             elif GD[k].get("task", "unnamed") == "combine_with_input_flags":
+                # or's in original flags from the measurement set (if -if option
+                # has not been specified, in which case this option will do nothing)
                 flag_windows = da.logical_or(flag_windows, original)
             elif GD[k].get("task", "unnamed") == "unflag":
                 flag_windows = da.zeros_like(flag_windows)
@@ -411,7 +420,12 @@ def main():
                                               chan_freq,
                                               chan_width,
                                               **task_kwargs)
-                flag_windows = da.logical_or(new_flags, flag_windows)
+                # override option will override any flags computed previously
+                # this may not be desirable so use with care or in combination with
+                # combine_with_input_flags option!
+                flag_windows = da.logical_or(new_flags, flag_windows) \
+                        if task_kwargs["accumulation_mode"] == "or" else \
+                        new_flags
 
             else:
                 raise ValueError("Task '{0:s}' does not name a valid task"
