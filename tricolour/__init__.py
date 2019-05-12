@@ -2,6 +2,10 @@
 
 """Top-level package for Tricolour."""
 
+##############################################################
+## External imports
+##############################################################
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -25,26 +29,14 @@ import numpy as np
 import xarray as xr
 from xarrayms import xds_from_ms, xds_from_table, xds_to_table
 
-
-from tricolour.mask import collect_masks, load_mask
-from tricolour.stokes import stokes_corr_map
-from tricolour.dask_wrappers import (sum_threshold_flagger,
-                                     polarised_intensity,
-                                     uvcontsub_flagger,
-                                     flag_autos,
-                                     apply_static_mask)
-
-from tricolour.packing import (unique_baselines,
-                               pack_data,
-                               unpack_data)
-
-from tricolour.config import collect
-from tricolour.util import casa_style_range
-import tricolour.post_mortem_handler as post_mortem_handler
-
 __author__ = """Simon Perkins"""
 __email__ = 'sperkins@ska.ac.za'
 __version__ = '0.2.0'
+
+##############################################################
+## Initialize Post Mortem debugger
+##############################################################
+import tricolour.post_mortem_handler as post_mortem_handler
 
 post_mortem_handler.enable_pdb_on_error()
 
@@ -54,6 +46,9 @@ try:
 except ImportError:
     can_profile = False
 
+##############################################################
+## Initialize Global logging
+##############################################################
 
 def create_logger():
     """ Create a console logger """
@@ -89,6 +84,23 @@ log, log_filehandler, log_console_handler, log_formatter = create_logger()
 DEFAULT_CONFIG = os.path.join(os.path.split(
     __file__)[0], "conf", "default.yaml")
 
+##############################################################
+## Package imports
+##############################################################
+from tricolour.mask import collect_masks, load_mask
+from tricolour.stokes import stokes_corr_map
+from tricolour.dask_wrappers import (sum_threshold_flagger,
+                                     polarised_intensity,
+                                     uvcontsub_flagger,
+                                     flag_autos,
+                                     apply_static_mask)
+
+from tricolour.packing import (unique_baselines,
+                               pack_data,
+                               unpack_data)
+from tricolour.config import collect
+from tricolour.util import casa_style_range
+from tricolour.statsbook import statsbook
 
 def print_info():
     RED = '\033[0;31m'
@@ -289,6 +301,7 @@ def main():
     spw_tab = "::".join((args.ms, "SPECTRAL_WINDOW"))
     spw_ds = list(xds_from_table(spw_tab, group_cols="__row__", ack=False))
     antspos = ads[0].POSITION.values
+    antsnames = ads[0].NAME.values
     fld_tab = "::".join((args.ms, "FIELD"))
     field_ds = list(xds_from_table(fld_tab, ack=False))
     fieldnames = field_ds[0].NAME.values
@@ -309,7 +322,8 @@ def main():
         field_dict = dict([(findx, fn) for findx, fn in enumerate(fieldnames)])
 
     write_computes = []
-
+    stats = statsbook()
+    original_stats = statsbook()
     # Iterate through each dataset
     for ds in xds:
         if ds.FIELD_ID not in field_dict:
@@ -374,6 +388,7 @@ def main():
                                               path=args.temporary_directory)
 
         original = flag_windows.copy()
+        original = original_stats.update(antsnames, original, ubl, ds.SCAN_NUMBER, field_dict[ds.FIELD_ID])
 
         # Run the flagger
         for k in GD:
@@ -409,6 +424,13 @@ def main():
                 flag_windows = da.logical_or(flag_windows, original)
             elif GD[k].get("task", "unnamed") == "unflag":
                 flag_windows = da.zeros_like(flag_windows)
+            elif GD[k].get("task", "unnamed") == "flag_nans_zeros":
+                new_flags = flag_windows.copy()
+                sel = da.logical_or(vis_windows == 0 + 0j,
+                                    da.isnan(vis_windows))
+                new_flags[sel] = True
+                flag_windows = da.logical_or(flag_windows,
+                                             new_flags)
             elif GD[k].get("task", "unnamed") == "apply_static_mask":
                 task_kwargs = GD[k].copy()
                 task_kwargs.pop("task", None)
@@ -424,13 +446,14 @@ def main():
                 # this may not be desirable so use with care or in combination with
                 # combine_with_input_flags option!
                 flag_windows = da.logical_or(new_flags, flag_windows) \
-                        if task_kwargs["accumulation_mode"] == "or" else \
+                        if task_kwargs["accumulation_mode"].strip() == "or" else \
                         new_flags
 
             else:
                 raise ValueError("Task '{0:s}' does not name a valid task"
                                  .format(GD[k].get("task", "unnamed")))
-
+        flag_windows = stats.update(antsnames, flag_windows, ubl, ds.SCAN_NUMBER, field_dict[ds.FIELD_ID])
+        # finally unpack back for writing
         unpacked_flags = unpack_data(antenna1, antenna2, time_inv,
                                      ubl, flag_windows)
 
@@ -446,7 +469,7 @@ def main():
 
         # Write back to original dataset
         writes = xds_to_table(new_ds, args.ms, "FLAG")
-        write_computes.append(writes)
+        write_computes.append([writes, original]) # original should also have .compute called because we need stats
 
     # Create dask contexts
     profilers = ([Profiler(), CacheProfiler(), ResourceProfiler()]
@@ -462,9 +485,8 @@ def main():
         visualize(profilers)
 
     toc = time.time()
-
+    stats.summarize(original_stats)
     elapsed = toc - tic
-
     log.info("Data flagged successfully in "
              "{0:02.0f}h{1:02.0f}m{2:02.0f}s"
              .format((elapsed // 60) // 60,

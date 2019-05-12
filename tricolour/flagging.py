@@ -8,9 +8,10 @@ import numpy as np
 import numba
 
 import dask.array as da
+import warnings
+warnings.simplefilter('ignore', np.RankWarning)
 
 from tricolour.util import casa_style_range
-
 
 MAD_NORMAL = 1.4826
 """Ratio between `median absolute deviation`_ and
@@ -940,13 +941,12 @@ def uvcontsub_flagger(vis, flags, major_cycles=5,
     vis = vis.reshape(ntime, nfreq, nbl*ncorr)
     flags = flags.reshape(ntime, nfreq, nbl*ncorr)
 
-    vis.flags.writeable = False
-    flags.flags.writeable = False
+    vis.flags.writeable = True
 
-    vis_scratch = vis.copy()
     result_flags = flags.copy()
 
     for mi in range(major_cycles):
+        vis_scratch = vis.copy()
         for corr in range(vis.shape[2]):
             # correlation all flagged then skip, nothing can be done
             if result_flags[:, :, corr].sum() == result_flags[:, :, corr].size:
@@ -954,8 +954,17 @@ def uvcontsub_flagger(vis, flags, major_cycles=5,
 
             vis_scratch[result_flags] = np.nan
             avgvis = np.nanmean(vis_scratch[:, :, corr], axis=0)
+
+            ##madavgvis = np.abs(np.abs(avgvis) - np.nanmedian(np.abs(avgvis)))
             # zero completely flagged channels before taking FFT
-            avgvis[np.isnan(avgvis)] = 0.0
+            sel = np.isnan(avgvis)
+            avgvis[sel] = 0.0
+            ##madavgvis[sel] = 9999999
+            ##fitweight = 1.0 / (madavgvis + 1.0e-8)
+            ##x = np.arange(avgvis.size)
+            ##z = np.polyfit(x, avgvis, deg=taylor_degrees, w=fitweight)
+            ##smoothened = np.poly1d(z)(x)
+            ##absresidual = np.abs(vis[:, :, corr] - smoothened[None, :])
             fft = np.fft.fft(avgvis, axis=0)
             lb = taylor_degrees
             ub = fft.shape[0]
@@ -968,9 +977,9 @@ def uvcontsub_flagger(vis, flags, major_cycles=5,
             # use prior flags when computing MAD
             flagged_absresidual = absresidual.copy()
             flagged_absresidual[result_flags[:, :, corr]] = np.nan
-            std = np.nanstd(flagged_absresidual, axis=1)
+            mad = np.nanmedian(np.abs(np.abs(flagged_absresidual) - np.nanmedian(np.abs(flagged_absresidual))))
             # discard old flags and flag based on MAD
-            newflags = absresidual > sigma * std[:, None]
+            newflags = absresidual > sigma * mad
 
             if mi >= or_original_from_cycle:
                 orred_flags = np.logical_or(result_flags[:, :, corr], newflags)
