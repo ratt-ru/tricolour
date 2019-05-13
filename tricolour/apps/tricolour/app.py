@@ -28,7 +28,7 @@ import numpy as np
 import xarray as xr
 from xarrayms import xds_from_ms, xds_from_table, xds_to_table
 
-from tricolour.apps.tricolour_impl.strat_executor import StrategyExecutor
+from tricolour.apps.tricolour.strat_executor import StrategyExecutor
 from tricolour.banner import banner
 from tricolour.mask import collect_masks, load_mask
 from tricolour.stokes import stokes_corr_map
