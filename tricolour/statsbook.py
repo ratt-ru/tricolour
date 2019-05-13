@@ -1,89 +1,267 @@
-from tricolour import log
-from scipy.stats import binned_statistic
-import numpy as np
+from collections import defaultdict
+from functools import partial
+import logging
+
 import dask
 import dask.array as da
+import dask.blockwise as db
+from dask.array.reductions import reduction
+from dask.highlevelgraph import HighLevelGraph
+import numpy as np
+from scipy.stats import binned_statistic
 
-class statsbook:
-    def __init__(self):
-        self._counts_per_ant = {}
-        self._counts_per_field = {}
-        self._counts_per_scan = {}
-        self._size_per_ant = {}
-        self._size_per_field = {}
-        self._size_per_scan = {}
-        self._counts_per_ddid = {}
-        self._bins_per_ddid = {}
-        self._size_per_ddid = {}
 
-    def update(self, antname_map, flag_window, ubls, scan_no, field_name, chans, ddid):
-        dims = ("time", "chan", "bl", "corr")  # corrprod = ncorr * nbl
-        def __update(antname_map, flag_window, ubls, scan_no, field_name, chans, ddid):
-            for ai, a in enumerate(antname_map):
-                # per antenna
-                sel = np.logical_or(ubls[0][:, 1] == ai,
-                                    ubls[0][:, 2] == ai)
-                cnt = np.sum(flag_window[:, :, sel, :])
-                sz = flag_window[:, :, sel, :].size
-                self._counts_per_ant[a] = self._counts_per_ant.get(a, 0) + cnt
-                self._size_per_ant[a] = self._size_per_ant.get(a, 0) + sz
+def _window_stats(flag_window, ubls, chan_freqs,
+                  antenna_names, scan_no, field_name, ddid, nchanbins):
+    """
+    Calculate stats for a **chunk** of a flag window.
+    These stats should be accumulated to form a final
+    stat object for the window. See _combine_baseline_window_stats
+    """
 
-                # per scan and field
-                cnt = np.sum(flag_window)
-                sz = flag_window.size
-                self._counts_per_field[field_name] = self._counts_per_field.get(field_name, 0) + cnt
-                self._size_per_field[field_name] = self._size_per_field.get(field_name, 0) + sz
-                self._counts_per_scan[scan_no] = self._counts_per_scan.get(scan_no, 0) + cnt
-                self._size_per_scan[scan_no] = self._size_per_scan.get(scan_no, 0) + sz
+    ubls = ubls[0]
+    flag_window = flag_window[0][0][0]
+    chan_freqs = chan_freqs[0]
 
-                # binned per channel
-                y = flag_window
-                bins_edges = np.linspace(np.min(chans), np.max(chans), 10)
-                bins = np.zeros(10)
-                for ch_i, ch in enumerate(bins_edges[:-1]):
-                    sel = np.logical_and(chans >= bins_edges[ch_i],
-                                         chans < bins_edges[ch_i + 1])
-                    bins[ch_i] = np.sum(y[:, sel, :, :])
-                self._counts_per_ddid[ddid] = self._counts_per_ddid.get(ddid, np.zeros_like(bins)) + bins
-                self._bins_per_ddid[ddid] = bins_edges
-                self._size_per_ddid[ddid] = self._size_per_ddid.get(ddid, 0) + flag_window.size
+    stats = statsbook(nchanbins)
 
-            return flag_window
-        return da.blockwise(__update, dims,
-                            antname_map, None,
-                            flag_window, dims,
-                            ubls, ("bl", "bl-comp"),
-                            scan_no, None,
-                            field_name, None,
-                            chans, tuple(["chan"]),
-                            ddid, None,
-                            dtype=flag_window.dtype)
+    for ai, a in enumerate(antenna_names):
+        # per antenna
+        sel = np.logical_or(ubls[:, 1] == ai, ubls[:, 2] == ai)
+        cnt = np.sum(flag_window[:, :, sel, :])
+        sz = flag_window[:, :, sel, :].size
+        stats._counts_per_ant[a] += cnt
+        stats._size_per_ant[a] += sz
 
-    def summarize(self, original):
-        log.info("********************************")
-        log.info("   BEGINNING OF FLAG SUMMARY    ")
-        log.info("********************************")
-        log.info("Per antenna:")
-        for a in self._counts_per_ant:
-            log.info("\t {0:s}: {1:.3f}%, original {2:.3f}%".format(a,
-                    self._counts_per_ant[a] * 100.0 / self._size_per_ant[a],
-                    original._counts_per_ant[a] * 100.0 / original._size_per_ant[a]))
-        log.info("Per scan:")
-        for s in self._counts_per_scan:
-            log.info("\t {0:d}: {1:.3f}%, original {2:.3f}%".format(s,
-                    self._counts_per_scan[s] * 100.0 / self._size_per_scan[s],
-                    original._counts_per_scan[s] * 100.0 / original._size_per_scan[s]))
-        log.info("Per field:")
-        for f in self._counts_per_field:
-            log.info("\t {0:s}: {1:.3f}%, original {2:.3f}%".format(f,
-                    self._counts_per_field[f] * 100.0 / self._size_per_field[f],
-                    original._counts_per_field[f] * 100.0 / original._size_per_field[f]))
-        log.info("Per data descriptor id:")
-        for d in self._counts_per_ddid:
-            log.info("\t {0:d}: {1:s}%".format(d,
-                    "\t".join(["{0:.2f}".format(s) for s in (self._counts_per_ddid[d] * 100.0 / self._size_per_ddid[d])])))
-            log.info("\t    {0:s} MHz".format("\t".join(["{0:.1f}".format(s) for s in self._bins_per_ddid[d] / 1e6])))
-        log.info("********************************")
-        log.info("       END OF FLAG SUMMARY      ")
-        log.info("********************************")
+        # per scan and field
+        cnt = np.sum(flag_window)
+        sz = flag_window.size
+        stats._counts_per_field[field_name] += cnt
+        stats._size_per_field[field_name] += sz
+        stats._counts_per_scan[scan_no] += cnt
+        stats._size_per_scan[scan_no] += sz
 
+        # binned per channel
+        bins_edges = np.linspace(np.min(chan_freqs), np.max(chan_freqs),
+                                 nchanbins)
+        bins = np.zeros(nchanbins, dtype=np.uint32)
+
+        for ch_i, ch in enumerate(bins_edges[:-1]):
+            sel = np.logical_and(chan_freqs >= bins_edges[ch_i],
+                                 chan_freqs < bins_edges[ch_i + 1])
+            bins[ch_i] = np.sum(flag_window[:, sel, :, :])
+
+        stats._counts_per_ddid[ddid] += bins
+        stats._bins_per_ddid[ddid] = bins_edges
+        stats._size_per_ddid[ddid] += flag_window.size
+
+    return stats
+
+
+def _combine_baseline_window_stats(baseline_stat_list, prev_stats):
+    """
+    Combine per baseline window stats into a greater window stat object
+    """
+    result = prev_stats.copy()
+
+    for stats in baseline_stat_list:
+        result.update(stats)
+
+    return result
+
+
+def window_stats(flag_window, ubls, chan_freqs,
+                 antenna_names, scan_no, field_name, ddid,
+                 nchanbins=10, prev_stats=None):
+    """
+    Calculates stats for a chunk of a `flag_window`.
+    Should be combined with the stats from other chunks.
+
+    Parameters
+    ----------
+    flag_window : :class:`dask.Array`
+        Flag window of shape ("time", "chan", "bl", "corr")
+    ubls : :class:`dask.Array`
+        Unique baselines of shape ("bl", 3)
+    chan_freqs : :class:`dask.Array`
+        Channel frequencies of shape ("chan",)
+    antenna_names : list or :class:`numpy.ndarray`
+        Antenna names of shape ("ant",)
+    scan_no : int
+        Scan number
+    field_name : str
+        Field name
+    ddid : int
+        Data descriptor id
+    nchanbins : int, optional
+        Number of bins in a channel
+    prev_stats : :class:`statsbook`, optional
+        Previous stats
+
+    Returns
+    -------
+    stats : :class:`dask.Array`
+        Dask array containing a single :class:`statsbook` object.
+        `prev_stats` is merged into this result, if present.
+    """
+
+    # Construct as array of per-baseline stats objects
+    stats = da.blockwise(_window_stats, ("bl",),
+                         flag_window, ("time", "chan", "bl", "corr"),
+                         ubls, ("bl", "bl-comp"),
+                         chan_freqs, ("chan",),
+                         antenna_names, None,
+                         scan_no, None,
+                         field_name, None,
+                         ddid, None,
+                         nchanbins, None,
+                         dtype=np.object)
+
+    # Create an empty stats object if the user hasn't supplied one
+    if prev_stats is None:
+        prev_stats = da.blockwise(statsbook, (),
+                                  nchanbins, None,
+                                  dtype=np.object)
+
+    # Combine per-baseline stats into a single stats object
+    return da.blockwise(_combine_baseline_window_stats, (),
+                        stats, ("bl",),
+                        prev_stats, (),
+                        dtype=np.object)
+
+
+def _combine_window_stats(*args):
+    result = args[0].copy()
+
+    for arg in args[1:]:
+        result.update(arg)
+
+    return result
+
+
+def combine_window_stats(window_stats):
+    """
+    Combines a list of window_stats in one final stat object
+
+    Parameters
+    ----------
+    window_stats : list of :class:`dask.Array`
+        Each entry of the list should be a dask array containing
+        a single :class:`statsbook` object.
+
+    Returns
+    -------
+    final_stats : :class:`dask.Array`
+        Dask array containing a single :class:`statsbook` object
+    """
+    args = (v for ws in window_stats for v in (ws, ()))
+
+    return da.blockwise(_combine_window_stats, (),
+                        *args, dtype=np.object)
+
+
+class statsbook(object):
+    def __init__(self, nchanbins):
+        self._nchanbins = nchanbins
+        self._counts_per_ant = defaultdict(lambda: 0)
+        self._counts_per_field = defaultdict(lambda: 0)
+        self._counts_per_scan = defaultdict(lambda: 0)
+        self._size_per_ant = defaultdict(lambda: 0)
+        self._size_per_field = defaultdict(lambda: 0)
+        self._size_per_scan = defaultdict(lambda: 0)
+
+        bin_factory = partial(np.zeros, nchanbins, dtype=np.uint32)
+        self._counts_per_ddid = defaultdict(bin_factory)
+        self._bins_per_ddid = defaultdict(lambda: 0)
+        self._size_per_ddid = defaultdict(lambda: 0)
+
+    def update(self, other):
+        # Counts
+        for a, count in other._counts_per_ant.items():
+            self._counts_per_ant[a] += count
+
+        for f, count in other._counts_per_field.items():
+            self._counts_per_field[f] += count
+
+        for s, count in other._counts_per_scan.items():
+            self._counts_per_scan[s] += count
+
+        for d, count in other._counts_per_ddid.items():
+            self._counts_per_ddid[d] += count
+
+        # Sizes
+        for a, size in other._size_per_ant.items():
+            self._size_per_ant[a] += size
+
+        for f, size in other._size_per_field.items():
+            self._size_per_field[f] += size
+
+        for s, size in other._size_per_scan.items():
+            self._size_per_scan[s] += size
+
+        for s, size in other._size_per_ddid.items():
+            self._size_per_ddid[s] += size
+
+        # ddid
+        for d, bins in other._bins_per_ddid.items():
+            self._bins_per_ddid[d] += bins
+
+    def copy(self):
+        """ Creates a copy of the current statsbook"""
+        result = statsbook(self._nchanbins)
+        result.update(self)
+        return result
+
+
+def summarise_stats(final, original):
+    """
+    Returns
+    -------
+    summary : list of str
+        A list of strings summarising both final and original flags
+    """
+    l = []  # noqa
+
+    l.append("********************************")
+    l.append("   BEGINNING OF FLAG SUMMARY    ")
+    l.append("********************************")
+
+    l.append("Per antenna:")
+    for a in final._counts_per_ant:
+        l.append("\t {0:s}: {1:.3f}%, original {2:.3f}%".format(a,
+                 final._counts_per_ant[a] * 100.0 /
+                 final._size_per_ant[a],
+                 original._counts_per_ant[a] * 100.0 /
+                 original._size_per_ant[a]))
+    l.append("Per scan:")
+    for s in final._counts_per_scan:
+        l.append("\t {0:d}: {1:.3f}%, original {2:.3f}%".format(s,
+                 final._counts_per_scan[s] * 100.0 /
+                 final._size_per_scan[s],
+                 original._counts_per_scan[s] * 100.0 /
+                 original._size_per_scan[s]))
+
+    l.append("Per field:")
+    for f in final._counts_per_field:
+        l.append("\t {0:s}: {1:.3f}%, original {2:.3f}%".format(f,
+                 final._counts_per_field[f] * 100.0 /
+                 final._size_per_field[f],
+                 original._counts_per_field[f] * 100.0 /
+                 original._size_per_field[f]))
+
+    l.append("Per data descriptor id:")
+
+    for d in final._counts_per_ddid:
+        ratios = final._counts_per_ddid[d] * 100.0 / final._size_per_ddid[d]
+        ratio_str = '\t'.join(["{0:.2f}".format(r) for r in ratios])
+        l.append("\t {0:d}: {1:s}%".format(d, ratio_str))
+
+        ddid_freqs = final._bins_per_ddid[d] / 1e6
+        ddid_freqs_str = '\t'.join(["{0:.1f}".format(f) for f in ddid_freqs])
+        l.append("\t    {0:s} MHz".format(ddid_freqs_str))
+
+    l.append("********************************")
+    l.append("       END OF FLAG SUMMARY      ")
+    l.append("********************************")
+
+    return l

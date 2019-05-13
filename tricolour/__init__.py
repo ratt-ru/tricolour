@@ -2,10 +2,6 @@
 
 """Top-level package for Tricolour."""
 
-##############################################################
-## External imports
-##############################################################
-
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -29,12 +25,31 @@ import numpy as np
 import xarray as xr
 from xarrayms import xds_from_ms, xds_from_table, xds_to_table
 
+from tricolour.banner import banner
+from tricolour.mask import collect_masks, load_mask
+from tricolour.stokes import stokes_corr_map
+from tricolour.dask_wrappers import (sum_threshold_flagger,
+                                     polarised_intensity,
+                                     uvcontsub_flagger,
+                                     flag_autos,
+                                     apply_static_mask)
+
+from tricolour.packing import (unique_baselines,
+                               pack_data,
+                               unpack_data)
+from tricolour.config import collect
+from tricolour.util import casa_style_range
+from tricolour.statsbook import (window_stats,
+                                 combine_window_stats,
+                                 summarise_stats)
+
+
 __author__ = """Simon Perkins"""
 __email__ = 'sperkins@ska.ac.za'
 __version__ = '0.2.0'
 
 ##############################################################
-## Initialize Post Mortem debugger
+# Initialize Post Mortem debugger
 ##############################################################
 import tricolour.post_mortem_handler as post_mortem_handler
 
@@ -47,8 +62,9 @@ except ImportError:
     can_profile = False
 
 ##############################################################
-## Initialize Global logging
+# Initialize Global logging
 ##############################################################
+
 
 def create_logger():
     """ Create a console logger """
@@ -83,57 +99,6 @@ log, log_filehandler, log_console_handler, log_formatter = create_logger()
 
 DEFAULT_CONFIG = os.path.join(os.path.split(
     __file__)[0], "conf", "default.yaml")
-
-##############################################################
-## Package imports
-##############################################################
-from tricolour.mask import collect_masks, load_mask
-from tricolour.stokes import stokes_corr_map
-from tricolour.dask_wrappers import (sum_threshold_flagger,
-                                     polarised_intensity,
-                                     uvcontsub_flagger,
-                                     flag_autos,
-                                     apply_static_mask)
-
-from tricolour.packing import (unique_baselines,
-                               pack_data,
-                               unpack_data)
-from tricolour.config import collect
-from tricolour.util import casa_style_range
-from tricolour.statsbook import statsbook
-
-def print_info():
-    RED = '\033[0;31m'
-    WHITE = '\033[0;37m'
-    BLUE = '\033[0;34m'
-    RESET = '\033[0m'
-    log.info("""
-***********************************************************************************************************************************************
-{0:s} ▄▄▄▄▄▄▄▄▄▄▄ {1:s} ▄▄▄▄▄▄▄▄▄▄▄{2:s}  ▄▄▄▄▄▄▄▄▄▄▄{3:s}  ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄            ▄▄▄▄▄▄▄▄▄▄▄  ▄         ▄  ▄▄▄▄▄▄▄▄▄▄▄
-{0:s}▐░░░░░░░░░░░▌{1:s}▐░░░░░░░░░░░▌{2:s}▐░░░░░░░░░░░▌{3:s}▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░▌          ▐░░░░░░░░░░░▌▐░▌       ▐░▌▐░░░░░░░░░░░▌
-{0:s} ▀▀▀▀█░█▀▀▀▀{1:s} ▐░█▀▀▀▀▀▀▀█░▌{2:s} ▀▀▀▀█░█▀▀▀▀{3:s} ▐░█▀▀▀▀▀▀▀▀▀ ▐░█▀▀▀▀▀▀▀█░▌▐░▌          ▐░█▀▀▀▀▀▀▀█░▌▐░▌       ▐░▌▐░█▀▀▀▀▀▀▀█░▌
-{0:s}     ▐░▌    {1:s} ▐░▌       ▐░▌{2:s}     ▐░▌    {3:s} ▐░▌          ▐░▌       ▐░▌▐░▌          ▐░▌       ▐░▌▐░▌       ▐░▌▐░▌       ▐░▌
-{0:s}     ▐░▌    {1:s} ▐░█▄▄▄▄▄▄▄█░▌{2:s}     ▐░▌    {3:s} ▐░▌          ▐░▌       ▐░▌▐░▌          ▐░▌       ▐░▌▐░▌       ▐░▌▐░█▄▄▄▄▄▄▄█░▌
-{0:s}     ▐░▌    {1:s} ▐░░░░░░░░░░░▌{2:s}     ▐░▌    {3:s} ▐░▌          ▐░▌       ▐░▌▐░▌          ▐░▌       ▐░▌▐░▌       ▐░▌▐░░░░░░░░░░░▌
-{0:s}     ▐░▌    {1:s} ▐░█▀▀▀▀█░█▀▀ {2:s}     ▐░▌    {3:s} ▐░▌          ▐░▌       ▐░▌▐░▌          ▐░▌       ▐░▌▐░▌       ▐░▌▐░█▀▀▀▀█░█▀▀
-{0:s}     ▐░▌    {1:s} ▐░▌     ▐░▌  {2:s}     ▐░▌    {3:s} ▐░▌          ▐░▌       ▐░▌▐░▌          ▐░▌       ▐░▌▐░▌       ▐░▌▐░▌     ▐░▌
-{0:s}     ▐░▌    {1:s} ▐░▌      ▐░▌ {2:s} ▄▄▄▄█░█▄▄▄▄{3:s} ▐░█▄▄▄▄▄▄▄▄▄ ▐░█▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄▄▄ ▐░█▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄█░▌▐░▌      ▐░▌
-{0:s}     ▐░▌    {1:s} ▐░▌       ▐░▌{2:s}▐░░░░░░░░░░░▌{3:s}▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░▌       ▐░▌
-{0:s}      ▀     {1:s}  ▀         ▀ {2:s} ▀▀▀▀▀▀▀▀▀▀▀ {3:s} ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀         ▀
-
-Viva la révolution!
-
-A DASK distributed RFI flagger by Science Data Processing and Radio Astronomy Research Group
-Copyright 2019 South African Radio Astronomy Observatory (SARAO, SKA-SA)
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-***********************************************************************************************************************************************
-""".format(BLUE, WHITE, RED, RESET))  # noqa make it Frenchy
 
 
 def load_config(config_file):
@@ -252,7 +217,7 @@ def create_parser():
 def main():
     tic = time.time()
 
-    print_info()
+    log.info(banner())
 
     args = create_parser().parse_args()
 
@@ -283,27 +248,32 @@ def main():
     index_cols = ['TIME']
 
     # Reopen the datasets using the aggregated row ordering
+    table_kwargs = {'ack': False}
     xds = list(xds_from_ms(args.ms,
                            columns=(data_column, "FLAG",
                                     "TIME", "ANTENNA1", "ANTENNA2"),
                            group_cols=group_cols,
                            index_cols=index_cols,
-                           chunks={"row": args.row_chunks}, ack=False))
+                           chunks={"row": args.row_chunks},
+                           table_kwargs=table_kwargs))
 
     # Get datasets for DATA_DESCRIPTION and POLARIZATION,
     # partitioned by row
     data_desc_tab = "::".join((args.ms, "DATA_DESCRIPTION"))
-    ddid_ds = list(xds_from_table(data_desc_tab, group_cols="__row__", ack=False))
+    ddid_ds = list(xds_from_table(data_desc_tab, group_cols="__row__",
+                                  table_kwargs=table_kwargs))
     pol_tab = "::".join((args.ms, "POLARIZATION"))
-    pol_ds = list(xds_from_table(pol_tab, group_cols="__row__", ack=False))
+    pol_ds = list(xds_from_table(pol_tab, group_cols="__row__",
+                                 table_kwargs=table_kwargs))
     ant_tab = "::".join((args.ms, "ANTENNA"))
     ads = list(xds_from_table(ant_tab))
     spw_tab = "::".join((args.ms, "SPECTRAL_WINDOW"))
-    spw_ds = list(xds_from_table(spw_tab, group_cols="__row__", ack=False))
+    spw_ds = list(xds_from_table(spw_tab, group_cols="__row__",
+                                 table_kwargs=table_kwargs))
     antspos = ads[0].POSITION.values
     antsnames = ads[0].NAME.values
     fld_tab = "::".join((args.ms, "FIELD"))
-    field_ds = list(xds_from_table(fld_tab, ack=False))
+    field_ds = list(xds_from_table(fld_tab, table_kwargs=table_kwargs))
     fieldnames = field_ds[0].NAME.values
 
     if args.field_names != []:
@@ -321,9 +291,11 @@ def main():
     else:
         field_dict = dict([(findx, fn) for findx, fn in enumerate(fieldnames)])
 
+    # List which hold our dask compute graphs for each dataset
     write_computes = []
-    stats = statsbook()
-    original_stats = statsbook()
+    original_stats = []
+    final_stats = []
+
     # Iterate through each dataset
     for ds in xds:
         if ds.FIELD_ID not in field_dict:
@@ -353,7 +325,8 @@ def main():
         # otherwise take flags from the dataset
         if args.ignore_flags is True:
             flags = da.full_like(vis, False, dtype=np.bool)
-            log.warn("!!!NOTE: COMPLETELY IGNORING MEASUREMENT SET FLAGS AS PER -IF FLAG REQUEST!!!")
+            log.warn("!!!NOTE: COMPLETELY IGNORING MEASUREMENT SET FLAGS "
+                     " AS PER -IF FLAG REQUEST!!!")
         else:
             flags = ds.FLAG.data
 
@@ -388,13 +361,10 @@ def main():
                                               path=args.temporary_directory)
 
         original = flag_windows.copy()
-        original = original_stats.update(antsnames,
-                                         original,
-                                         ubl,
-                                         ds.SCAN_NUMBER,
-                                         field_dict[ds.FIELD_ID],
-                                         chan_freq,
-                                         ds.attrs['DATA_DESC_ID'])
+        original_stats.append(window_stats(original, ubl, chan_freq,
+                                           antsnames, ds.SCAN_NUMBER,
+                                           field_dict[ds.FIELD_ID],
+                                           ds.attrs['DATA_DESC_ID']))
 
         # Run the flagger
         for k in GD:
@@ -416,7 +386,6 @@ def main():
                 # second iteration. The original flags from MS should be or'd
                 # back in afterwards. Flags from steps prior to this one serves
                 # only as a "initial guess"
-                ###flag_windows = da.logical_or(new_flags, flag_windows)
                 flag_windows = new_flags
             elif GD[k].get("task", "unnamed") == "flag_autos":
                 task_kwargs = GD[k].copy()
@@ -425,8 +394,9 @@ def main():
                 new_flags = flag_autos(flag_windows, ubl, **task_kwargs)
                 flag_windows = da.logical_or(new_flags, flag_windows)
             elif GD[k].get("task", "unnamed") == "combine_with_input_flags":
-                # or's in original flags from the measurement set (if -if option
-                # has not been specified, in which case this option will do nothing)
+                # or's in original flags from the measurement set
+                # (if -if option has not been specified,
+                # in which case this option will do nothing)
                 flag_windows = da.logical_or(flag_windows, original)
             elif GD[k].get("task", "unnamed") == "unflag":
                 flag_windows = da.zeros_like(flag_windows)
@@ -449,22 +419,21 @@ def main():
                                               chan_width,
                                               **task_kwargs)
                 # override option will override any flags computed previously
-                # this may not be desirable so use with care or in combination with
-                # combine_with_input_flags option!
-                flag_windows = da.logical_or(new_flags, flag_windows) \
-                        if task_kwargs["accumulation_mode"].strip() == "or" else \
-                        new_flags
+                # this may not be desirable so use with care or in combination
+                # with combine_with_input_flags option!
+                if task_kwargs["accumulation_mode"].strip() == "or":
+                    flag_windows = da.logical_or(new_flags, flag_windows)
+                else:
+                    flag_windows = new_flags
 
             else:
                 raise ValueError("Task '{0:s}' does not name a valid task"
                                  .format(GD[k].get("task", "unnamed")))
-        flag_windows = stats.update(antsnames,
-                                    flag_windows,
-                                    ubl,
-                                    ds.SCAN_NUMBER,
-                                    field_dict[ds.FIELD_ID],
-                                    chan_freq,
-                                    ds.attrs['DATA_DESC_ID'])
+
+        final_stats.append(window_stats(flag_windows, ubl, chan_freq,
+                                        antsnames, ds.SCAN_NUMBER,
+                                        field_dict[ds.FIELD_ID],
+                                        ds.attrs['DATA_DESC_ID']))
 
         # finally unpack back for writing
         unpacked_flags = unpack_data(antenna1, antenna2, time_inv,
@@ -482,7 +451,8 @@ def main():
 
         # Write back to original dataset
         writes = xds_to_table(new_ds, args.ms, "FLAG")
-        write_computes.append([writes, original]) # original should also have .compute called because we need stats
+        # original should also have .compute called because we need stats
+        write_computes.append(writes)
 
     # Create dask contexts
     profilers = ([Profiler(), CacheProfiler(), ResourceProfiler()]
@@ -491,14 +461,24 @@ def main():
 
     pool = ThreadPool(args.nworkers)
 
+    # Combine stats from all datasets
+    original_stats = combine_window_stats(original_stats)
+    final_stats = combine_window_stats(final_stats)
+
     with contextlib.nested(*contexts), dask.config.set(pool=pool):
-        dask.compute(write_computes)
+        _, original_stats, final_stats = dask.compute(write_computes,
+                                                      original_stats,
+                                                      final_stats)
 
     if can_profile:
         visualize(profilers)
 
     toc = time.time()
-    stats.summarize(original_stats)
+
+    # Log each summary line
+    for line in summarise_stats(final_stats, original_stats):
+        log.info(line)
+
     elapsed = toc - tic
     log.info("Data flagged successfully in "
              "{0:02.0f}h{1:02.0f}m{2:02.0f}s"
