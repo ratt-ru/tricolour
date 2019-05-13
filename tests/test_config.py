@@ -38,4 +38,4 @@ def test_config_load():
         yaml.dump(config, f)
         f.flush()
 
-        assert config == collect([f.name])
+        assert config == collect(f.name)

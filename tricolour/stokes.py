@@ -64,7 +64,7 @@ def stokes_corr_map(corr_types):
         .. code-block:: python
 
             stokes = a*(s1*vis[:,:,c1] + s2*vis[:,:,c2])
-    """
+    """  # noqa
     corr_type_set = set(corr_types)
     corr_maps = {}
 
@@ -82,7 +82,7 @@ def stokes_corr_map(corr_types):
 
 @numba.jit(nopython=True, nogil=True, cache=True)
 def unpolarised_intensity(vis, stokes_unpol, stokes_pol):
-    """
+    r"""
     Derives the unpolarised intensity from visibilities
     and tuples describing how to derive stokes parameters
     from visibility correlations.
@@ -97,7 +97,7 @@ def unpolarised_intensity(vis, stokes_unpol, stokes_pol):
     Parameters
     ----------
     vis: :class:`numpy.ndarray`
-        Visibilities of shape :code:`(time, baseline, chan, corr)`
+        Visibilities of shape :code:`(row, chan, corr)`
     stokes_unpol: tuple
         Tuple with schema :code:`(c1,c2,a,s1,s2)` describing
         how to derive unpolarised stokes parameters (I):
@@ -115,7 +115,7 @@ def unpolarised_intensity(vis, stokes_unpol, stokes_pol):
     Returns
     -------
     :class:`numpy.ndarray`
-        Unpolarised intensities of shape :code:`(time, baseline, chan, 1)`.
+        Unpolarised intensities of shape :code:`(row, chan, 1)`.
     """
 
     if not len(stokes_unpol) == 1:
@@ -126,36 +126,35 @@ def unpolarised_intensity(vis, stokes_unpol, stokes_pol):
         raise ValueError("No entries for polarised stokes (stokes_pol)")
 
     # Only one output correlation -- unpolarised intensity
-    out_vis = np.empty(vis.shape[:3] + (1,), vis.dtype)
+    out_vis = np.empty(vis.shape[:2] + (1,), vis.dtype)
 
-    for t in range(vis.shape[0]):
-        for bl in range(vis.shape[1]):
-            for f in range(vis.shape[2]):
-                # Polarised intensity (Q,U,V)
-                pol = 0
+    for r in range(vis.shape[0]):
+        for f in range(vis.shape[1]):
+            # Polarised intensity (Q,U,V)
+            pol = 0
 
-                for (c1, c2, a, s1, s2) in stokes_pol:
-                    value = a * (s1 * vis[t, bl, f, c1] +
-                                 s2 * vis[t, bl, f, c2])
-                    pol += value.real**2  # imaginary contains only noise
+            for (c1, c2, a, s1, s2) in stokes_pol:
+                value = a * (s1 * vis[r, f, c1] +
+                             s2 * vis[r, f, c2])
+                pol += value.real**2  # imaginary contains only noise
 
-                # Unpolarised intensity (I)
-                unpol = 0
+            # Unpolarised intensity (I)
+            unpol = 0
 
-                for (c1, c2, a, s1, s2) in stokes_unpol:
-                    value = a * (s1 * vis[t, bl, f, c1] +
-                                 s2 * vis[t, bl, f, c2])
-                    unpol += value.real   # imaginary contains only noise
+            for (c1, c2, a, s1, s2) in stokes_unpol:
+                value = a * (s1 * vis[r, f, c1] +
+                             s2 * vis[r, f, c2])
+                unpol += value.real   # imaginary contains only noise
 
-                # I - sqrt(Q^2 + U^2 + V^2)
-                out_vis[t, bl, f, 0] = unpol - np.sqrt(pol)
+            # I - sqrt(Q^2 + U^2 + V^2)
+            out_vis[r, f, 0] = unpol - np.sqrt(pol)
 
     return out_vis
 
 
 @numba.jit(nopython=True, nogil=True, cache=True)
 def polarised_intensity(vis, stokes_pol):
-    """
+    r"""
     Derives the polarised intensity from visibilities
     and tuples describing how to derive stokes parameters
     from visibility correlations.
@@ -169,7 +168,7 @@ def polarised_intensity(vis, stokes_pol):
     Parameters
     ----------
     vis: :class:`numpy.ndarray`
-        Visibilities of shape :code:`(time, baseline, chan, corr)`
+        Visibilities of shape :code:`(row, chan, corr)`
     stokes_pol: tuple
         Tuple with schema :code:`(c1,c2,a,s1,s2)` describing
         how to derive polarised stokes parameters (Q,U,V):
@@ -183,24 +182,23 @@ def polarised_intensity(vis, stokes_pol):
     Returns
     -------
     :class:`numpy.ndarray`
-        Unpolarised intensities of shape :code:`(time, baseline, chan, 1)`.
+        Unpolarised intensities of shape :code:`(row, chan, 1)`.
     """
 
     # Only one output correlation -- polarised intensity
-    out_vis = np.empty(vis.shape[:3] + (1,), vis.dtype)
+    out_vis = np.empty(vis.shape[:2] + (1,), vis.dtype)
 
-    for t in range(vis.shape[0]):
-        for bl in range(vis.shape[1]):
-            for f in range(vis.shape[2]):
-                # Polarised intensity (Q,U,V)
-                pol = 0
+    for r in range(vis.shape[0]):
+        for f in range(vis.shape[1]):
+            # Polarised intensity (Q,U,V)
+            pol = 0
 
-                for (c1, c2, a, s1, s2) in stokes_pol:
-                    value = a * (s1 * vis[t, bl, f, c1] +
-                                 s2 * vis[t, bl, f, c2])
-                    pol += value.real**2  # imaginary contains only noise
+            for (c1, c2, a, s1, s2) in stokes_pol:
+                value = a * (s1 * vis[r, f, c1] +
+                             s2 * vis[r, f, c2])
+                pol += value.real**2  # imaginary contains only noise
 
-                # sqrt(Q^2 + U^2 + V^2)
-                out_vis[t, bl, f, 0] = np.sqrt(pol)
+            # sqrt(Q^2 + U^2 + V^2)
+            out_vis[r, f, 0] = np.sqrt(pol)
 
     return out_vis
