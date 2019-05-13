@@ -4,7 +4,6 @@
 """The setup script."""
 
 from os.path import join as pjoin
-from glob import glob
 
 from setuptools import setup, find_packages
 
@@ -42,13 +41,15 @@ setup(
         'Programming Language :: Python :: 3.6',
     ],
     description="Science Data Processing flagging code, wrapped in dask",
+    entry_points={
+        'console_scripts': ['tricolour=tricolour.apps.tricolour:main'],
+    },
     install_requires=requirements,
     long_description=readme + '\n\n' + history,
     include_package_data=True,
     keywords='tricolour',
     name='tricolour',
     packages=find_packages(),
-    scripts=glob(pjoin('tricolour', 'scripts', '*')),
     setup_requires=setup_requirements,
     test_suite='tests',
     tests_require=test_requirements,

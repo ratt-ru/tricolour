@@ -1,5 +1,0 @@
-#!/usr/bin/env python
-import tricolour
-
-if __name__ == "__main__":
-    tricolour.main()
