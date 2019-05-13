@@ -56,7 +56,7 @@ except ImportError:
     can_profile = False
 
 ##############################################################
-# Initialize Global logging
+# Initialize Application Logger
 ##############################################################
 
 
@@ -77,19 +77,11 @@ def create_logger():
 
     log.addHandler(console)
 
-    return log, filehandler, console, cfmt
-
-
-def remove_log_handler(hndl):
-    log.removeHandler(hndl)
-
-
-def add_log_handler(hndl):
-    log.addHandler(hndl)
+    return log
 
 
 # Create the log object
-log, log_filehandler, log_console_handler, log_formatter = create_logger()
+log = create_logger()
 
 DEFAULT_CONFIG = pkg_resources.resource_filename('tricolour',
                                                  pjoin("conf", "default.yaml"))
