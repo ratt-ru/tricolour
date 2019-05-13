@@ -39,9 +39,9 @@ from tricolour.packing import (unique_baselines,
                                unpack_data)
 from tricolour.config import collect
 from tricolour.util import casa_style_range
-from tricolour.statsbook import (window_stats,
-                                 combine_window_stats,
-                                 summarise_stats)
+from tricolour.window_statistics import (window_stats,
+                                         combine_window_stats,
+                                         summarise_stats)
 
 
 __author__ = """Simon Perkins"""

@@ -17,7 +17,7 @@ def _window_stats(flag_window, ubls, chan_freqs,
     flag_window = flag_window[0][0][0]
     chan_freqs = chan_freqs[0]
 
-    stats = statsbook(nchanbins)
+    stats = WindowStatistics(nchanbins)
 
     for ai, a in enumerate(antenna_names):
         # per antenna
@@ -89,13 +89,13 @@ def window_stats(flag_window, ubls, chan_freqs,
         Data descriptor id
     nchanbins : int, optional
         Number of bins in a channel
-    prev_stats : :class:`statsbook`, optional
+    prev_stats : :class:`WindowStatistics`, optional
         Previous stats
 
     Returns
     -------
     stats : :class:`dask.Array`
-        Dask array containing a single :class:`statsbook` object.
+        Dask array containing a single :class:`WindowStatistics` object.
         `prev_stats` is merged into this result, if present.
     """
 
@@ -113,7 +113,7 @@ def window_stats(flag_window, ubls, chan_freqs,
 
     # Create an empty stats object if the user hasn't supplied one
     if prev_stats is None:
-        prev_stats = da.blockwise(statsbook, (),
+        prev_stats = da.blockwise(WindowStatistics, (),
                                   nchanbins, None,
                                   dtype=np.object)
 
@@ -141,12 +141,12 @@ def combine_window_stats(window_stats):
     ----------
     window_stats : list of :class:`dask.Array`
         Each entry of the list should be a dask array containing
-        a single :class:`statsbook` object.
+        a single :class:`WindowStatistics` object.
 
     Returns
     -------
     final_stats : :class:`dask.Array`
-        Dask array containing a single :class:`statsbook` object
+        Dask array containing a single :class:`WindowStatistics` object
     """
     args = (v for ws in window_stats for v in (ws, ()))
 
@@ -154,7 +154,7 @@ def combine_window_stats(window_stats):
                         *args, dtype=np.object)
 
 
-class statsbook(object):
+class WindowStatistics(object):
     def __init__(self, nchanbins):
         self._nchanbins = nchanbins
         self._counts_per_ant = defaultdict(lambda: 0)
@@ -201,8 +201,8 @@ class statsbook(object):
             self._bins_per_ddid[d] += bins
 
     def copy(self):
-        """ Creates a copy of the current statsbook"""
-        result = statsbook(self._nchanbins)
+        """ Creates a copy of the current WindowStatistics"""
+        result = WindowStatistics(self._nchanbins)
         result.update(self)
         return result
 

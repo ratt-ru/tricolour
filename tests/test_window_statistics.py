@@ -10,9 +10,9 @@ import dask.array as da
 import numpy as np
 import pytest
 
-from tricolour.statsbook import (statsbook, window_stats,
-                                 combine_window_stats,
-                                 summarise_stats)
+from tricolour.window_statistics import (WindowStatistics, window_stats,
+                                         combine_window_stats,
+                                         summarise_stats)
 
 ntime = 10
 nchan = 16
@@ -46,7 +46,7 @@ def flag_windows(unique_baselines):
 @pytest.mark.parametrize("scan_nrs", [[0, 1, 2]])
 @pytest.mark.parametrize("field_names", [["M87", "Sag A*"]])
 @pytest.mark.parametrize("ddids", [[0, 1, 2]])
-def test_statsbook(antenna_names, unique_baselines,
+def test_WindowStatistics(antenna_names, unique_baselines,
                    channels, flag_windows,
                    scan_nrs, field_names, ddids):
 
@@ -80,7 +80,7 @@ def test_statsbook(antenna_names, unique_baselines,
     assert len(stats_list) > 0
     combined_stats = combine_window_stats(stats_list)
     combined_stats = combined_stats.compute()
-    assert isinstance(combined_stats, statsbook)
+    assert isinstance(combined_stats, WindowStatistics)
 
     summary = summarise_stats(stats, combined_stats)
     summary_str = '\n'.join(summary)  # noqa
