@@ -388,7 +388,13 @@ def main():
                                               path=args.temporary_directory)
 
         original = flag_windows.copy()
-        original = original_stats.update(antsnames, original, ubl, ds.SCAN_NUMBER, field_dict[ds.FIELD_ID])
+        original = original_stats.update(antsnames,
+                                         original,
+                                         ubl,
+                                         ds.SCAN_NUMBER,
+                                         field_dict[ds.FIELD_ID],
+                                         chan_freq,
+                                         ds.attrs['DATA_DESC_ID'])
 
         # Run the flagger
         for k in GD:
@@ -452,7 +458,14 @@ def main():
             else:
                 raise ValueError("Task '{0:s}' does not name a valid task"
                                  .format(GD[k].get("task", "unnamed")))
-        flag_windows = stats.update(antsnames, flag_windows, ubl, ds.SCAN_NUMBER, field_dict[ds.FIELD_ID])
+        flag_windows = stats.update(antsnames,
+                                    flag_windows,
+                                    ubl,
+                                    ds.SCAN_NUMBER,
+                                    field_dict[ds.FIELD_ID],
+                                    chan_freq,
+                                    ds.attrs['DATA_DESC_ID'])
+
         # finally unpack back for writing
         unpacked_flags = unpack_data(antenna1, antenna2, time_inv,
                                      ubl, flag_windows)
