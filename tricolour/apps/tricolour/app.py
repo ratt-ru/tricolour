@@ -119,7 +119,7 @@ def load_config(config_file):
     import yaml
 
     with open(config_file) as cf:
-        config.update_defaults(yaml.load(cf))
+        config.update_defaults(yaml.full_load(cf))
 
     return config
 
