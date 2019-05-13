@@ -46,9 +46,9 @@ def flag_windows(unique_baselines):
 @pytest.mark.parametrize("scan_nrs", [[0, 1, 2]])
 @pytest.mark.parametrize("field_names", [["M87", "Sag A*"]])
 @pytest.mark.parametrize("ddids", [[0, 1, 2]])
-def test_WindowStatistics(antenna_names, unique_baselines,
-                   channels, flag_windows,
-                   scan_nrs, field_names, ddids):
+def test_window_statistisc(antenna_names, unique_baselines,
+                           channels, flag_windows,
+                           scan_nrs, field_names, ddids):
 
     fw = flag_windows
     # Chunk into groups of 2 baselines
