@@ -9,6 +9,7 @@ from __future__ import print_function
 import argparse
 import contextlib
 from collections import OrderedDict
+from donfig import Config
 from functools import partial
 import logging
 import logging.handlers
@@ -27,19 +28,15 @@ import numpy as np
 import xarray as xr
 from xarrayms import xds_from_ms, xds_from_table, xds_to_table
 
+from tricolour.apps.tricolour_impl.strat_executor import StrategyExecutor
 from tricolour.banner import banner
 from tricolour.mask import collect_masks, load_mask
 from tricolour.stokes import stokes_corr_map
-from tricolour.dask_wrappers import (sum_threshold_flagger,
-                                     polarised_intensity,
-                                     uvcontsub_flagger,
-                                     flag_autos,
-                                     apply_static_mask)
+from tricolour.dask_wrappers import polarised_intensity
 
 from tricolour.packing import (unique_baselines,
                                pack_data,
                                unpack_data)
-from tricolour.config import collect
 from tricolour.util import casa_style_range
 from tricolour.window_statistics import (window_stats,
                                          combine_window_stats,
@@ -111,40 +108,20 @@ def load_config(config_file):
     dict
       Configuration
     """
+    from tricolour import config
+
     if config_file == DEFAULT_CONFIG:
         log.warn("User strategy not provided. Will now attempt to "
                  "find some defaults in the install paths")
     else:
         log.info("Loading custom user strategy {0:s}".format(config_file))
 
-    config = collect(config_file)
+    import yaml
 
-    # Load configuration from file if present
-    GD = dict([(k, config[k]) for k in config])
-    GD = OrderedDict([(k, GD[k]) for k in sorted(
-        GD.keys(), key=lambda x: GD[x].get("order", 99))])
+    with open(config_file) as cf:
+        config.update_defaults(yaml.load(cf))
 
-    def _print_tree(tree, indent=0):
-        for k in tree:
-            if isinstance(tree[k], dict) or isinstance(tree[k], OrderedDict):
-                log.info(('\t' * indent) + "Step {0:s} (type '{1:s}')".format(
-                    k, tree[k].get("task", "Task is nameless")))
-                _print_tree(tree[k], indent + 1)
-            elif k == "order" or k == "task":
-                continue
-            else:
-                log.info(('\t' * indent) +
-                         "{0:s}:{1:s}".format(k.ljust(30), str(tree[k])))
-
-    log.info("********************************")
-    log.info("   BEGINNING OF CONFIGURATION   ")
-    log.info("********************************")
-    _print_tree(GD)
-    log.info("********************************")
-    log.info("      END OF CONFIGURATION      ")
-    log.info("********************************")
-
-    return GD
+    return config
 
 
 def create_parser():
@@ -357,75 +334,15 @@ def main():
                                               backend=args.window_backend,
                                               path=args.temporary_directory)
 
-        original = flag_windows.copy()
-        original_stats.append(window_stats(original, ubl, chan_freq,
+        original_stats.append(window_stats(flag_windows, ubl, chan_freq,
                                            antsnames, ds.SCAN_NUMBER,
                                            field_dict[ds.FIELD_ID],
                                            ds.attrs['DATA_DESC_ID']))
 
-        # Run the flagger
-        for k in GD:
-            if GD[k].get("task", "unnamed") == "sum_threshold":
-                task_kwargs = GD[k].copy()
-                task_kwargs.pop("task", None)
-                task_kwargs.pop("order", None)
-                new_flags = sum_threshold_flagger(vis_windows, flag_windows,
-                                                  **task_kwargs)
-                # sum threshold builds upon any flags that came previous
-                flag_windows = da.logical_or(new_flags, flag_windows)
-            elif GD[k].get("task", "unnamed") == "uvcontsub_flagger":
-                task_kwargs = GD[k].copy()
-                task_kwargs.pop("task", None)
-                task_kwargs.pop("order", None)
-                new_flags = uvcontsub_flagger(vis_windows, flag_windows,
-                                              **task_kwargs)
-                # this task discards previous flags by default during its
-                # second iteration. The original flags from MS should be or'd
-                # back in afterwards. Flags from steps prior to this one serves
-                # only as a "initial guess"
-                flag_windows = new_flags
-            elif GD[k].get("task", "unnamed") == "flag_autos":
-                task_kwargs = GD[k].copy()
-                task_kwargs.pop("task", None)
-                task_kwargs.pop("order", None)
-                new_flags = flag_autos(flag_windows, ubl, **task_kwargs)
-                flag_windows = da.logical_or(new_flags, flag_windows)
-            elif GD[k].get("task", "unnamed") == "combine_with_input_flags":
-                # or's in original flags from the measurement set
-                # (if -if option has not been specified,
-                # in which case this option will do nothing)
-                flag_windows = da.logical_or(flag_windows, original)
-            elif GD[k].get("task", "unnamed") == "unflag":
-                flag_windows = da.zeros_like(flag_windows)
-            elif GD[k].get("task", "unnamed") == "flag_nans_zeros":
-                new_flags = flag_windows.copy()
-                sel = da.logical_or(vis_windows == 0 + 0j,
-                                    da.isnan(vis_windows))
-                new_flags[sel] = True
-                flag_windows = da.logical_or(flag_windows,
-                                             new_flags)
-            elif GD[k].get("task", "unnamed") == "apply_static_mask":
-                task_kwargs = GD[k].copy()
-                task_kwargs.pop("task", None)
-                task_kwargs.pop("order", None)
-                new_flags = apply_static_mask(flag_windows,
-                                              ubl,
-                                              antspos,
-                                              masked_channels,
-                                              chan_freq,
-                                              chan_width,
-                                              **task_kwargs)
-                # override option will override any flags computed previously
-                # this may not be desirable so use with care or in combination
-                # with combine_with_input_flags option!
-                if task_kwargs["accumulation_mode"].strip() == "or":
-                    flag_windows = da.logical_or(new_flags, flag_windows)
-                else:
-                    flag_windows = new_flags
+        with StrategyExecutor(antspos, ubl, chan_freq, chan_width,
+                              masked_channels, GD['strategies']) as se:
 
-            else:
-                raise ValueError("Task '{0:s}' does not name a valid task"
-                                 .format(GD[k].get("task", "unnamed")))
+            flag_windows = se.apply_strategies(flag_windows, vis_windows)
 
         final_stats.append(window_stats(flag_windows, ubl, chan_freq,
                                         antsnames, ds.SCAN_NUMBER,
