@@ -1,14 +1,8 @@
 from collections import defaultdict
 from functools import partial
-import logging
 
-import dask
 import dask.array as da
-import dask.blockwise as db
-from dask.array.reductions import reduction
-from dask.highlevelgraph import HighLevelGraph
 import numpy as np
-from scipy.stats import binned_statistic
 
 
 def _window_stats(flag_window, ubls, chan_freqs,
