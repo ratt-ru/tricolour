@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import logging
 import os
 import sys
 import re
@@ -19,6 +20,8 @@ paths = [
     os.path.join(os.path.expanduser('~'), '.tricolour')
 ]
 
+
+log = logging.getLogger(__name__)
 
 if 'TRICOLOUR_CONFIG' in os.environ:
     paths.append(os.environ['TRICOLOUR_CONFIG'])
@@ -74,14 +77,14 @@ def load_mask(filename, dilate):
 
     masked_channels = mask_chans[np.argwhere(mask_flags)]
 
-    tricolour.log.info("Loaded mask {0:s} {1:s} with {2:.2f}% "
-                       "flagged bandwidth between {3:.3f} "
-                       "and {4:.3f} GHz".format(
-                            filename,
-                            "(dilated)" if dilate else "(non-dilated)",
-                            100.0 * masked_channels.size / mask_chans.size,
-                            np.min(mask_chans) / 1.0e9,
-                            np.max(mask_chans) / 1.0e9))
+    log.info("Loaded mask {0:s} {1:s} with {2:.2f}% "
+             "flagged bandwidth between {3:.3f} "
+             "and {4:.3f} GHz".format(
+                filename,
+                "(dilated)" if dilate else "(non-dilated)",
+                100.0 * masked_channels.size / mask_chans.size,
+                np.min(mask_chans) / 1.0e9,
+                np.max(mask_chans) / 1.0e9))
 
     return masked_channels
 
@@ -103,9 +106,9 @@ def collect_masks(filename="", paths=paths):
 
         file_paths = []
         file_exts = ('.staticmask', '.npy')
-        tricolour.log.info("Looking for static masks...")
+        log.info("Looking for static masks...")
         for path in paths:
-            tricolour.log.info("Searching {0:s}".format(path))
+            log.info("Searching {0:s}".format(path))
             if os.path.exists(path):
                 if os.path.isdir(path):
                     file_paths.extend(sorted([
@@ -116,7 +119,7 @@ def collect_masks(filename="", paths=paths):
                     file_paths.append(path)
 
         for fp in file_paths:
-            tricolour.log.info("Found static mask file {0:s}".format(fp))
+            log.info("Found static mask file {0:s}".format(fp))
     else:
         file_paths = [filename]
 

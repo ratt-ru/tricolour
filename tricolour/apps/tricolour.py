@@ -13,7 +13,9 @@ from functools import partial
 import logging
 import logging.handlers
 from multiprocessing.pool import ThreadPool, cpu_count
+import pkg_resources
 import os
+from os.path import join as pjoin
 import time
 
 import dask
@@ -92,8 +94,8 @@ def add_log_handler(hndl):
 # Create the log object
 log, log_filehandler, log_console_handler, log_formatter = create_logger()
 
-DEFAULT_CONFIG = os.path.join(os.path.split(
-    __file__)[0], "conf", "default.yaml")
+DEFAULT_CONFIG = pkg_resources.resource_filename('tricolour',
+                                                 pjoin("conf", "default.yaml"))
 
 
 def load_config(config_file):
