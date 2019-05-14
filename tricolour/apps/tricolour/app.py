@@ -15,6 +15,7 @@ import logging
 import logging.handlers
 from multiprocessing.pool import ThreadPool, cpu_count
 import pkg_resources
+from pprint import pformat
 import os
 from os.path import join as pjoin
 import time
@@ -112,6 +113,14 @@ def load_config(config_file):
 
     with open(config_file) as cf:
         config.update_defaults(yaml.full_load(cf))
+
+    try:
+        config_dict = config.to_dict()['strategies']
+    except KeyError:
+        raise arparse.ArgumentTypeError("Configuration has no "
+                                        "strategies section")
+
+    log.info("Applying Flagging Strategies:\n %s", pformat(config_dict))
 
     return config
 
