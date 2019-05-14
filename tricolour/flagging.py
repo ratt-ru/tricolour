@@ -983,12 +983,17 @@ def uvcontsub_flagger(vis, flags, major_cycles=5,
                 continue
 
             vis_scratch[result_flags] = np.nan
+            # Take mean along time axis
             avgvis = np.nanmean(vis_scratch[cp, :, :], axis=0)
+            assert avgvis.shape == (nfreq,)
 
             # zero completely flagged channels before taking FFT
             sel = np.isnan(avgvis)
             avgvis[sel] = 0.0
+            # FFT along frequency axis
             fft = np.fft.fft(avgvis, axis=0)
+            assert fft.shape == (nfreq,)
+
             lb = taylor_degrees
             ub = fft.shape[0]
             # clip high frequency components
