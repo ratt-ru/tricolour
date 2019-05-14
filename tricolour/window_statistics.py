@@ -4,6 +4,8 @@ from functools import partial
 import dask.array as da
 import numpy as np
 
+from tricolour.packing import _WINDOW_SCHEMA
+
 
 def _window_stats(flag_window, ubls, chan_freqs,
                   antenna_names, scan_no, field_name, ddid, nchanbins):
@@ -22,8 +24,8 @@ def _window_stats(flag_window, ubls, chan_freqs,
     for ai, a in enumerate(antenna_names):
         # per antenna
         sel = np.logical_or(ubls[:, 1] == ai, ubls[:, 2] == ai)
-        cnt = np.sum(flag_window[:, :, sel, :])
-        sz = flag_window[:, :, sel, :].size
+        cnt = np.sum(flag_window[sel, :, :, :])
+        sz = flag_window[sel, :, :, :].size
         stats._counts_per_ant[a] += cnt
         stats._size_per_ant[a] += sz
 
@@ -43,7 +45,7 @@ def _window_stats(flag_window, ubls, chan_freqs,
         for ch_i, ch in enumerate(bins_edges[:-1]):
             sel = np.logical_and(chan_freqs >= bins_edges[ch_i],
                                  chan_freqs < bins_edges[ch_i + 1])
-            bins[ch_i] = np.sum(flag_window[:, sel, :, :])
+            bins[ch_i] = np.sum(flag_window[:, :, :, sel])
 
         stats._counts_per_ddid[ddid] += bins
         stats._bins_per_ddid[ddid] = bins_edges
@@ -74,13 +76,13 @@ def window_stats(flag_window, ubls, chan_freqs,
     Parameters
     ----------
     flag_window : :class:`dask.Array`
-        Flag window of shape ("time", "chan", "bl", "corr")
+        Flag window of shape :code:`(bl, corr, time, chan)`
     ubls : :class:`dask.Array`
-        Unique baselines of shape ("bl", 3)
+        Unique baselines of shape :code:`(bl, 3)`
     chan_freqs : :class:`dask.Array`
-        Channel frequencies of shape ("chan",)
+        Channel frequencies of shape :code:`(chan,)`
     antenna_names : list or :class:`numpy.ndarray`
-        Antenna names of shape ("ant",)
+        Antenna names of shape :code:`(ant,)
     scan_no : int
         Scan number
     field_name : str
@@ -101,7 +103,7 @@ def window_stats(flag_window, ubls, chan_freqs,
 
     # Construct as array of per-baseline stats objects
     stats = da.blockwise(_window_stats, ("bl",),
-                         flag_window, ("time", "chan", "bl", "corr"),
+                         flag_window, _WINDOW_SCHEMA,
                          ubls, ("bl", "bl-comp"),
                          chan_freqs, ("chan",),
                          antenna_names, None,
