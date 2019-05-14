@@ -58,7 +58,7 @@ def uvcontsub_flagger(vis, flag, **kwargs):
     """
     name = 'uvcontsub-flagger-' + da.core.tokenize(vis, flag, **kwargs)
 
-    layers = db.blockwise(np_uvcontsub_flagger, name, dims,
+    layers = db.blockwise(np_uvcontsub_flagger, name, _WINDOW_SCHEMA,
                           vis.name, _WINDOW_SCHEMA,
                           flag.name, _WINDOW_SCHEMA,
                           numblocks={
