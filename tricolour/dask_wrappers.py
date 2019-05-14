@@ -10,13 +10,20 @@ from dask.highlevelgraph import HighLevelGraph
 import dask.array as da
 import dask.blockwise as db
 
-from .flagging import sum_threshold_flagger as np_sum_threshold_flagger
-from .flagging import uvcontsub_flagger as np_uvcontsub_flagger
-from .flagging import apply_static_mask as np_apply_static_mask
-from .flagging import flag_autos as np_flag_autos
+from tricolour.flagging import (
+                    sum_threshold_flagger as np_sum_threshold_flagger)
+from tricolour.flagging import (
+                    uvcontsub_flagger as np_uvcontsub_flagger)
+from tricolour.flagging import (
+                    apply_static_mask as np_apply_static_mask)
+from tricolour.flagging import (
+                    flag_autos as np_flag_autos)
 
-from .stokes import (polarised_intensity as np_polarised_intensity,
-                     unpolarised_intensity as np_unpolarised_intensity)
+from tricolour.stokes import (
+                    polarised_intensity as np_polarised_intensity,
+                    unpolarised_intensity as np_unpolarised_intensity)
+
+from tricolour.packing import _WINDOW_SCHEMA
 
 
 def sum_threshold_flagger(vis, flag, **kwargs):
@@ -30,11 +37,10 @@ def sum_threshold_flagger(vis, flag, **kwargs):
     # the size of each chunk is different
     token = da.core.tokenize(vis, flag, kwargs)
     name = 'sum-threshold-flagger-' + token
-    dims = ("time", "chan", "bl", "corr")
 
-    layers = db.blockwise(np_sum_threshold_flagger, name, dims,
-                          vis.name, dims,
-                          flag.name, dims,
+    layers = db.blockwise(np_sum_threshold_flagger, name, _WINDOW_SCHEMA,
+                          vis.name, _WINDOW_SCHEMA,
+                          flag.name, _WINDOW_SCHEMA,
                           numblocks={
                               vis.name: vis.numblocks,
                               flag.name: flag.numblocks,
@@ -51,11 +57,10 @@ def uvcontsub_flagger(vis, flag, **kwargs):
     Dask wrapper for :func:`~tricolour.uvcontsub_flagger`
     """
     name = 'uvcontsub-flagger-' + da.core.tokenize(vis, flag, **kwargs)
-    dims = ("time", "chan", "bl", "corr")
 
     layers = db.blockwise(np_uvcontsub_flagger, name, dims,
-                          vis.name, dims,
-                          flag.name, dims,
+                          vis.name, _WINDOW_SCHEMA,
+                          flag.name, _WINDOW_SCHEMA,
                           numblocks={
                               vis.name: vis.numblocks,
                               flag.name: flag.numblocks,
@@ -82,10 +87,9 @@ def apply_static_mask(flag, ubl, antspos, masks,
     """
     Dask wrapper for :func:`~tricolour.apply_static_mask`
     """
-    dims = ("time", "chan", "bl", "corr")  # corrprod = ncorr * nbl
 
-    return da.blockwise(_apply_static_mask_wrapper, dims,
-                        flag, dims,
+    return da.blockwise(_apply_static_mask_wrapper, _WINDOW_SCHEMA,
+                        flag, _WINDOW_SCHEMA,
                         ubl, ("bl", "bl-comp"),
                         antspos, None,
                         masks, None,
@@ -103,10 +107,8 @@ def flag_autos(flag, ubl, **kwargs):
     """
     Dask wrapper for :func:`~tricolour.flag_autos`
     """
-    dims = ("time", "chan", "bl", "corr")
-
-    return da.blockwise(np_flag_autos, dims,
-                        flag, dims,
+    return da.blockwise(np_flag_autos, _WINDOW_SCHEMA,
+                        flag, _WINDOW_SCHEMA,
                         ubl, ("bl", "bl-comp"),
                         dtype=flag.dtype)
 

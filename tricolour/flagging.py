@@ -4,14 +4,16 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import warnings
+
 import numpy as np
 import numba
 
 import dask.array as da
-import warnings
-warnings.simplefilter('ignore', np.RankWarning)
 
 from tricolour.util import casa_style_range
+
+warnings.simplefilter('ignore', np.RankWarning)
 
 MAD_NORMAL = 1.4826
 """Ratio between `median absolute deviation`_ and
@@ -28,7 +30,7 @@ def flag_autos(flags, ubl):
     ----------
     flags : :class:`numpy.ndarray`
         Flags corresponding to visibility data
-        of shape :code:`(time, chan, bl, corr)`
+        of shape :code:`(bl, corr, time, chan)`
     ubl : :class:`numpy.ndarray`
         unique baseline pairs corresponding to row (blindx, a1indx, a2indx)
         of shape :code:`(bl, 3)`
@@ -38,17 +40,17 @@ def flag_autos(flags, ubl):
     out_flags : ndarray, bool
         Flags corresponding to `data`
     """
-    
+
     ubl = ubl[0]
 
-    if flags.shape[2] != ubl.shape[0]:
+    if flags.shape[0] != ubl.shape[0]:
         raise ValueError("flag and ubl shape mismatch %s != %s"
                          % (flags.shape[2], ubl.shape[0]))
 
     out_flags = flags.copy()
     # Flag auto-correlations
-    sel = ubl[:, 1] == ubl[:, 2]
-    out_flags[:, :, sel, :] = True
+    bl_sel = ubl[:, 1] == ubl[:, 2]
+    out_flags[bl_sel, :, :, :] = True
 
     return out_flags
 
@@ -62,7 +64,8 @@ def apply_static_mask(flag, ubl, antspos, masks,
     Parameters
     ----------
     flag : ndarray, bool
-        Flags corresponding to visibility data (time, freq, bl, corr)
+        Flags corresponding to visibility data
+        of shape :code:`(bl, corr, time, chan)`
     ubl : :class:`numpy.ndarray`
         Unique baselines of shape :code:`(bl, 3)`
     antspos: ndarray, float
@@ -87,9 +90,9 @@ def apply_static_mask(flag, ubl, antspos, masks,
     """
     uvrange = casa_style_range(uvrange)
 
-    if flag.shape[2] != ubl.shape[0]:
+    if flag.shape[0] != ubl.shape[0]:
         raise ValueError("flag and ubl shape mismatch %s != %s"
-                         % (flag.shape[2], ubl.shape[0]))
+                         % (flag.shape[1], ubl.shape[0]))
 
     spw_chanlb = chan_freqs - chan_widths * 0.5
     spw_chanub = chan_freqs + chan_widths * 0.5
@@ -118,9 +121,9 @@ def apply_static_mask(flag, ubl, antspos, masks,
 
         # All correlations flagged equally at the moment
         if accumulation_mode == "or":
-            out_flags[:, :, bl_sel, :] |= masked_channels[None, :, None, None]
+            out_flags[bl_sel, :, :, :] |= masked_channels[None, None, None, :]
         elif accumulation_mode == "override":
-            out_flags[:, :, bl_sel, :] = masked_channels[None, :, None, None]
+            out_flags[bl_sel, :, :, :] = masked_channels[None, None, None, :]
         else:
             raise ValueError("Invalid accumulation_mode '%s'. "
                              "Should be 'or' or 'override'"
@@ -636,7 +639,8 @@ def _sum_threshold(input_data, input_flags, axis, windows, outlier_nsigma, rho, 
     outlier_nsigma : float
         Number of standard deviations at which to flag
     rho : float
-        Parameter controlling the relationship between threshold and window size
+        Parameter controlling the relationship between
+        threshold and window size
     chunks : ndarray, int
         Boundaries between chunks in which each chunk has a separate noise
         estimation. This array must start with 0, be strictly increasing, and
@@ -665,7 +669,8 @@ def _sum_threshold(input_data, input_flags, axis, windows, outlier_nsigma, rho, 
         step = 256
         for i in range(0, input_data.shape[1], step):
             sub = slice(i, min(i + step, input_data.shape[1]))
-            _sum_threshold1d(input_data[:, sub], input_flags[:, sub], output_flags[:, sub],
+            _sum_threshold1d(input_data[:, sub], input_flags[:, sub],
+                             output_flags[:, sub],
                              windows, outlier_nsigma, rho, chunks)
     else:
         raise ValueError('axis must be 0 or 1')
@@ -680,17 +685,20 @@ def _get_flags_impl(
         spike_width_time, spike_width_freq, time_extend, freq_extend,
         freq_chunk_ends, average_freq, flag_all_time_frac, flag_all_freq_frac,
         rho):
-    n_time, n_freq, n_bl = in_data.shape
+    n_cp, n_time, n_freq = in_data.shape
     # Average `in_data` in frequency. This is done unconditionally, because it
     # also does other useful steps (see the documentation).
     data, flags = _average_freq(in_data, in_flags, average_freq)
 
+    assert data.shape[:2] == in_data.shape[:2]
+    assert flags.shape[:2] == in_flags.shape[:2]
+
     # Output flags, in baseline-major order
-    tmp_flags = np.empty((n_bl, n_time, n_freq), np.bool_)
+    tmp_flags = np.empty((n_cp, n_time, n_freq), np.bool_)
     # Do operations independently per baseline.
-    for bl in range(data.shape[0]):
+    for cp in range(n_cp):
         _get_baseline_flags(
-            data[bl], flags[bl], tmp_flags[bl],
+            data[cp], flags[cp], tmp_flags[cp],
             outlier_nsigma, windows_time, windows_freq,
             background_reject, background_iterations,
             spike_width_time, spike_width_freq,
@@ -700,11 +708,11 @@ def _get_flags_impl(
             rho)
 
     # Transpose the output flags and explicitly flag nans from input
-    for t in range(n_time):
-        for f in range(n_freq):
-            for bl in range(n_bl):
-                out_flags[t, f, bl] = tmp_flags[bl, t,
-                                                f] or np.isnan(in_data[t, f, bl])
+    for cp in range(n_cp):
+        for t in range(n_time):
+            for f in range(n_freq):
+                out_flags[cp, t, f] = (tmp_flags[cp, t, f] or
+                                       np.isnan(in_data[cp, t, f]))
 
 
 @numba.jit(nopython=True, nogil=True, cache=True)
@@ -750,8 +758,6 @@ def _average_freq(in_data, in_flags, factor):
     2. Flags data with non-finite values.
     3. Sets the value of flagged elements to zero.
     4. Does frequency averaging by a factor of `factor`.
-    5. Transposes the data ordering so that baseline is the first,
-       slowest-varying axis.
 
     Parameters
     ----------
@@ -766,31 +772,39 @@ def _average_freq(in_data, in_flags, factor):
     """
     if in_data.shape != in_flags.shape:
         raise ValueError('shape mismatch')
-    n_time, n_freq, n_bl = in_data.shape
+
+    n_cp, n_time, n_freq = in_data.shape
+
     a_freq = (n_freq + factor - 1) // factor
-    out_shape = (n_bl, n_time, a_freq)
+    out_shape = (n_cp, n_time, a_freq)
     avg_data = np.zeros(out_shape, np.float32)
     avg_weight = np.zeros(out_shape, factor.dtype)
+
     # TODO: might need to do this through a temporary buffer to avoid cache
     # aliasing problems.
-    for i in range(n_time):
-        for j in range(n_freq):
-            jout = j // factor
-            for k in range(n_bl):
-                data = np.abs(in_data[i, j, k])
-                if not in_flags[i, j, k] and not np.isnan(data):
-                    avg_data[k, i, jout] += data
-                    avg_weight[k, i, jout] += 1
-    for i in range(n_bl):
-        for j in range(n_time):
-            for k in range(a_freq):
-                flag = avg_weight[i, j, k] == 0
+    for cp in range(n_cp):
+        for t in range(n_time):
+            for f in range(n_freq):
+                fout = f // factor
+                data = np.abs(in_data[cp, t, f])
+
+                if not in_flags[cp, t, f] and not np.isnan(data):
+                    avg_data[cp, t, fout] += data
+                    avg_weight[cp, t, fout] += 1
+
+    for cp in range(n_cp):
+        for t in range(n_time):
+            for f in range(a_freq):
+                flag = avg_weight[cp, t, f] == 0
+
                 if flag:
-                    avg_data[i, j, k] = 0   # Avoid divide by zero and a NaN
+                    avg_data[cp, t, f] = 0   # Avoid divide by zero and a NaN
                 else:
-                    avg_data[i, j, k] /= avg_weight[i, j, k]
+                    avg_data[cp, t, f] /= avg_weight[cp, t, f]
+
                 # Replace weight with flag (in-place) to save memory
-                avg_weight[i, j, k] = flag
+                avg_weight[cp, t, f] = flag
+
     return avg_data, _asbool(avg_weight)
 
 
@@ -861,7 +875,8 @@ def _get_baseline_flags(
     n_time, n_freq = data.shape
     # Generate median spectrum, background it, and flag it
     spec_data, spec_flags = _time_median(data, flags)
-    spec_background = _get_background2d(spec_data, spec_flags, background_iterations,
+    spec_background = _get_background2d(spec_data, spec_flags,
+                                        background_iterations,
                                         np.array((0.0, spike_width_freq)),
                                         background_reject,
                                         freq_chunk_ends)
@@ -913,7 +928,7 @@ def uvcontsub_flagger(vis, flags, major_cycles=5,
     Parameters
     ----------
     vis: data ndarray, complex
-        Visibilities, with shape (time, frequency, nbl*ncorr)
+        Visibilities, with shape :code:`(bl, corr, time, chan)`
     flags : ndarray, bool
         Flags corresponding to `data`
     major_cycles: int
@@ -936,10 +951,10 @@ def uvcontsub_flagger(vis, flags, major_cycles=5,
     if vis.shape != flags.shape:
         raise ValueError("vis and flags must have the same shape")
 
-    ntime, nfreq, nbl, ncorr = vis.shape
+    nbl, ncorr, ntime, nfreq = vis.shape
 
-    vis = vis.reshape(ntime, nfreq, nbl*ncorr)
-    flags = flags.reshape(ntime, nfreq, nbl*ncorr)
+    vis = vis.reshape(nbl*ncorr, ntime, nfreq)
+    flags = flags.reshape(nbl*ncorr, ntime, nfreq)
 
     vis.flags.writeable = True
 
@@ -947,24 +962,17 @@ def uvcontsub_flagger(vis, flags, major_cycles=5,
 
     for mi in range(major_cycles):
         vis_scratch = vis.copy()
-        for corr in range(vis.shape[2]):
+        for cp in range(vis.shape[0]):
             # correlation all flagged then skip, nothing can be done
-            if result_flags[:, :, corr].sum() == result_flags[:, :, corr].size:
+            if result_flags[cp, :, :].sum() == result_flags[cp, :, :].size:
                 continue
 
             vis_scratch[result_flags] = np.nan
-            avgvis = np.nanmean(vis_scratch[:, :, corr], axis=0)
+            avgvis = np.nanmean(vis_scratch[cp, :, :], axis=0)
 
-            ##madavgvis = np.abs(np.abs(avgvis) - np.nanmedian(np.abs(avgvis)))
             # zero completely flagged channels before taking FFT
             sel = np.isnan(avgvis)
             avgvis[sel] = 0.0
-            ##madavgvis[sel] = 9999999
-            ##fitweight = 1.0 / (madavgvis + 1.0e-8)
-            ##x = np.arange(avgvis.size)
-            ##z = np.polyfit(x, avgvis, deg=taylor_degrees, w=fitweight)
-            ##smoothened = np.poly1d(z)(x)
-            ##absresidual = np.abs(vis[:, :, corr] - smoothened[None, :])
             fft = np.fft.fft(avgvis, axis=0)
             lb = taylor_degrees
             ub = fft.shape[0]
@@ -973,21 +981,24 @@ def uvcontsub_flagger(vis, flags, major_cycles=5,
             # what we're left with is a low order smooth polynomial makeshift
             # fit to the data
             smoothened = np.fft.ifft(fft)
-            absresidual = np.abs(vis[:, :, corr] - smoothened[None, :]).real
+            absresidual = np.abs(vis[cp, :, :] - smoothened[None, :]).real
             # use prior flags when computing MAD
             flagged_absresidual = absresidual.copy()
-            flagged_absresidual[result_flags[:, :, corr]] = np.nan
-            mad = np.nanmedian(np.abs(np.abs(flagged_absresidual) - np.nanmedian(np.abs(flagged_absresidual))))
+            flagged_absresidual[result_flags[cp, :, :]] = np.nan
+            diff = np.abs(np.abs(flagged_absresidual) -
+                          np.nanmedian(np.abs(flagged_absresidual)))
+            mad = np.nanmedian(np.abs(diff))
+
             # discard old flags and flag based on MAD
             newflags = absresidual > sigma * mad
 
             if mi >= or_original_from_cycle:
-                orred_flags = np.logical_or(result_flags[:, :, corr], newflags)
-                result_flags[:, :, corr] = orred_flags
+                orred_flags = np.logical_or(result_flags[cp, :, :], newflags)
+                result_flags[cp, :, :] = orred_flags
             else:
-                result_flags[:, :, corr] = newflags
+                result_flags[cp, :, :] = newflags
 
-    return result_flags.reshape(ntime, nfreq, nbl, ncorr)
+    return result_flags.reshape(nbl, ncorr, ntime, nfreq)
 
 
 def sum_threshold_flagger(vis, flags, outlier_nsigma=4.5,
@@ -1063,10 +1074,9 @@ def sum_threshold_flagger(vis, flags, outlier_nsigma=4.5,
     """
 
     # Collapse baseline and correlation dimensions together
-    ntime, nchan, nbl, ncorr = vis.shape
-
-    vis = vis.reshape(ntime, nchan, nbl*ncorr)
-    flags = flags.reshape(ntime, nchan, nbl*ncorr)
+    nbl, ncorr, ntime, nchan = vis.shape
+    vis = vis.reshape(nbl*ncorr, ntime, nchan)
+    flags = flags.reshape(nbl*ncorr, ntime, nchan)
 
     windows_freq = np.asarray(windows_freq, dtype=np.float32)
     windows_freq = np.ceil(windows_freq) / average_freq
@@ -1077,7 +1087,7 @@ def sum_threshold_flagger(vis, flags, outlier_nsigma=4.5,
     freq_chunks = freq_chunks
     average_freq = _as_min_dtype(average_freq)
 
-    averaged_channels = (vis.shape[1] + average_freq - 1) // average_freq
+    averaged_channels = (nchan + average_freq - 1) // average_freq
 
     # Set up frequency chunks
     freq_chunk_ends = np.linspace(
@@ -1085,7 +1095,7 @@ def sum_threshold_flagger(vis, flags, outlier_nsigma=4.5,
 
     # Clip the windows to the available time and frequency range
     windows_time = np.array(
-        [w for w in windows_time if w <= vis.shape[0]], np.int_)
+        [w for w in windows_time if w <= ntime], np.int_)
     windows_freq = np.array(
         [w for w in windows_freq if w <= averaged_channels], np.int_)
 
@@ -1104,7 +1114,7 @@ def sum_threshold_flagger(vis, flags, outlier_nsigma=4.5,
         iter_flags = np.logical_or(iter_flags,
                                    out_flags)
 
-    return out_flags.reshape(ntime, nchan, nbl, ncorr)
+    return out_flags.reshape(nbl, ncorr, ntime, nchan)
 
 
 class SumThresholdFlagger(object):
@@ -1164,10 +1174,13 @@ class SumThresholdFlagger(object):
         Falloff exponent for SumThreshold
     """
 
-    def __init__(self, outlier_nsigma=4.5, windows_time=[1, 2, 4, 8],
-                 windows_freq=[1, 2, 4, 8], background_reject=2.0, background_iterations=1,
-                 spike_width_time=12.5, spike_width_freq=10.0, time_extend=3, freq_extend=3,
-                 freq_chunks=10, average_freq=1, flag_all_time_frac=0.6, flag_all_freq_frac=0.8,
+    def __init__(self, outlier_nsigma=4.5,
+                 windows_time=[1, 2, 4, 8], windows_freq=[1, 2, 4, 8],
+                 background_reject=2.0, background_iterations=1,
+                 spike_width_time=12.5, spike_width_freq=10.0,
+                 time_extend=3, freq_extend=3,
+                 freq_chunks=10, average_freq=1,
+                 flag_all_time_frac=0.6, flag_all_freq_frac=0.8,
                  rho=1.3):
         self.outlier_nsigma = outlier_nsigma
         self.windows_time = windows_time
@@ -1201,8 +1214,10 @@ class SumThresholdFlagger(object):
         code can consume. All the actual work is done in
         :func:`_get_flags_impl`.
         """
-        averaged_channels = (
-            in_data.shape[1] + self.average_freq - 1) // self.average_freq
+        ncorrprod, ntime, nchan = in_data.shape
+
+        averaged_channels = ((nchan + self.average_freq - 1) //
+                             self.average_freq)
 
         # Set up frequency chunks
         freq_chunk_ends = np.linspace(
@@ -1210,7 +1225,7 @@ class SumThresholdFlagger(object):
 
         # Clip the windows to the available time and frequency range
         windows_time = np.array(
-            [w for w in self.windows_time if w <= in_data.shape[1]], np.int_)
+            [w for w in self.windows_time if w <= ntime], np.int_)
         windows_freq = np.array(
             [w for w in self.windows_freq if w <= averaged_channels], np.int_)
 
@@ -1274,7 +1289,7 @@ class SumThresholdFlagger(object):
             raise ValueError('data has wrong number of dimensions')
         out_flags = np.empty(flags.shape, np.bool_)
 
-        n_bl = data.shape[-1]
+        ncorrprod = data.shape[0]
         if not chunk_size:
             chunk_size = 16
             if pool is not None:
@@ -1283,7 +1298,7 @@ class SumThresholdFlagger(object):
                 # it is equal to cpu_count. We want at least 4 tasks per CPU
                 # to avoid load imbalances.
                 workers = multiprocessing.cpu_count()
-                while chunk_size > 1 and chunk_size * workers * 4 > n_bl:
+                while chunk_size > 1 and chunk_size * workers * 4 > ncorrprod:
                     chunk_size //= 2
         if pool is not None and is_multiprocess is None:
             is_multiprocess = isinstance(
@@ -1291,10 +1306,10 @@ class SumThresholdFlagger(object):
         futures = []
         outputs = {}
         try:
-            for i in range(0, n_bl, chunk_size):
-                chunk_data = data[..., i: i + chunk_size]
-                chunk_flags = flags[..., i: i + chunk_size]
-                chunk_out = out_flags[..., i: i + chunk_size]
+            for cp in range(0, ncorrprod, chunk_size):
+                chunk_data = data[cp: cp + chunk_size, ...]
+                chunk_flags = flags[cp: cp + chunk_size, ...]
+                chunk_out = out_flags[cp: cp + chunk_size, ...]
                 self._get_flags(chunk_data, chunk_flags, chunk_out)
                 # if pool is not None and is_multiprocess:
                 #     future = pool.submit(_get_flags_mp, chunk_data, chunk_flags, self)
