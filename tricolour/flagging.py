@@ -1,4 +1,6 @@
-"""Library to contain 2d RFI flagging routines and other RFI related functions."""
+"""
+Library to contain 2d RFI flagging routines and other RFI related functions.
+"""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -164,7 +166,8 @@ def _asbool(data):
         else:
             return data.astype(np.bool_)
     elif (isinstance(data.dtype, numba.types.Boolean)
-            or (isinstance(data.dtype, numba.types.Integer) and data.dtype.bitwidth == 8)):
+            or (isinstance(data.dtype, numba.types.Integer)
+                and data.dtype.bitwidth == 8)):
         return lambda data: data.view(np.bool_)
     else:
         return lambda data: data.astype(np.bool_)
@@ -228,7 +231,9 @@ def _median_abs(data, flags):
 
 @numba.jit(nopython=True, nogil=True, cache=True)
 def _median_abs_axis0(data, flags):
-    """Compute median of absolute values of non-flagged values in `data`, along axis 0.
+    """
+    Compute median of absolute values of non-flagged values
+    in `data`, along axis 0.
 
     The first dimension is kept in the output as a dimension of size 1 (to
     avoid issues with numba converting 0d arrays to scalars.
@@ -457,14 +462,16 @@ def masked_gaussian_filter(data, flags, sigma, out, passes=4):
 
 
 @numba.jit(nopython=True, nogil=True, cache=True)
-def _get_background2d(data, flags, iterations, spike_width, reject_threshold, freq_chunk_ends):
+def _get_background2d(data, flags, iterations, spike_width,
+                      reject_threshold, freq_chunk_ends):
     """Determine a smooth background over a 2D array by iteratively convolving
     the data with elliptical Gaussians with linearly decreasing width from
     `iterations`*`spike_width` down to `spike width`. Outliers greater than
     `reject_threshold`*sigma from the background are masked on each
     iteration.
 
-    Initial weights are set to zero at positions specified in `in_flags` if given.
+    Initial weights are set to zero at positions
+    specified in `in_flags` if given.
     After the final iteration a final Gaussian smoothed background is computed
     and any stray NaNs in the background are interpolated in frequency (axis 1)
     for each timestamp (axis 0). The NaNs can appear when the the convolving
@@ -549,8 +556,11 @@ def _convolve_flags(in_values, scale, threshold, out_flags, window):
 
 
 @numba.jit(nopython=True, nogil=True, cache=True)
-def _sum_threshold1d(input_data, input_flags, output_flags, windows, outlier_nsigma, rho, chunks):
-    """Implementation of :func:`_sum_threshold`. It operates along the first axis."""
+def _sum_threshold1d(input_data, input_flags, output_flags, windows,
+                     outlier_nsigma, rho, chunks):
+    """
+    Implementation of :func:`_sum_threshold`. It operates along the first axis.
+    """
     for ci in range(chunks.size - 1):
         chunk_slice = slice(chunks[ci], chunks[ci + 1])
         chunk_data = input_data[chunk_slice]
@@ -566,23 +576,24 @@ def _sum_threshold1d(input_data, input_flags, output_flags, windows, outlier_nsi
                 threshold[idx] *= threshold_scale
 
         padded_slice = slice(max(chunks[ci] - np.max(windows) + 1, 0),
-                             min(chunks[ci + 1] + np.max(windows) - 1, input_data.size))
+                             min(chunks[ci + 1] + np.max(windows) - 1,
+                             input_data.size))
         padded_data = input_data[padded_slice]
         # TODO: can pre-allocate these outside the loop (but will need
         # resizing)
         output_flags_pos = np.zeros(padded_data.shape, np.bool_)
         output_flags_neg = np.zeros(padded_data.shape, np.bool_)
         for window in windows:
-            # The threshold for this iteration is calculated from the initial threshold
-            # using the equation from Offringa (2010).
+            # The threshold for this iteration is calculated from the
+            # initial threshold using the equation from Offringa (2010).
             tf = pow(rho, np.log2(window))
             # Get the thresholds
             thisthreshold = threshold / tf
             # Set already flagged values to be the +/- value of the
             # threshold if they are outside the threshold, and take
             # a cumulative sum.
-            cum_data = np.empty(
-                (padded_data.shape[0] + 1,) + padded_data.shape[1:], np.float64)
+            cum_shape = (padded_data.shape[0] + 1,) + padded_data.shape[1:]
+            cum_data = np.empty(cum_shape, np.float64)
             cum_data[0] = 0
             for i in range(padded_data.shape[0]):
                 for j in np.ndindex(padded_data.shape[1:]):
@@ -594,19 +605,19 @@ def _sum_threshold1d(input_data, input_flags, output_flags, windows, outlier_nsi
                     elif output_flags_neg[idx] and clamped < -limit:
                         clamped = -limit
                     cum_data[(i + 1,) + j] = cum_data[idx] + clamped
-            # Calculate a rolling sum array from the data with the window for this iteration,
-            # which is later scaled by rolliing_scale to give the rolling
-            # average.
+            # Calculate a rolling sum array from the data with the window
+            # for this iteration, which is later scaled by rolling_scale
+            # to give the rolling average.
             avgarray = cum_data[window:] - cum_data[:-window]
             rolling_scale = np.float32(1.0 / window)
 
-            # Work out the flags from the average data above the current threshold,
-            # convolve them, and combine with current flags.
+            # Work out the flags from the average data above the
+            # current threshold, convolve them, and combine with current flags.
             _convolve_flags(avgarray, rolling_scale,
                             thisthreshold, output_flags_pos, window)
 
-            # Work out the flags from the average data below the current threshold,
-            # convolve them, and OR with current flags.
+            # Work out the flags from the average data below the
+            # current threshold, convolve them, and OR with current flags.
             _convolve_flags(avgarray, -rolling_scale,
                             thisthreshold, output_flags_neg, window)
 
@@ -614,11 +625,13 @@ def _sum_threshold1d(input_data, input_flags, output_flags, windows, outlier_nsi
         # chunk itself, without the padding
         rel_slice = slice(chunk_slice.start - padded_slice.start,
                           chunk_slice.stop - padded_slice.start)
-        output_flags[chunk_slice] = output_flags_pos[rel_slice] | output_flags_neg[rel_slice]
+        output_flags[chunk_slice] = (output_flags_pos[rel_slice] |
+                                     output_flags_neg[rel_slice])
 
 
 @numba.jit(nopython=True, nogil=True, cache=True)
-def _sum_threshold(input_data, input_flags, axis, windows, outlier_nsigma, rho, chunks=None):
+def _sum_threshold(input_data, input_flags, axis, windows,
+                   outlier_nsigma, rho, chunks=None):
     """Apply the SumThreshold method along the given axis of
     `input_data`.
 
@@ -695,7 +708,8 @@ def _get_flags_impl(
 
     # Output flags, in baseline-major order
     tmp_flags = np.empty((n_cp, n_time, n_freq), np.bool_)
-    # Do operations independently per baseline.
+
+    # Independently flag each correlation product.
     for cp in range(n_cp):
         _get_baseline_flags(
             data[cp], flags[cp], tmp_flags[cp],
@@ -707,7 +721,7 @@ def _get_flags_impl(
             flag_all_time_frac, flag_all_freq_frac,
             rho)
 
-    # Transpose the output flags and explicitly flag nans from input
+    # Explicitly flag nans from input
     for cp in range(n_cp):
         for t in range(n_time):
             for f in range(n_freq):
@@ -762,7 +776,8 @@ def _average_freq(in_data, in_flags, factor):
     Parameters
     ----------
     in_data : ndarray, real or complex
-        Visibilities or their magnitudes, with shape (time, frequency, baseline).
+        Visibilities or their magnitudes,
+        with shape (time, frequency, baseline).
     in_flags : ndarray, bool
         Flags corresponding to the visibilities. This can safely be a type
         other than bool, where non-zero values indicate flagged data.
@@ -1019,15 +1034,15 @@ def sum_threshold_flagger(vis, flags, outlier_nsigma=4.5,
            size `self.average_freq`
         2. Divide the data into overlapping sub-chunks in frequency which are
            backgrounded and thresholded independently
-        3. Flag a 1d spectrum median filtered in time to get fainter contaminated
-           channels.
+        3. Flag a 1d spectrum median filtered in time to get fainter
+           contaminated channels.
         4. Derive a smooth 2d background through each chunk
         5. SumThreshold the background subtracted chunks in time and frequency
         6. Extend derived flags in time and frequency, via self.freq_extend and
            self.time_extend
         7. Extend flags to all times and frequencies in cases when more than
-           a given fraction of samples are flagged (via `self.flag_all_time_frac` and
-           `self.flag_all_freq_frac`)
+           a given fraction of samples are flagged
+           (via `self.flag_all_time_frac` and `self.flag_all_freq_frac`)
         8. Accumulate flags
 
     Parameters
@@ -1041,32 +1056,38 @@ def sum_threshold_flagger(vis, flags, outlier_nsigma=4.5,
     windows_time : array, int
         Size of averaging windows to use in the SumThreshold method in time
     windows_freq : array, int
-        Size of averaging windows to use in the SumThreshold method in frequency
+        Size of averaging windows to use in the SumThreshold method
+        in frequency
     background_reject : float
         Number of sigma to reject outliers when backgrounding
     background_iterations : int
-        Number of iterations to use when determining a smooth background, after each
-        iteration data in excess of `background_reject`*`sigma` are masked
+        Number of iterations to use when determining a smooth background,
+        after each iteration data in excess of
+        `background_reject`*`sigma` are masked
     spike_width_time : float
-        Characteristic width in dumps to smooth over when backgrounding. This is
-        the one-sigma width of the convolving Gaussian in axis 0.
+        Characteristic width in dumps to smooth over when backgrounding.
+        This is the one-sigma width of the convolving Gaussian in axis 0.
     spike_width_freq : float
-        Characteristic width in channels to smooth over when backgrounding. This is
-        the one-sigma width of the convolving Gaussian in axis 1.
+        Characteristic width in channels to smooth over when backgrounding.
+        This is the one-sigma width of the convolving Gaussian in axis 1.
     time_extend : int
         Size of kernel in time to convolve with flags after detection
     freq_extend : int
         Size of kernel in frequency to convolve with flags after detection
     freq_chunks : int
-        Number of equal-sized chunks to independently flag in frequency. Smaller
-        chunks will be less affected by variations in the band in the frequency domain.
+        Number of equal-sized chunks to independently flag in frequency.
+        Smaller chunks will be less affected by variations in the band
+        in the frequency domain.
     average_freq : int
-        Number of channels to average frequency before flagging. Flags will be extended
-        to the frequency shape of the input data before being returned
+        Number of channels to average frequency before flagging.
+        Flags will be extended to the frequency shape
+        of the input data before being returned
     flag_all_time_frac : float
-        Fraction of data flagged above which to extend flags to all data in time axis.
+        Fraction of data flagged above which to extend flags
+        to all data in time axis.
     flag_all_freq_frac : float
-        Fraction of data flagged above which to extend flags to all data in frequency axis.
+        Fraction of data flagged above which to extend flags
+        to all data in frequency axis.
     rho : float
         Falloff exponent for SumThreshold
     num_major_iterations: int
@@ -1118,7 +1139,9 @@ def sum_threshold_flagger(vis, flags, outlier_nsigma=4.5,
 
 
 class SumThresholdFlagger(object):
-    """Flagger that uses the SumThreshold method (Offringa, A., MNRAS, 405, 155-167, 2010)
+    """
+    Flagger that uses the SumThreshold method
+    (Offringa, A., MNRAS, 405, 155-167, 2010)
     to detect spikes in both frequency and time axes.
     The full algorithm does the following:
 
@@ -1126,15 +1149,15 @@ class SumThresholdFlagger(object):
            size `self.average_freq`
         2. Divide the data into overlapping sub-chunks in frequency which are
            backgrounded and thresholded independently
-        3. Flag a 1d spectrum median filtered in time to get fainter contaminated
-           channels.
+        3. Flag a 1d spectrum median filtered in time to get fainter
+           contaminated channels.
         4. Derive a smooth 2d background through each chunk
         5. SumThreshold the background subtracted chunks in time and frequency
         6. Extend derived flags in time and frequency, via self.freq_extend and
            self.time_extend
         7. Extend flags to all times and frequencies in cases when more than
-           a given fraction of samples are flagged (via `self.flag_all_time_frac` and
-           `self.flag_all_freq_frac`)
+           a given fraction of samples are flagged
+           (via `self.flag_all_time_frac` and `self.flag_all_freq_frac`)
 
     Parameters
     ----------
@@ -1144,32 +1167,38 @@ class SumThresholdFlagger(object):
     windows_time : array, int
         Size of averaging windows to use in the SumThreshold method in time
     windows_freq : array, int
-        Size of averaging windows to use in the SumThreshold method in frequency
+        Size of averaging windows to use in the
+        SumThreshold method in frequency
     background_reject : float
         Number of sigma to reject outliers when backgrounding
     background_iterations : int
-        Number of iterations to use when determining a smooth background, after each
-        iteration data in excess of `background_reject`*`sigma` are masked
+        Number of iterations to use when determining a smooth background,
+        after each iteration data in excess of
+        `background_reject`*`sigma` are masked
     spike_width_time : float
-        Characteristic width in dumps to smooth over when backgrounding. This is
-        the one-sigma width of the convolving Gaussian in axis 0.
+        Characteristic width in dumps to smooth over when backgrounding.
+        This is the one-sigma width of the convolving Gaussian in axis 0.
     spike_width_freq : float
-        Characteristic width in channels to smooth over when backgrounding. This is
-        the one-sigma width of the convolving Gaussian in axis 1.
+        Characteristic width in channels to smooth over when backgrounding.
+        This is the one-sigma width of the convolving Gaussian in axis 1.
     time_extend : int
         Size of kernel in time to convolve with flags after detection
     freq_extend : int
         Size of kernel in frequency to convolve with flags after detection
     freq_chunks : int
-        Number of equal-sized chunks to independently flag in frequency. Smaller
-        chunks will be less affected by variations in the band in the frequency domain.
+        Number of equal-sized chunks to independently flag in frequency.
+        Smaller chunks will be less affected by variations
+        in the band in the frequency domain.
     average_freq : int
-        Number of channels to average frequency before flagging. Flags will be extended
-        to the frequency shape of the input data before being returned
+        Number of channels to average frequency before flagging.
+        Flags will be extended to the frequency shape
+        of the input data before being returned.
     flag_all_time_frac : float
-        Fraction of data flagged above which to extend flags to all data in time axis.
+        Fraction of data flagged above which to extend flags
+        to all data in time axis.
     flag_all_freq_frac : float
-        Fraction of data flagged above which to extend flags to all data in frequency axis.
+        Fraction of data flagged above which to extend flags
+        to all data in frequency axis.
     rho : float
         Falloff exponent for SumThreshold
     """
@@ -1239,7 +1268,8 @@ class SumThresholdFlagger(object):
             self.flag_all_time_frac, self.flag_all_freq_frac,
             self.rho)
 
-    def get_flags(self, data, flags, pool=None, chunk_size=None, is_multiprocess=None):
+    def get_flags(self, data, flags, pool=None,
+                  chunk_size=None, is_multiprocess=None):
         """Get flags in data array, with optional input flags of same shape
         that denote samples in data to ignore when backgrounding and deriving
         thresholds.
@@ -1254,8 +1284,8 @@ class SumThresholdFlagger(object):
         Parameters
         ----------
         data : 3D array
-            The input visibility data, in (time, frequency, baseline) order. It may
-            also contain just the magnitudes.
+            The input visibility data, in (time, frequency, baseline) order.
+            It may also contain just the magnitudes.
         flags : 3D array, boolean
             Input flags.
         pool : :class:`concurrent.futures.Executor`, optional
@@ -1312,11 +1342,13 @@ class SumThresholdFlagger(object):
                 chunk_out = out_flags[cp: cp + chunk_size, ...]
                 self._get_flags(chunk_data, chunk_flags, chunk_out)
                 # if pool is not None and is_multiprocess:
-                #     future = pool.submit(_get_flags_mp, chunk_data, chunk_flags, self)
+                #     future = pool.submit(_get_flags_mp, chunk_data,
+                #                          chunk_flags, self)
                 #     outputs[future] = chunk_out
                 #     futures.append(future)
                 # elif pool is not None:
-                #     futures.append(pool.submit(self._get_flags, chunk_data, chunk_flags, chunk_out))
+                #     futures.append(pool.submit(self._get_flags, chunk_data,
+                #                                chunk_flags, chunk_out))
                 # else:
                 #    self._get_flags(chunk_data, chunk_flags, chunk_out)
             # Wait for all the futures to complete, and raise any exception.
