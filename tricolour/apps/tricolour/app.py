@@ -102,27 +102,49 @@ def load_config(config_file):
       Configuration
     """
     from tricolour import config
-
-    if config_file == DEFAULT_CONFIG:
-        log.warn("User strategy not provided. Will now attempt to "
-                 "find some defaults in the install paths")
-    else:
-        log.info("Loading custom user strategy {0:s}".format(config_file))
-
     import yaml
 
     with open(config_file) as cf:
         config.update_defaults(yaml.full_load(cf))
 
-    try:
-        config_dict = config.to_dict()['strategies']
-    except KeyError:
-        raise arparse.ArgumentTypeError("Configuration has no "
-                                        "strategies section")
-
-    log.info("Applying Flagging Strategies:\n %s", pformat(config_dict))
-
     return config
+
+
+def log_configuration(args):
+    cfg = args.config.to_dict()
+    empty_dict = {}
+
+    try:
+        strategies = cfg['strategies']
+    except KeyError:
+        log.warn("Configuration has no strategies")
+        return
+
+    if len(strategies) > 0:
+        log.info("The following strategies will be applied:")
+
+        for s, strategy in enumerate(strategies):
+            name = strategy.get("name", "<nameless>")
+
+            try:
+                task = strategy["task"]
+            except KeyError:
+                log.warn("Strategy '%s' has no associate task", name)
+
+            log.info("%d: %s (%s)", s, task, name)
+
+            for key, value in strategy.get("kwargs", empty_dict).items():
+                log.info("\t%s: %s", key, value)
+
+    if args.scan_numbers != []:
+        log.info("Only considering scans '{0:s}' as "
+                 "per user selection criterion"
+                 .format(",".join(map(str, args.scan_numbers))))
+
+    if args.flagging_strategy == "polarisation":
+        log.info("Flagging based on quadrature polarized power")
+    else:
+        log.info("Flagging per correlation ('standard' mode)")
 
 
 def create_parser():
@@ -196,16 +218,6 @@ def main():
 
     args = create_parser().parse_args()
 
-    if args.scan_numbers != []:
-        log.info("Only considering scans '{0:s}' as "
-                 "per user selection criterion"
-                 .format(",".join(map(str, args.scan_numbers))))
-
-    if args.flagging_strategy == "polarisation":
-        log.info("Flagging based on quadrature polarized power")
-    else:
-        log.info("Flagging per correlation ('standard' mode)")
-
     if args.disable_post_mortem:
         log.warn("Disabling crash debugging with the "
                  "Interactive Python Debugger, as per user request")
@@ -216,6 +228,8 @@ def main():
     masked_channels = [load_mask(fn, dilate=args.dilate_masks)
                        for fn in collect_masks()]
     GD = args.config
+
+    log_configuration(args)
 
     # Group datasets by these columns
     group_cols = ["FIELD_ID", "DATA_DESC_ID", "SCAN_NUMBER"]
