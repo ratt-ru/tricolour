@@ -14,6 +14,9 @@ from numcodecs import Blosc
 import zarr
 
 
+_WINDOW_SCHEMA = ("bl", "corr", "time", "chan")
+
+
 def _debug_inputs(data):
     if isinstance(data, np.ndarray):
         return (data.shape, data.dtype)
@@ -60,8 +63,8 @@ def _create_window(name, ntime, nchan, nbl, ncorr,
     if backend == "zarr-disk":
         compressor = Blosc(cname='zstd', clevel=1, shuffle=Blosc.SHUFFLE)
 
-        return zarr.creation.create(shape=(ntime, nchan, nbl, ncorr),
-                                    chunks=(ntime, nchan, 1, ncorr),
+        return zarr.creation.create(shape=(nbl, ncorr, ntime, nchan),
+                                    chunks=(1, ncorr, ntime, nchan),
                                     compressor=compressor,
                                     dtype=dtype,
                                     synchronizer=zarr.ThreadSynchronizer(),
@@ -70,7 +73,7 @@ def _create_window(name, ntime, nchan, nbl, ncorr,
                                     read_only=False,
                                     store=pjoin(path, "-".join((name, token))))
     elif backend == "numpy":
-        return np.zeros((ntime, nchan, nbl, ncorr), dtype=dtype)
+        return np.zeros((nbl, ncorr, ntime, nchan), dtype=dtype)
     else:
         raise ValueError("Invalid backend '%s'" % backend)
 
@@ -125,7 +128,7 @@ def _pack_data(time_inv, ubl,
     vis_windows = vis_windows[0]
     flag_windows = flag_windows[0]
 
-    assert vis_windows.shape[2] == flag_windows.shape[2]
+    assert vis_windows.shape == flag_windows.shape
 
     if isinstance(vis_windows, zarr.Array) and (flag_windows, zarr.Array):
         zarr_case = True
@@ -155,12 +158,20 @@ def _pack_data(time_inv, ubl,
             if np.all(np.diff(time_idx) == 1):
                 time_idx = slice(time_idx[0], time_idx[-1] + 1)
 
+            # We're selecting all times for one baseline
+            # So we order by (corr, row (time), chan) for
+            # the assignments below
+            data_transposed = data[valid, :, :].transpose(2, 0, 1)
+            flag_transposed = flag[valid, :, :].transpose(2, 0, 1)
+
+            # import pdb; pdb.set_trace()
+
             if zarr_case:
-                vis_windows.oindex[time_idx, :, bl, :] = data[valid, :, :]
-                flag_windows.oindex[time_idx, :, bl, :] = flag[valid, :, :]
+                vis_windows.oindex[bl, :, time_idx, :] = data_transposed
+                flag_windows.oindex[bl, :, time_idx, :] = flag_transposed
             else:
-                vis_windows[time_idx, :, bl, :] = data[valid, :, :]
-                flag_windows[time_idx, :, bl, :] = flag[valid, :, :]
+                vis_windows[bl, :, time_idx, :] = data_transposed
+                flag_windows[bl, :, time_idx, :] = flag_transposed
 
     return np.array([[[True]]])
 
@@ -172,7 +183,7 @@ def _packed_windows(dummy_result, ubl, window):
     if np.all(np.diff(bl_index) == 1):
         bl_index = slice(bl_index[0], bl_index[-1] + 1)
 
-    return window[:, :, bl_index, :]
+    return window[bl_index, :, :, :]
 
 
 def pack_data(time_inv, ubl,
@@ -181,7 +192,6 @@ def pack_data(time_inv, ubl,
               backend="numpy", path=None,
               return_objs=False):
 
-    window_shape = ("time", "chan", "bl", "corr")
     nchan, ncorr = data.shape[1:3]
     nbl = ubl.shape[0]
 
@@ -212,14 +222,14 @@ def pack_data(time_inv, ubl,
                            dtype=np.bool)
 
     # Expose visibility data at it's full resolution
-    vis_windows = da.blockwise(_packed_windows, window_shape,
+    vis_windows = da.blockwise(_packed_windows, _WINDOW_SCHEMA,
                                packing, ("row", "chan", "corr"),
                                ubl, ("bl", "bl-comp"),
                                vis_win_obj, ("windim",),
                                new_axes={"time": ntime},
                                dtype=data.dtype)
 
-    flag_windows = da.blockwise(_packed_windows, window_shape,
+    flag_windows = da.blockwise(_packed_windows, _WINDOW_SCHEMA,
                                 packing, ("row", "chan", "corr"),
                                 ubl, ("bl", "bl-comp"),
                                 flag_win_obj, ("windim",),
@@ -236,12 +246,14 @@ def _unpack_data(antenna1, antenna2, time_inv, ubl, windows):
     exemplar = windows[0][0]
 
     # (row, chan, corr)
-    data_shape = (antenna1.shape[0], exemplar.shape[1], exemplar.shape[3])
+    data_shape = (antenna1.shape[0], exemplar.shape[3], exemplar.shape[1])
     data = np.zeros(data_shape, dtype=exemplar.dtype)
 
-    for baselines, window in zip(ubl, windows[0]):
+    for baselines, window in zip(ubl, windows):
         baselines = baselines[0]
+        window = window[0]
         bl_min = baselines[:, 0].min()
+
         for bl, a1, a2 in baselines:
             # Normalise the baseline index within this baseline chunk
             bl = bl - bl_min
@@ -256,7 +268,10 @@ def _unpack_data(antenna1, antenna2, time_inv, ubl, windows):
             if np.all(np.diff(time_idx) == 1):
                 time_idx = slice(time_idx[0], time_idx[-1] + 1)
 
-            data[valid, :, :] = window[time_idx, :, bl, :]
+            # We're selecting all times for one baseline
+            # So we order by (row (time), chan, corr) for
+            # the assignment below
+            data[valid, :, :] = window[bl, :, time_idx, :].transpose(1, 2, 0)
 
     return data
 
@@ -267,5 +282,5 @@ def unpack_data(antenna1, antenna2, time_inv, ubl, flag_windows):
                         antenna2, ("row",),
                         time_inv, ("row",),
                         ubl, ("bl", "bl-comp"),
-                        flag_windows, ("time", "chan", "bl", "corr"),
+                        flag_windows, _WINDOW_SCHEMA,
                         dtype=flag_windows.dtype)

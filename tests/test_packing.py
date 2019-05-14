@@ -14,7 +14,8 @@ from tricolour.packing import (unique_baselines,
                                create_vis_windows,
                                create_flag_windows,
                                pack_data,
-                               unpack_data)
+                               unpack_data,
+                               _WINDOW_SCHEMA)
 
 
 def flag_data(vis_windows, flag_windows):
@@ -23,11 +24,9 @@ def flag_data(vis_windows, flag_windows):
     def _flag_data(vis_windows, flag_windows):
         return flag_windows
 
-    dims = ("time", "chan", "bl", "corr")
-
-    return da.blockwise(_flag_data, dims,
-                        vis_windows, dims,
-                        flag_windows, dims,
+    return da.blockwise(_flag_data, _WINDOW_SCHEMA,
+                        vis_windows, _WINDOW_SCHEMA,
+                        flag_windows, _WINDOW_SCHEMA,
                         dtype=vis_windows.dtype)
 
 
@@ -88,7 +87,7 @@ def test_vis_and_flag_packing(tmpdir, backend):
                                ubl, vis_windows)
 
     result = da.compute(vis, flag, vis_win_obj, flag_win_obj,
-                        unpacked_vis, unpacked_flags)
+                        unpacked_vis, unpacked_flags, scheduler='sync')
     (vis, flag, vis_win_obj, flag_win_obj,
      unpacked_vis, unpacked_flags) = result
 
