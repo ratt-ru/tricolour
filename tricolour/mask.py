@@ -4,37 +4,36 @@ from __future__ import print_function
 
 import logging
 import os
-import sys
 import re
+
+from pkg_resources import resource_filename
 import numpy as np
 
 from scipy.ndimage import binary_dilation
 
-import tricolour
-
-paths = [
-    '/etc/tricolour',
-    os.path.join(sys.prefix, 'etc', 'tricolour'),
-    os.path.join(os.path.split(tricolour.__file__)[0], "data"),
-    os.path.join(os.path.expanduser('~'), '.config', 'tricolour'),
-    os.path.join(os.path.expanduser('~'), '.tricolour')
-]
-
+from tricolour import config
 
 log = logging.getLogger(__name__)
 
-if 'TRICOLOUR_CONFIG' in os.environ:
-    paths.append(os.environ['TRICOLOUR_CONFIG'])
+# Look in default configuration paths, as well as the data directory
+_DEFAULT_PATHS = config.paths + [resource_filename('tricolour', 'data')]
 
 
 def dilate_mask(mask_chans, mask_flags, dilate):
-    """ Dilates mask array by number of channels indicated in dilate
+    """
+    Dilates mask array by number of channels indicated in dilate
 
-    Arguments:
-        dilate: dilation channel width in either Hz or number of channels
-        mask_chans: centre frequencies of mask
-        mask_flags: boolean array of mask
-    Returns:
+    Parameters
+    ----------
+    dilate: int
+        Dilation channel width in either Hz or number of channels
+    mask_chans: :class:`numpy.ndarray`
+        centre frequencies of mask
+    mask_flags: :class:`numpy.ndarray`
+        boolean array of mask
+
+    Returns
+    -------
         dilated_mask: boolean array of shape mask_flags
     """
     try:
@@ -89,7 +88,7 @@ def load_mask(filename, dilate):
     return masked_channels
 
 
-def collect_masks(filename="", paths=paths):
+def collect_masks(filename="", paths=_DEFAULT_PATHS):
     """
     Collect masks from paths
 
@@ -100,7 +99,8 @@ def collect_masks(filename="", paths=paths):
 
     Returns
     -------
-    search paths
+    masks: list of str
+        Discovered masks
     """
     if filename == "":
 
