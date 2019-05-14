@@ -87,7 +87,7 @@ def test_vis_and_flag_packing(tmpdir, backend):
                                ubl, vis_windows)
 
     result = da.compute(vis, flag, vis_win_obj, flag_win_obj,
-                        unpacked_vis, unpacked_flags, scheduler='sync')
+                        unpacked_vis, unpacked_flags)
     (vis, flag, vis_win_obj, flag_win_obj,
      unpacked_vis, unpacked_flags) = result
 
