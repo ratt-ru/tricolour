@@ -30,7 +30,7 @@ class StrategyExecutor(object):
         return self
 
     def __exit__(self, etype, evalue, etraceback):
-        return True
+        pass
 
     def apply_strategies(self, flag_windows, vis_windows):
         original = flag_windows.copy()
