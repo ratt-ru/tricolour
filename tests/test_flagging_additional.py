@@ -5,9 +5,12 @@ from __future__ import print_function
 
 
 import numpy as np
+from numpy.testing import assert_array_equal
 import pytest
 
-from tricolour.flagging import flag_autos, apply_static_mask
+from tricolour.flagging import (flag_autos,
+                                apply_static_mask,
+                                flag_nans_and_zeros)
 from tricolour.util import casa_style_range
 
 
@@ -49,6 +52,37 @@ def unique_baselines(baselines):
     ubl = np.unique(np.stack(baselines, axis=1), axis=1)
     bl_range = np.arange(ubl.shape[0])[:, None]
     return np.concatenate([bl_range, ubl], axis=1)
+
+
+def test_flag_nans_and_zeros(unique_baselines):
+    ntime = 10
+    nchan = 16
+    ncorr = 4
+
+    shape = (unique_baselines.shape[0], ncorr, ntime, nchan)
+
+    zero_flags = np.zeros(shape, dtype=np.uint8)
+    vis = np.random.random(shape) + 1j*np.random.random(shape)
+
+    vis[4, 2, 4, 5] = 0
+    vis[0, 1, 2, 7] = np.nan + np.nan*1j
+
+    out_flags = flag_nans_and_zeros(vis, zero_flags)
+
+    zero_sel = vis == 0
+    nan_sel = np.isnan(vis)
+
+    # Flagged at zero and nan locations
+    assert out_flags[4, 2, 4, 5] == 1
+    assert out_flags[0, 1, 2, 7] == 1
+    # Unflagged everywhere else
+    assert np.all(out_flags[np.where(~(zero_sel | nan_sel))] == 0)
+
+    flags = np.random.randint(0, 2, shape, dtype=np.uint8)
+
+    # Test that zero, nan and original flags are or'd together
+    out_flags = flag_nans_and_zeros(vis, flags)
+    assert_array_equal(out_flags, flags | zero_sel | nan_sel)
 
 
 def test_flag_autos(unique_baselines):

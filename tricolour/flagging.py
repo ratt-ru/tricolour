@@ -24,6 +24,42 @@ standard deviation of a Gaussian distribution.
 """  # noqa
 
 
+@numba.njit(nogil=True, cache=True)
+def flag_nans_and_zeros(vis_windows, flag_windows):
+    """
+    Flag nan and zero visibilities.
+
+    Parameters
+    ----------
+    vis_windows : :class:`numpy.ndarray`
+        Visibilities of shape :code:`(bl, corr, time, chan)`
+    flag_windows : :class:`numpy.ndarray`
+        Flags of shape :code:`(bl, corr, time, chan)`
+
+    Returns
+    -------
+    flag_windows : :class:`numpy.ndarray`
+        Flags of shape :code:`(bl, corr, time, chan)`
+    """
+    if vis_windows.shape != flag_windows.shape:
+        raise ValueError("vis_windows.shape != flag_windows.shape")
+
+    nbl, ncorr, ntime, nchan = vis_windows.shape
+
+    out_flags = np.zeros_like(flag_windows)
+
+    for bl in range(nbl):
+        for c in range(ncorr):
+            for t in range(ntime):
+                for f in range(nchan):
+                    vis = vis_windows[bl, c, t, f]
+                    flag = vis == 0 or np.isnan(vis)
+                    flag = flag or flag_windows[bl, c, t, f] != 0
+                    out_flags[bl, c, t, f] = flag
+
+    return out_flags
+
+
 def flag_autos(flags, ubl):
     """
     Flags auto-correlations
