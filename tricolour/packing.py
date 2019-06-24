@@ -73,7 +73,7 @@ def _create_window(name, ntime, nchan, nbl, ncorr,
                                     read_only=False,
                                     store=pjoin(path, "-".join((name, token))))
     elif backend == "numpy":
-        return np.zeros((nbl, ncorr, ntime, nchan), dtype=dtype)
+        return np.full((nbl, ncorr, ntime, nchan), default, dtype=dtype)
     else:
         raise ValueError("Invalid backend '%s'" % backend)
 
