@@ -12,7 +12,6 @@ def _window_stats(flag_window, ubls, chan_freqs,
     These stats should be accumulated to form a final
     stat object for the window. See _combine_baseline_window_stats
     """
-
     ubls = ubls[0]
     flag_window = flag_window[0][0][0]
     chan_freqs = chan_freqs[0]
@@ -46,7 +45,7 @@ def _window_stats(flag_window, ubls, chan_freqs,
             bins[ch_i] = np.sum(flag_window[:, sel, :, :])
 
         stats._counts_per_ddid[ddid] += bins
-        stats._bins_per_ddid[ddid] = bins_edges
+        stats._bins_per_ddid[ddid] = bins_edges # frequency labels
         stats._size_per_ddid[ddid] += flag_window.size
 
     return stats
@@ -198,7 +197,7 @@ class WindowStatistics(object):
 
         # ddid
         for d, bins in other._bins_per_ddid.items():
-            self._bins_per_ddid[d] += bins
+            self._bins_per_ddid[d] = bins # this is the frequency labels
 
     def copy(self):
         """ Creates a copy of the current WindowStatistics"""

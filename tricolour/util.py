@@ -82,7 +82,7 @@ def aggregate_chunks(chunks, max_chunks, return_groups=False):
 
 def casa_style_range(val, argparse=False):
     """ returns list of ints """
-    RangeException = argparse.ArgumentTypeError if argparse else ValueError
+    RangeException = ValueError
 
     if not isinstance(val, six.string_types):
         raise RangeException("Value must be a string")
