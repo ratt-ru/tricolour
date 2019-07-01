@@ -91,9 +91,9 @@ def casa_style_range(val, argparse=False):
     elif re.match(r"^(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?~"
                   r"(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?[\s]*[m]?$", val):
 
-        return map(float, val.replace(" ", "")
-                             .replace("\t", "")
-                             .replace("m", "")
-                             .split("~"))
+        return list(map(float, val.replace(" ", "")
+                                  .replace("\t", "")
+                                  .replace("m", "")
+                                  .split("~")))
     else:
         raise RangeException("Value must be range or blank")

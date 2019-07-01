@@ -13,7 +13,7 @@ from donfig import Config
 from functools import partial
 import logging
 import logging.handlers
-from multiprocessing.pool import ThreadPool, cpu_count
+from multiprocessing.pool import ThreadPool
 import pkg_resources
 from pprint import pformat
 import os
@@ -173,7 +173,7 @@ def create_parser():
                    "and computational efficiency")
     p.add_argument("-bc", "--baseline-chunks", type=int, default=16,
                    help="Number of baselines in a window chunk")
-    p.add_argument("-nw", "--nworkers", type=int, default=cpu_count() * 2,
+    p.add_argument("-nw", "--nworkers", type=int, default=os.cpu_count() * 2,
                    help="Number of workers (threads) to use. "
                    "By default, set to twice the "
                    "number of logical CPUs on the system. "
@@ -383,18 +383,24 @@ def main():
         # original should also have .compute called because we need stats
         write_computes.append(writes)
 
-    # Create dask contexts
-    profilers = ([Profiler(), CacheProfiler(), ResourceProfiler()]
-                 if can_profile else [])
-    contexts = [ProgressBar()] + profilers
-
-    pool = ThreadPool(args.nworkers)
-
     # Combine stats from all datasets
     original_stats = combine_window_stats(original_stats)
     final_stats = combine_window_stats(final_stats)
 
-    with contextlib.nested(*contexts), dask.config.set(pool=pool):
+    with contextlib.ExitStack() as stack:
+        # Create dask profiling contexts
+        profilers = []
+
+        if can_profile:
+            profilers.append(stack.enter_context(Profiler()))
+            profilers.append(stack.enter_context(CacheProfiler()))
+            profilers.append(stack.enter_context(ResourceProfiler()))
+
+        pool = stack.enter_context(ThreadPool(args.nworkers))
+        stack.enter_context(dask.config.set(pool=pool))
+
+        stack.enter_context(ProgressBar())
+
         _, original_stats, final_stats = dask.compute(write_computes,
                                                       original_stats,
                                                       final_stats)
