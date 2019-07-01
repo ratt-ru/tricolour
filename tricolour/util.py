@@ -4,7 +4,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import argparse
+from argparse import ArgumentTypeError
 import six
 import re
 
@@ -82,7 +82,7 @@ def aggregate_chunks(chunks, max_chunks, return_groups=False):
 
 def casa_style_range(val, argparse=False):
     """ returns list of ints """
-    RangeException = ValueError
+    RangeException = ArgumentTypeError if argparse else ValueError
 
     if not isinstance(val, six.string_types):
         raise RangeException("Value must be a string")
