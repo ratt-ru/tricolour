@@ -1,4 +1,6 @@
 FROM kernsuite/base:5
+
+# lint the code
 RUN docker-apt-install python3-pip
 RUN pip3 install pycodestyle flake8
 ADD . /code
