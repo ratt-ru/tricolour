@@ -61,11 +61,9 @@ def unique_baselines(ant1, ant2):
 def _create_window(name, ntime, nchan, nbl, ncorr,
                    dtype, default, token, backend="numpy", path=None):
     if backend == "zarr-disk":
-        compressor = Blosc(cname='zstd', clevel=1, shuffle=Blosc.SHUFFLE)
-
         return zarr.creation.create(shape=(nbl, ncorr, ntime, nchan),
                                     chunks=(1, ncorr, ntime, nchan),
-                                    compressor=compressor,
+                                    compressor=None,
                                     dtype=dtype,
                                     synchronizer=zarr.ThreadSynchronizer(),
                                     overwrite=True,
