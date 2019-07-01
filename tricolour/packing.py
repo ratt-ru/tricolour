@@ -14,6 +14,9 @@ from numcodecs import Blosc
 import zarr
 
 
+_WINDOW_SCHEMA = ("bl", "corr", "time", "chan")
+
+
 def _debug_inputs(data):
     if isinstance(data, np.ndarray):
         return (data.shape, data.dtype)
@@ -58,11 +61,9 @@ def unique_baselines(ant1, ant2):
 def _create_window(name, ntime, nchan, nbl, ncorr,
                    dtype, default, token, backend="numpy", path=None):
     if backend == "zarr-disk":
-        compressor = Blosc(cname='zstd', clevel=1, shuffle=Blosc.SHUFFLE)
-
-        return zarr.creation.create(shape=(ntime, nchan, nbl, ncorr),
-                                    chunks=(ntime, nchan, 1, ncorr),
-                                    compressor=compressor,
+        return zarr.creation.create(shape=(nbl, ncorr, ntime, nchan),
+                                    chunks=(1, ncorr, ntime, nchan),
+                                    compressor=None,
                                     dtype=dtype,
                                     synchronizer=zarr.ThreadSynchronizer(),
                                     overwrite=True,
@@ -70,7 +71,8 @@ def _create_window(name, ntime, nchan, nbl, ncorr,
                                     read_only=False,
                                     store=pjoin(path, "-".join((name, token))))
     elif backend == "numpy":
-        return np.zeros((ntime, nchan, nbl, ncorr), dtype=dtype)
+        return [np.full((ncorr, ntime, nchan), default, dtype=dtype)
+                for bl in range(nbl)]
     else:
         raise ValueError("Invalid backend '%s'" % backend)
 
@@ -97,6 +99,18 @@ def _create_window_dask(name, ntime, nchan, nbl, ncorr, token,
 def create_vis_windows(ntime, nchan, nbl, ncorr, token,
                        dtype, default=np.nan + np.nan*1j,
                        backend="numpy", path=None):
+    """
+    Returns
+    -------
+    vis_window : :class:`dask.array.Array`
+        dask array containing either
+
+        1. A zarr array
+        2. A list of per-baseline numpy arrays
+
+        Compute should never directly be called on this array,
+        but it should be passed to other functions
+    """
 
     return _create_window_dask("vis", ntime, nchan, nbl, ncorr, token,
                                dtype, default, backend, path)
@@ -104,6 +118,18 @@ def create_vis_windows(ntime, nchan, nbl, ncorr, token,
 
 def create_flag_windows(ntime, nchan, nbl, ncorr, token,
                         dtype, default=1, backend="numpy", path=None):
+    """
+    Returns
+    -------
+    vis_window : :class:`dask.array.Array`
+        dask array containing either
+
+        1. A zarr array
+        2. A list of per-baseline numpy arrays
+
+        Compute should never directly be called on this array,
+        but it should be passed to other functions
+    """
     return _create_window_dask("flag", ntime, nchan, nbl, ncorr, token,
                                dtype, default, backend, path)
 
@@ -125,16 +151,16 @@ def _pack_data(time_inv, ubl,
     vis_windows = vis_windows[0]
     flag_windows = flag_windows[0]
 
-    assert vis_windows.shape[2] == flag_windows.shape[2]
-
     if isinstance(vis_windows, zarr.Array) and (flag_windows, zarr.Array):
+        assert vis_windows.shape == flag_windows.shape
         zarr_case = True
-    elif (isinstance(vis_windows, np.ndarray) and
-            isinstance(flag_windows, np.ndarray)):
+    elif (isinstance(vis_windows, list) and
+          isinstance(flag_windows, list)):
+        assert vis_windows[0].shape == flag_windows[0].shape
         zarr_case = False
     else:
         raise TypeError("visibility '%s' and flag '%s' types must both "
-                        "be zarr or numpy arrays")
+                        "be a zarr Array or lists of numpy arrays")
 
     # This double for loop is strange, mostly because ubl and bl_index
     # are lists (or lists of lists) of ndarrays. As the "bl" and "bl-comp"
@@ -155,12 +181,20 @@ def _pack_data(time_inv, ubl,
             if np.all(np.diff(time_idx) == 1):
                 time_idx = slice(time_idx[0], time_idx[-1] + 1)
 
+            # We're selecting all times for one baseline
+            # So we order by (corr, row (time), chan) for
+            # the assignments below
+            data_transposed = data[valid, :, :].transpose(2, 0, 1)
+            flag_transposed = flag[valid, :, :].transpose(2, 0, 1)
+
+            # import pdb; pdb.set_trace()
+
             if zarr_case:
-                vis_windows.oindex[time_idx, :, bl, :] = data[valid, :, :]
-                flag_windows.oindex[time_idx, :, bl, :] = flag[valid, :, :]
+                vis_windows.oindex[bl, :, time_idx, :] = data_transposed
+                flag_windows.oindex[bl, :, time_idx, :] = flag_transposed
             else:
-                vis_windows[time_idx, :, bl, :] = data[valid, :, :]
-                flag_windows[time_idx, :, bl, :] = flag[valid, :, :]
+                vis_windows[bl][:, time_idx, :] = data_transposed
+                flag_windows[bl][:, time_idx, :] = flag_transposed
 
     return np.array([[[True]]])
 
@@ -169,25 +203,29 @@ def _packed_windows(dummy_result, ubl, window):
     window = window[0]
     bl_index = ubl[0][:, 0]
 
+    # Slice if possible
     if np.all(np.diff(bl_index) == 1):
         bl_index = slice(bl_index[0], bl_index[-1] + 1)
 
-    return window[:, :, bl_index, :]
+    if isinstance(window, zarr.Array):
+        return window[bl_index, :, :, :]
+    elif isinstance(window, list):
+        return np.stack(window[bl_index], axis=0)
+    else:
+        raise ValueError("Window must either be a single zarr Array "
+                         "or a list of numpy arrays '%s'." % type(window))
 
 
 def pack_data(time_inv, ubl,
               antenna1, antenna2,
               data, flags, ntime,
-              backend="numpy", path=None,
-              return_objs=False):
+              backend="numpy", path=None):
 
-    window_shape = ("time", "chan", "bl", "corr")
     nchan, ncorr = data.shape[1:3]
     nbl = ubl.shape[0]
 
     token = dask.base.tokenize(time_inv, ubl, antenna1, antenna2,
-                               data, flags, ntime, backend, path,
-                               return_objs)
+                               data, flags, ntime, backend, path)
 
     vis_win_obj = create_vis_windows(ntime, nchan, nbl, ncorr, token,
                                      dtype=data.dtype,
@@ -212,22 +250,19 @@ def pack_data(time_inv, ubl,
                            dtype=np.bool)
 
     # Expose visibility data at it's full resolution
-    vis_windows = da.blockwise(_packed_windows, window_shape,
+    vis_windows = da.blockwise(_packed_windows, _WINDOW_SCHEMA,
                                packing, ("row", "chan", "corr"),
                                ubl, ("bl", "bl-comp"),
                                vis_win_obj, ("windim",),
                                new_axes={"time": ntime},
                                dtype=data.dtype)
 
-    flag_windows = da.blockwise(_packed_windows, window_shape,
+    flag_windows = da.blockwise(_packed_windows, _WINDOW_SCHEMA,
                                 packing, ("row", "chan", "corr"),
                                 ubl, ("bl", "bl-comp"),
                                 flag_win_obj, ("windim",),
                                 new_axes={"time": ntime},
                                 dtype=flags.dtype)
-
-    if return_objs:
-        return vis_windows, flag_windows, vis_win_obj, flag_win_obj
 
     return vis_windows, flag_windows
 
@@ -236,12 +271,14 @@ def _unpack_data(antenna1, antenna2, time_inv, ubl, windows):
     exemplar = windows[0][0]
 
     # (row, chan, corr)
-    data_shape = (antenna1.shape[0], exemplar.shape[1], exemplar.shape[3])
+    data_shape = (antenna1.shape[0], exemplar.shape[3], exemplar.shape[1])
     data = np.zeros(data_shape, dtype=exemplar.dtype)
 
-    for baselines, window in zip(ubl, windows[0]):
+    for baselines, window in zip(ubl, windows):
         baselines = baselines[0]
+        window = window[0]
         bl_min = baselines[:, 0].min()
+
         for bl, a1, a2 in baselines:
             # Normalise the baseline index within this baseline chunk
             bl = bl - bl_min
@@ -256,7 +293,10 @@ def _unpack_data(antenna1, antenna2, time_inv, ubl, windows):
             if np.all(np.diff(time_idx) == 1):
                 time_idx = slice(time_idx[0], time_idx[-1] + 1)
 
-            data[valid, :, :] = window[time_idx, :, bl, :]
+            # We're selecting all times for one baseline
+            # So we order by (row (time), chan, corr) for
+            # the assignment below
+            data[valid, :, :] = window[bl, :, time_idx, :].transpose(1, 2, 0)
 
     return data
 
@@ -267,5 +307,5 @@ def unpack_data(antenna1, antenna2, time_inv, ubl, flag_windows):
                         antenna2, ("row",),
                         time_inv, ("row",),
                         ubl, ("bl", "bl-comp"),
-                        flag_windows, ("time", "chan", "bl", "corr"),
+                        flag_windows, _WINDOW_SCHEMA,
                         dtype=flag_windows.dtype)

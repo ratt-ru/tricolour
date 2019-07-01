@@ -5,9 +5,12 @@ from __future__ import print_function
 
 
 import numpy as np
+from numpy.testing import assert_array_equal
 import pytest
 
-from tricolour.flagging import flag_autos, apply_static_mask
+from tricolour.flagging import (flag_autos,
+                                apply_static_mask,
+                                flag_nans_and_zeros)
 from tricolour.util import casa_style_range
 
 
@@ -51,23 +54,54 @@ def unique_baselines(baselines):
     return np.concatenate([bl_range, ubl], axis=1)
 
 
+def test_flag_nans_and_zeros(unique_baselines):
+    ntime = 10
+    nchan = 16
+    ncorr = 4
+
+    shape = (unique_baselines.shape[0], ncorr, ntime, nchan)
+
+    zero_flags = np.zeros(shape, dtype=np.uint8)
+    vis = np.random.random(shape) + 1j*np.random.random(shape)
+
+    vis[4, 2, 4, 5] = 0
+    vis[0, 1, 2, 7] = np.nan + np.nan*1j
+
+    out_flags = flag_nans_and_zeros(vis, zero_flags)
+
+    zero_sel = vis == 0
+    nan_sel = np.isnan(vis)
+
+    # Flagged at zero and nan locations
+    assert out_flags[4, 2, 4, 5] == 1
+    assert out_flags[0, 1, 2, 7] == 1
+    # Unflagged everywhere else
+    assert np.all(out_flags[np.where(~(zero_sel | nan_sel))] == 0)
+
+    flags = np.random.randint(0, 2, shape, dtype=np.uint8)
+
+    # Test that zero, nan and original flags are or'd together
+    out_flags = flag_nans_and_zeros(vis, flags)
+    assert_array_equal(out_flags, flags | zero_sel | nan_sel)
+
+
 def test_flag_autos(unique_baselines):
     ntime = 10
     nchan = 16
     ncorr = 4
 
     ubl = unique_baselines
-    flags = np.ones((ntime, nchan, ubl.shape[0], ncorr), dtype=np.uint8)
+    flags = np.ones((ubl.shape[0], ncorr, ntime, nchan), dtype=np.uint8)
 
     # Unflag auto-correlations
     ant1, ant2 = ubl[:, 1], ubl[:, 2]
     sel = ant1 == ant2
-    flags[:, :, sel, :] = 0
+    flags[sel, :, :, :] = 0
 
     new_flags = flag_autos(flags, [ubl])
 
     # Auto-correlations should now all be flagged
-    assert np.all(new_flags[:, :, sel, :] == 1)
+    assert np.all(new_flags[sel, :, :, :] == 1)
 
 
 def test_apply_static_mask(wsrt_ants, unique_baselines,
@@ -92,7 +126,7 @@ def test_apply_static_mask(wsrt_ants, unique_baselines,
                            chan_freqs[5] - 128])[:, None]
 
     ubl = unique_baselines
-    flags = np.zeros((ntime, nchan, ubl.shape[0], ncorr), dtype=np.uint8)
+    flags = np.zeros((ubl.shape[0], ncorr, ntime, nchan), dtype=np.uint8)
 
     #  Logical or mode
     new_flags = apply_static_mask(flags, ubl, wsrt_ants,
@@ -104,8 +138,8 @@ def test_apply_static_mask(wsrt_ants, unique_baselines,
     chan_sel = np.zeros(chan_freqs.shape[0], dtype=np.bool)
     chan_sel[[2, 10]] = True
 
-    assert np.all(new_flags[:, chan_sel, :, :] == 1)
-    assert np.all(new_flags[:, ~chan_sel, :, :] == 0)
+    assert np.all(new_flags[:, :, :, chan_sel] == 1)
+    assert np.all(new_flags[:, :, :, ~chan_sel] == 0)
 
     # Logical Or Mode
     new_flags = apply_static_mask(flags, ubl, wsrt_ants,
@@ -117,8 +151,8 @@ def test_apply_static_mask(wsrt_ants, unique_baselines,
     chan_sel = np.zeros(chan_freqs.shape[0], dtype=np.bool)
     chan_sel[[2, 10, 4, 11, 5]] = True
 
-    assert np.all(new_flags[:, chan_sel, :, :] == 1)
-    assert np.all(new_flags[:, ~chan_sel, :, :] == 0)
+    assert np.all(new_flags[:, :, :, chan_sel] == 1)
+    assert np.all(new_flags[:, :, :, ~chan_sel] == 0)
 
     # Override mode
     new_flags = apply_static_mask(flags, ubl, wsrt_ants,
@@ -130,8 +164,8 @@ def test_apply_static_mask(wsrt_ants, unique_baselines,
     chan_sel = np.zeros(chan_freqs.shape[0], dtype=np.bool)
     chan_sel[[4, 11, 5]] = True
 
-    assert np.all(new_flags[:, chan_sel, :, :] == 1)
-    assert np.all(new_flags[:, ~chan_sel, :, :] == 0)
+    assert np.all(new_flags[:, :, :, chan_sel] == 1)
+    assert np.all(new_flags[:, :, :, ~chan_sel] == 0)
 
     # Test Baseline range selection
     min_range = 1e3
@@ -155,8 +189,8 @@ def test_apply_static_mask(wsrt_ants, unique_baselines,
                             sqrd_bl_len < max_range**2)
 
     # Everything inside the selection is flagged
-    idx = np.ix_(np.arange(ntime), chan_sel, bl_sel, np.arange(ncorr))
+    idx = np.ix_(bl_sel, np.arange(ncorr), np.arange(ntime), chan_sel)
     assert np.all(new_flags[idx] == 1)
     # Everything outside the selection is unflagged
-    idx = np.ix_(np.arange(ntime), ~chan_sel, ~bl_sel, np.arange(ncorr))
+    idx = np.ix_(~bl_sel, np.arange(ncorr), np.arange(ntime), ~chan_sel)
     assert np.all(new_flags[idx] == 0)

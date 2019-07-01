@@ -38,13 +38,13 @@ class TestAsbool(object):
 
 class TestAverageFreq(object):
     def setup(self):
-        self.small_data = np.arange(30, dtype=np.float32).reshape(5, 6, 1)
-        self.small_data = self.small_data.repeat(2, axis=2)
+        self.small_data = np.arange(30, dtype=np.float32).reshape(1, 5, 6)
+        self.small_data = self.small_data.repeat(2, axis=0)
         self.small_flags = np.zeros(self.small_data.shape, np.bool_)
-        self.small_flags[3, :, 0] = 1
-        self.small_flags[:, 4, 0] = 1
-        self.small_flags[2, 0, :] = 1
-        self.small_flags[2, 5, :] = 1
+        self.small_flags[0, 3, :] = 1
+        self.small_flags[0, :, 4] = 1
+        self.small_flags[:, 2, 0] = 1
+        self.small_flags[:, 2, 5] = 1
 
     def test_one(self):
         """
@@ -57,10 +57,8 @@ class TestAverageFreq(object):
         expected[self.small_flags] = 0
         assert np.float32 == avg_data.dtype
         assert np.bool_ == avg_flags.dtype
-        np.testing.assert_array_equal(np.moveaxis(expected, -1, 0),
-                                      avg_data)
-        np.testing.assert_array_equal(np.moveaxis(self.small_flags, -1, 0),
-                                      avg_flags)
+        np.testing.assert_array_equal(expected, avg_data)
+        np.testing.assert_array_equal(self.small_flags, avg_flags)
 
     def test_divides(self):
         """Test _average_freq when averaging factor divides in exactly"""
@@ -88,9 +86,11 @@ class TestAverageFreq(object):
                 [False, False, False]
             ],
             [[False, False, False]] * 5])
+
         avg_data, avg_flags = flagging._average_freq(self.small_data,
                                                      self.small_flags,
                                                      flagging._as_min_dtype(2))
+
         assert np.float32 == avg_data.dtype
         assert np.bool_ == avg_flags.dtype
         np.testing.assert_array_equal(expected_data, avg_data)
@@ -510,49 +510,49 @@ class TestSumThresholdFlagger(object):
 
     def _make_background(self, shape, rs):
         """Simulate a bandpass with some smooth variation."""
-        ntime, nfreq, n_bl = shape
+        ncp, ntime, nfreq = shape
         nx = 10
         x = np.linspace(0.0, nfreq, nx)
-        y = np.ones((ntime, nx, n_bl)) * 2.34
-        y[:, 0, :] = 0.1
-        y[:, -1, :] = 0.1
+        y = np.ones((ncp, ntime, nx)) * 2.34
+        y[:, :, 0] = 0.1
+        y[:, :, -1] = 0.1
         y[:] += rs.uniform(0.0, 0.1, y.shape)
-        f = scipy.interpolate.interp1d(x, y, axis=1,
+        f = scipy.interpolate.interp1d(x, y, axis=2,
                                        kind='cubic', assume_sorted=True)
         return f(np.arange(nfreq))
 
-    def _make_data(self, flagger, rs, shape=(234, 345, 1)):
+    def _make_data(self, flagger, rs, shape=(1, 234, 345)):
         background = self._make_background(shape, rs).astype(np.float32)
         data = background + (rs.standard_normal(shape) * 0.1).astype(np.float32)
         rfi = np.zeros(shape, np.float32)
         # Some completely bad channels and bad times
-        rfi[12, :] = 1
-        rfi[20:25, :] = 1
-        rfi[:, 17] = 1
-        rfi[:, 200:220] = 1
+        rfi[:, 12, :] = 1
+        rfi[:, 20:25, :] = 1
+        rfi[:, :, 17] = 1
+        rfi[:, :, 200:220] = 1
         # Some mostly bad channels and times
-        rfi[30, :300] = 1
-        rfi[50:, 80] = 1
+        rfi[:, 30, :300] = 1
+        rfi[:, 50:, 80] = 1
         # Some smaller blocks of RFI
-        rfi[60:65, 100:170] = 1
-        rfi[150:200, 150:153] = 1
+        rfi[:, 60:65, 100:170] = 1
+        rfi[:, 150:200, 150:153] = 1
         expected = rfi.astype(np.bool_)
         # The mostly-bad channels and times must be fully flagged
-        expected[30, :] = True
-        expected[:, 80] = True
+        expected[:, 30, :] = True
+        expected[:, :, 80] = True
         data += rfi * rs.standard_normal(shape) * 3.0
         # Channel that is slightly biased, but
         # wouldn't be picked up in a single dump
-        data[:, 260] += 0.2 * flagger.average_freq
-        expected[:, 260] = True
+        data[:, :, 260] += 0.2 * flagger.average_freq
+        expected[:, :, 260] = True
         # Test input NaN value flagged on output
-        data[225, 225] = np.nan
-        expected[225, 225] = True
+        data[:, 225, 225] = np.nan
+        expected[:, 225, 225] = True
         in_flags = np.zeros(shape, np.bool_)
         # Pre-flag some channels, and make those values NaN (because cal
         # currently does this - but should be fixed).
-        in_flags[:, 185:190] = True
-        data[:, 185:190] = np.nan
+        in_flags[:, :, 185:190] = True
+        data[:, :, 185:190] = np.nan
         return np.abs(data), in_flags, expected
 
     def _test_get_flags(self, flagger):
@@ -574,19 +574,20 @@ class TestSumThresholdFlagger(object):
         # TODO: improve _get_background2d so that it better fits a slope
         # at the edges of the passband.
         allowed = expected | in_flags
-        allowed[:-1] |= allowed[1:]
-        allowed[1:] |= allowed[:-1]
-        allowed[:, :-1] |= allowed[:, 1:]
-        allowed[:, 1:] |= allowed[:, :-1]
-        allowed[:, :40] = True
-        allowed[:, -40:] = True
+        allowed[:, :-1, :] |= allowed[:, 1:, :]
+        allowed[:, 1:, :] |= allowed[:, :-1, :]
+        allowed[:, :, :-1] |= allowed[:, :, 1:]
+        allowed[:, :, 1:] |= allowed[:, :, :-1]
+        allowed[:, :, :40] = True
+        allowed[:, :, -40:] = True
         missing = expected & ~out_flags
         extra = out_flags & ~allowed
         # Uncomment for debugging failures
+        # print(np.where(missing > 0))
         # import matplotlib.pyplot as plt
-        # plt.imshow(expected[..., 0] +
-        #            2 * out_flags[..., 0] +
-        #            4 * allowed[..., 0])
+        # plt.imshow(expected[0, ...] +
+        #            2 * out_flags[0, ...] +
+        #            4 * allowed[0, ...])
         # plt.show()
         assert 0 == missing.sum()
         assert extra.sum() / data.size < 0.03
@@ -616,7 +617,7 @@ class TestSumThresholdFlagger(object):
         # self._test_get_flags(flagger)
 
     def _test_get_flags_all_flagged(self, flagger):
-        data = np.zeros((100, 80, 4), np.float32)
+        data = np.zeros((4, 100, 80), np.float32)
         in_flags = np.ones(data.shape, np.bool_)
         out_flags = flagger.get_flags(data, in_flags)
         np.testing.assert_array_equal(np.zeros_like(in_flags), out_flags)
@@ -631,27 +632,27 @@ class TestSumThresholdFlagger(object):
     def test_variable_noise(self):
         """Noise level that varies across the band."""
         rs = np.random.RandomState(seed=1)
-        shape = (234, 345, 1)
+        shape = (1, 234, 345)
         # For this test we use a flat background, to avoid the issues with
         # bandpass estimation in sloped regions.
         background = np.ones(shape, np.float32) * 11
         # Noise level that varies from 0 to 1 across the band
         noise = rs.standard_normal(shape)
-        noise *= np.arange(shape[1])[np.newaxis, :, np.newaxis] / shape[1]
+        noise *= np.arange(shape[2])[np.newaxis, np.newaxis, :] / shape[2]
         noise = noise.astype(np.float32)
-        noise[100, 17] = 1.0    # About 20 sigma - must be detected
-        noise[200, 170] = 1.0   # About 2 sigma -  must not be detected
+        noise[:, 100, 17] = 1.0    # About 20 sigma - must be detected
+        noise[:, 200, 170] = 1.0   # About 2 sigma -  must not be detected
         data = np.abs(background + noise)
         in_flags = np.zeros(shape, np.bool_)
         out_flags = self.flagger.get_flags(data, in_flags)
-        assert out_flags[100, 17, 0] == True  # noqa
-        assert out_flags[200, 170, 0] == False  # noqa
+        assert out_flags[0, 100, 17] == True  # noqa
+        assert out_flags[0, 200, 170] == False  # noqa
 
     def _test_parallel(self, pool):
         """Test that parallel execution gets same results as serial"""
         rs = np.random.RandomState(seed=1)
         data, in_flags, expected = self._make_data(self.flagger, rs,
-                                                   shape=(234, 512, 32))
+                                                   shape=(32, 234, 512))
         out_serial = self.flagger.get_flags(data, in_flags)
         out_parallel = self.flagger.get_flags(data, in_flags, pool=pool)
         np.testing.assert_array_equal(out_serial, out_parallel)

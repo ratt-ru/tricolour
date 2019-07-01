@@ -40,13 +40,13 @@ def channels():
 @pytest.fixture
 def flag_windows(unique_baselines):
     nbl = unique_baselines.shape[0]
-    return np.random.randint(0, 2, (ntime, nchan, nbl, ncorr))
+    return np.random.randint(0, 2, (nbl, ncorr, ntime, nchan))
 
 
 @pytest.mark.parametrize("scan_nrs", [[0, 1, 2]])
 @pytest.mark.parametrize("field_names", [["M87", "Sag A*"]])
 @pytest.mark.parametrize("ddids", [[0, 1, 2]])
-def test_window_statistisc(antenna_names, unique_baselines,
+def test_window_statistics(antenna_names, unique_baselines,
                            channels, flag_windows,
                            scan_nrs, field_names, ddids):
 

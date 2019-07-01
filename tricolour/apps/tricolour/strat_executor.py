@@ -12,6 +12,7 @@ from tricolour.dask_wrappers import (sum_threshold_flagger,
                                      polarised_intensity,
                                      uvcontsub_flagger,
                                      flag_autos,
+                                     flag_nans_and_zeros,
                                      apply_static_mask)
 
 
@@ -30,7 +31,7 @@ class StrategyExecutor(object):
         return self
 
     def __exit__(self, etype, evalue, etraceback):
-        return True
+        pass
 
     def apply_strategies(self, flag_windows, vis_windows):
         original = flag_windows.copy()
@@ -66,12 +67,7 @@ class StrategyExecutor(object):
             elif task == "unflag":
                 flag_windows = da.zeros_like(flag_windows)
             elif task == "flag_nans_zeros":
-                new_flags = flag_windows.copy()
-                sel = da.logical_or(vis_windows == 0 + 0j,
-                                    da.isnan(vis_windows))
-                new_flags[sel] = True
-                flag_windows = da.logical_or(flag_windows,
-                                             new_flags)
+                flag_windows = flag_nans_and_zeros(vis_windows, flag_windows)
             elif task == "apply_static_mask":
                 new_flags = apply_static_mask(flag_windows,
                                               self.ubl,

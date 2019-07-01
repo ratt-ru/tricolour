@@ -6,7 +6,7 @@ from __future__ import print_function
 
 import dask.array as da
 import numpy as np
-from numpy.testing import assert_array_almost_equal
+from numpy.testing import assert_array_equal
 import pytest
 import zarr
 
@@ -14,7 +14,8 @@ from tricolour.packing import (unique_baselines,
                                create_vis_windows,
                                create_flag_windows,
                                pack_data,
-                               unpack_data)
+                               unpack_data,
+                               _WINDOW_SCHEMA)
 
 
 def flag_data(vis_windows, flag_windows):
@@ -23,16 +24,15 @@ def flag_data(vis_windows, flag_windows):
     def _flag_data(vis_windows, flag_windows):
         return flag_windows
 
-    dims = ("time", "chan", "bl", "corr")
-
-    return da.blockwise(_flag_data, dims,
-                        vis_windows, dims,
-                        flag_windows, dims,
+    return da.blockwise(_flag_data, _WINDOW_SCHEMA,
+                        vis_windows, _WINDOW_SCHEMA,
+                        flag_windows, _WINDOW_SCHEMA,
                         dtype=vis_windows.dtype)
 
 
 @pytest.mark.parametrize("backend", ["numpy", "zarr-disk"])
 def test_vis_and_flag_packing(tmpdir, backend):
+    rs = np.random.RandomState(seed=1)
     na = 7
     ntime = 10
     nchan = 16
@@ -49,13 +49,21 @@ def test_vis_and_flag_packing(tmpdir, backend):
 
     nrow = time.size
 
-    vis = (np.random.random((nrow, nchan, ncorr)) +
-           np.random.random((nrow, nchan, ncorr))*1j)
+    vis = (rs.standard_normal((nrow, nchan, ncorr)) +
+           rs.standard_normal((nrow, nchan, ncorr))*1j)
 
-    flag = np.random.randint(0, 2, (nrow, nchan, ncorr))
+    flag = rs.randint(0, 2, (nrow, nchan, ncorr))
 
     bl_chunks = nbl // 4
     row_chunks = 10
+
+    # Remove some rows
+    del_rows = np.random.randint(nrow, size=15)
+    antenna1 = np.delete(antenna1, del_rows)
+    antenna2 = np.delete(antenna2, del_rows)
+    time = np.delete(time, del_rows)
+    vis = np.delete(vis, del_rows, axis=0)
+    flag = np.delete(flag, del_rows, axis=0)
 
     antenna1 = da.from_array(antenna1, chunks=row_chunks)
     antenna2 = da.from_array(antenna2, chunks=row_chunks)
@@ -72,12 +80,9 @@ def test_vis_and_flag_packing(tmpdir, backend):
 
     _, time_inv = da.unique(time, return_inverse=True)
 
-    result = pack_data(time_inv, ubl, antenna1, antenna2,
-                       vis, flag, ntime,
-                       backend=backend, path=tmpdir,
-                       return_objs=True)
-
-    vis_windows, flag_windows, vis_win_obj, flag_win_obj = result
+    vis_windows, flag_windows = pack_data(time_inv, ubl, antenna1, antenna2,
+                                          vis, flag, ntime,
+                                          backend=backend, path=tmpdir)
 
     flag_windows = flag_data(vis_windows, flag_windows)
 
@@ -87,20 +92,8 @@ def test_vis_and_flag_packing(tmpdir, backend):
     unpacked_vis = unpack_data(antenna1, antenna2, time_inv,
                                ubl, vis_windows)
 
-    result = da.compute(vis, flag, vis_win_obj, flag_win_obj,
-                        unpacked_vis, unpacked_flags)
-    (vis, flag, vis_win_obj, flag_win_obj,
-     unpacked_vis, unpacked_flags) = result
+    result = da.compute(vis, flag, unpacked_vis, unpacked_flags)
+    (vis, flag, unpacked_vis, unpacked_flags) = result
 
-    # Check that we've created the correct type of backend object
-    if backend == "numpy":
-        assert isinstance(vis_win_obj, np.ndarray)
-        assert isinstance(flag_win_obj, np.ndarray)
-    elif backend == "zarr-disk":
-        assert isinstance(vis_win_obj, zarr.Array)
-        assert isinstance(flag_win_obj, zarr.Array)
-    else:
-        raise ValueError("Unhandled backend '%s'" % backend)
-
-    assert_array_almost_equal(flag, unpacked_flags)
-    assert_array_almost_equal(vis, unpacked_vis)
+    assert_array_equal(flag, unpacked_flags)
+    assert_array_equal(vis, unpacked_vis)
