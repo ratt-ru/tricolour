@@ -32,6 +32,7 @@ def flag_data(vis_windows, flag_windows):
 
 @pytest.mark.parametrize("backend", ["numpy", "zarr-disk"])
 def test_vis_and_flag_packing(tmpdir, backend):
+    np.random.seed(42)
     na = 7
     ntime = 10
     nchan = 16
@@ -55,6 +56,14 @@ def test_vis_and_flag_packing(tmpdir, backend):
 
     bl_chunks = nbl // 4
     row_chunks = 10
+
+    # Remove some rows
+    del_rows = np.random.randint(nrow, size=15)
+    antenna1 = np.delete(antenna1, del_rows)
+    antenna2 = np.delete(antenna2, del_rows)
+    time = np.delete(time, del_rows)
+    vis = np.delete(vis, del_rows, axis=0)
+    flag = np.delete(flag, del_rows, axis=0)
 
     antenna1 = da.from_array(antenna1, chunks=row_chunks)
     antenna2 = da.from_array(antenna2, chunks=row_chunks)
