@@ -19,7 +19,7 @@ requirements = [
     'numpy >= 1.14.0',
     'numba >= 0.43.0',
     'scipy >= 1.2.0',
-    'xarray-ms >= 0.1.5',
+    'xarray-ms >= 0.1.9',
     'zarr >= 2.3.1'
 ]
 
