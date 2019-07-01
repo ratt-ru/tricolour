@@ -27,9 +27,7 @@ requirements = [
     'zarr >= 2.3.1'
 ]
 
-setup_requirements = ['pytest-runner', ]
-
-test_requirements = ['pytest']
+extras_require = {'testing': ['pytest']}
 
 setup(
     author="Simon Perkins",
@@ -46,15 +44,13 @@ setup(
     entry_points={
         'console_scripts': ['tricolour=tricolour.apps.tricolour.app:main'],
     },
+    extras_require=extras_require,
     install_requires=requirements,
     long_description=readme + '\n\n' + history,
     include_package_data=True,
     keywords='tricolour',
     name='tricolour',
     packages=find_packages(),
-    setup_requires=setup_requirements,
-    test_suite='tests',
-    tests_require=test_requirements,
     url='https://github.com/ska-sa/tricolour',
     version='0.1.0',
     zip_safe=False,
