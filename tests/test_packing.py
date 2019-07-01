@@ -6,7 +6,7 @@ from __future__ import print_function
 
 import dask.array as da
 import numpy as np
-from numpy.testing import assert_array_almost_equal
+from numpy.testing import assert_array_equal
 import pytest
 import zarr
 
@@ -86,5 +86,5 @@ def test_vis_and_flag_packing(tmpdir, backend):
     result = da.compute(vis, flag, unpacked_vis, unpacked_flags)
     (vis, flag, unpacked_vis, unpacked_flags) = result
 
-    assert_array_almost_equal(flag, unpacked_flags)
-    assert_array_almost_equal(vis, unpacked_vis)
+    assert_array_equal(flag, unpacked_flags)
+    assert_array_equal(vis, unpacked_vis)
