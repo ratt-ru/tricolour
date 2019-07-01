@@ -20,7 +20,7 @@ from tricolour.stokes import (stokes_corr_map,
     ['RL', 'RR', 'LL', 'LR']])
 def test_unpolarised_intensity(stokes):
     # Set up our stokes parameters in an interesting order
-    stokes = map(STOKES_TYPES.__getitem__, stokes)
+    stokes = list(map(STOKES_TYPES.__getitem__, stokes))
     vis = np.asarray([[[1+1j, 2+2j, 3+3j, 4+4j]]], np.complex128)
 
     stokes_map = stokes_corr_map(stokes)
@@ -53,7 +53,7 @@ def test_unpolarised_intensity(stokes):
     ['RL', 'RR', 'LL', 'LR']])
 def test_polarised_intensity(stokes):
     # Set up our stokes parameters in an interesting order
-    stokes = map(STOKES_TYPES.__getitem__, stokes)
+    stokes = list(map(STOKES_TYPES.__getitem__, stokes))
     vis = np.asarray([[[1+1j, 2+2j, 3+3j, 4+4j]]], np.complex128)
 
     stokes_map = stokes_corr_map(stokes)
