@@ -5,7 +5,6 @@ from __future__ import division
 from __future__ import print_function
 
 from argparse import ArgumentTypeError
-import six
 import re
 
 import numpy as np
@@ -84,7 +83,7 @@ def casa_style_range(val, argparse=False):
     """ returns list of ints """
     RangeException = ArgumentTypeError if argparse else ValueError
 
-    if not isinstance(val, six.string_types):
+    if not isinstance(val, str):
         raise RangeException("Value must be a string")
     if val == "":
         return (0, np.inf)
