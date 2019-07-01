@@ -32,7 +32,7 @@ def flag_data(vis_windows, flag_windows):
 
 @pytest.mark.parametrize("backend", ["numpy", "zarr-disk"])
 def test_vis_and_flag_packing(tmpdir, backend):
-    np.random.seed(42)
+    rs = np.random.RandomState(seed=1)
     na = 7
     ntime = 10
     nchan = 16
@@ -49,10 +49,10 @@ def test_vis_and_flag_packing(tmpdir, backend):
 
     nrow = time.size
 
-    vis = (np.random.random((nrow, nchan, ncorr)) +
-           np.random.random((nrow, nchan, ncorr))*1j)
+    vis = (rs.standard_normal((nrow, nchan, ncorr)) +
+           rs.standard_normal((nrow, nchan, ncorr))*1j)
 
-    flag = np.random.randint(0, 2, (nrow, nchan, ncorr))
+    flag = rs.randint(0, 2, (nrow, nchan, ncorr))
 
     bl_chunks = nbl // 4
     row_chunks = 10
