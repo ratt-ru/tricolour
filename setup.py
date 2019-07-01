@@ -4,8 +4,12 @@
 """The setup script."""
 
 from os.path import join as pjoin
+import sys
 
 from setuptools import setup, find_packages
+
+if sys.version_info.major < 3:
+    raise ValueError("python 2 is not supported")
 
 with open('README.rst') as readme_file:
     readme = readme_file.read()
@@ -34,8 +38,6 @@ setup(
         'Development Status :: 2 - Pre-Alpha',
         'Intended Audience :: Developers',
         'Natural Language :: English',
-        "Programming Language :: Python :: 2",
-        'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
