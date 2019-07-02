@@ -152,6 +152,9 @@ def _zarr_pack_transpose(data, valid):
 
     result = np.empty((corrs, len(valid_rows), chans), dtype=data.dtype)
 
+    # We're selecting all times for one baseline
+    # So we order by (corr, row (time), chan) for
+    # the assignments below
     for out_row, in_row in enumerate(valid_rows):
         for f in range(chans):
             for c in range(corrs):
@@ -176,6 +179,9 @@ def _numpy_pack_transpose(window, data, valid, row_idx):
     if len(valid_rows) != row_idx.shape[0]:
         raise ValueError("len(valid_rows) != row_idx.shape[0]")
 
+    # We're selecting all times for one baseline
+    # So we order by (corr, row (time), chan) for
+    # the assignments below
     for out_row, in_row in zip(row_idx, valid_rows):
         for f in range(chans):
             for c in range(corrs):
@@ -220,10 +226,6 @@ def _pack_data(time_inv, ubl,
             # Ignore if we have nothing to pack
             if time_idx.size == 0:
                 continue
-
-            # We're selecting all times for one baseline
-            # So we order by (corr, row (time), chan) for
-            # the assignments below
 
             if zarr_case:
                 # Slice if we have a contiguous time range of values
@@ -321,6 +323,9 @@ def _numpy_unpack_transpose(data, window, valid, row_idx):
     if len(valid_rows) != row_idx.shape[0]:
         raise ValueError("len(valid_rows) != row_idx.shape[0]")
 
+    # We're selecting all times for one baseline
+    # So we order by (corr, row (time), chan) for
+    # the assignments below
     for out_row, in_row in zip(valid_rows, row_idx):
         for f in range(chans):
             for c in range(corrs):
