@@ -10,7 +10,6 @@ import dask
 import dask.array as da
 from dask.highlevelgraph import HighLevelGraph
 import numpy as np
-from numcodecs import Blosc
 import zarr
 
 
