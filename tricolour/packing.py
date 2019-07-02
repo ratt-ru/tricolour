@@ -9,6 +9,7 @@ from tempfile import mkdtemp
 import dask
 import dask.array as da
 from dask.highlevelgraph import HighLevelGraph
+import numba
 import numpy as np
 import zarr
 
@@ -136,6 +137,51 @@ def _rand_sort(key):
     return random.random()
 
 
+@numba.njit(nogil=True, cache=True)
+def _zarr_pack_transpose(data, valid):
+    rows, chans, corrs = data.shape
+
+    if rows != valid.shape[0]:
+        raise ValueError("data rows don't match valid rows")
+
+    valid_rows = []
+
+    for r in range(rows):
+        if valid[r]:
+            valid_rows.append(r)
+
+    result = np.empty((corrs, len(valid_rows), chans), dtype=data.dtype)
+
+    for out_row, in_row in enumerate(valid_rows):
+        for f in range(chans):
+            for c in range(corrs):
+                result[c, out_row, f] = data[in_row, f, c]
+
+    return result
+
+
+@numba.njit(nogil=True, cache=True)
+def _numpy_pack_transpose(window, data, valid, row_idx):
+    rows, chans, corrs = data.shape
+
+    if rows != valid.shape[0]:
+        raise ValueError("data rows don't match valid rows")
+
+    valid_rows = []
+
+    for r in range(rows):
+        if valid[r]:
+            valid_rows.append(r)
+
+    if len(valid_rows) != row_idx.shape[0]:
+        raise ValueError("len(valid_rows) != row_idx.shape[0]")
+
+    for out_row, in_row in zip(row_idx, valid_rows):
+        for f in range(chans):
+            for c in range(corrs):
+                window[c, out_row, f] = data[in_row, f, c]
+
+
 def _pack_data(time_inv, ubl,
                ant1, ant2, data, flag,
                vis_windows, flag_windows):
@@ -175,24 +221,22 @@ def _pack_data(time_inv, ubl,
             if time_idx.size == 0:
                 continue
 
-            # Slice if we have a contiguous time range of values
-            if np.all(np.diff(time_idx) == 1):
-                time_idx = slice(time_idx[0], time_idx[-1] + 1)
-
             # We're selecting all times for one baseline
             # So we order by (corr, row (time), chan) for
             # the assignments below
-            data_transposed = data[valid, :, :].transpose(2, 0, 1)
-            flag_transposed = flag[valid, :, :].transpose(2, 0, 1)
-
-            # import pdb; pdb.set_trace()
 
             if zarr_case:
-                vis_windows.oindex[bl, :, time_idx, :] = data_transposed
-                flag_windows.oindex[bl, :, time_idx, :] = flag_transposed
+                # Slice if we have a contiguous time range of values
+                if np.all(np.diff(time_idx) == 1):
+                    time_idx = slice(time_idx[0], time_idx[-1] + 1)
+
+                data_t = _zarr_pack_transpose(data, valid)
+                vis_windows.oindex[bl, :, time_idx, :] = data_t
+                flag_t = _zarr_pack_transpose(flag, valid)
+                flag_windows.oindex[bl, :, time_idx, :] = flag_t
             else:
-                vis_windows[bl, :, time_idx, :] = data_transposed
-                flag_windows[bl, :, time_idx, :] = flag_transposed
+                _numpy_pack_transpose(vis_windows[bl], data, valid, time_idx)
+                _numpy_pack_transpose(flag_windows[bl], flag, valid, time_idx)
 
     return np.array([[[True]]])
 
@@ -264,6 +308,25 @@ def pack_data(time_inv, ubl,
     return vis_windows, flag_windows
 
 
+@numba.njit(nogil=True, cache=True)
+def _numpy_unpack_transpose(data, window, valid, row_idx):
+    rows, chans, corrs = data.shape
+
+    valid_rows = []
+
+    for r in range(rows):
+        if valid[r]:
+            valid_rows.append(r)
+
+    if len(valid_rows) != row_idx.shape[0]:
+        raise ValueError("len(valid_rows) != row_idx.shape[0]")
+
+    for out_row, in_row in zip(valid_rows, row_idx):
+        for f in range(chans):
+            for c in range(corrs):
+                data[out_row, f, c] = window[c, in_row, f]
+
+
 def _unpack_data(antenna1, antenna2, time_inv, ubl, windows):
     exemplar = windows[0][0]
 
@@ -286,14 +349,7 @@ def _unpack_data(antenna1, antenna2, time_inv, ubl, windows):
             if time_idx.size == 0:
                 continue
 
-            # Slice if we have a contiguous time range of values
-            if np.all(np.diff(time_idx) == 1):
-                time_idx = slice(time_idx[0], time_idx[-1] + 1)
-
-            # We're selecting all times for one baseline
-            # So we order by (row (time), chan, corr) for
-            # the assignment below
-            data[valid, :, :] = window[bl, :, time_idx, :].transpose(1, 2, 0)
+            _numpy_unpack_transpose(data, window[bl], valid, time_idx)
 
     return data
 
