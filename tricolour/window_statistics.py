@@ -47,7 +47,7 @@ def _window_stats(flag_window, ubls, chan_freqs,
             bins[ch_i] = np.sum(flag_window[:, :, :, sel])
 
         stats._counts_per_ddid[ddid] += bins
-        stats._bins_per_ddid[ddid] = bins_edges # frequency labels
+        stats._bins_per_ddid[ddid] = bins_edges  # frequency labels
         stats._size_per_ddid[ddid] += flag_window.size
 
     return stats
@@ -114,8 +114,10 @@ def window_stats(flag_window, ubls, chan_freqs,
 
     # Create an empty stats object if the user hasn't supplied one
     if prev_stats is None:
-        prev_stats = da.blockwise(WindowStatistics, (),
-                                  nchanbins, None,
+        def _window_stat_creator():
+            return WindowStatistics(nchanbins)
+
+        prev_stats = da.blockwise(_window_stat_creator, (),
                                   dtype=np.object)
 
     # Combine per-baseline stats into a single stats object
