@@ -188,29 +188,26 @@ def _numpy_pack_transpose(window, data, valid, row_idx):
                 window[c, out_row, f] = data[in_row, f, c]
 
 
-def _pack_data(time_inv, ubl,
-               ant1, ant2, data, flag,
-               vis_windows, flag_windows):
-
-    time_inv = time_inv
-    ant1 = ant1
-    ant2 = ant2
-    data = data
-    flag = flag
-
+def _slow_pack_data(time_inv, ubl,
+                    ant1, ant2, data, flag,
+                    vis_windows, flag_windows):
     vis_windows = vis_windows[0]
     flag_windows = flag_windows[0]
 
     assert vis_windows.shape == flag_windows.shape
 
-    if isinstance(vis_windows, zarr.Array) and (flag_windows, zarr.Array):
+    if (isinstance(vis_windows, zarr.Array) and
+            isinstance(flag_windows, zarr.Array)):
         zarr_case = True
     elif (isinstance(vis_windows, np.ndarray) and
             isinstance(flag_windows, np.ndarray)):
         zarr_case = False
     else:
         raise TypeError("visibility '%s' and flag '%s' types must both "
-                        "be zarr or numpy arrays")
+                        "be numpy or zarr arrays")
+
+    # We're dealing with all baselines at once
+    assert sum(len(bl_list[0]) for bl_list in ubl) == vis_windows.shape[0]
 
     # This double for loop is strange, mostly because ubl and bl_index
     # are lists (or lists of lists) of ndarrays. As the "bl" and "bl-comp"
@@ -233,14 +230,68 @@ def _pack_data(time_inv, ubl,
                     time_idx = slice(time_idx[0], time_idx[-1] + 1)
 
                 data_t = _zarr_pack_transpose(data, valid)
-                vis_windows.oindex[bl, :, time_idx, :] = data_t
                 flag_t = _zarr_pack_transpose(flag, valid)
+
+                vis_windows.oindex[bl, :, time_idx, :] = data_t
                 flag_windows.oindex[bl, :, time_idx, :] = flag_t
             else:
+                # Faster path
                 _numpy_pack_transpose(vis_windows[bl], data, valid, time_idx)
                 _numpy_pack_transpose(flag_windows[bl], flag, valid, time_idx)
 
     return np.array([[[True]]])
+
+
+@numba.njit(nogil=True, cache=True)
+def _numba_pack_data(time_inv, ubl,
+                     ant1, ant2, data, flag,
+                     vis_windows, flag_windows):
+    rows, chans, corrs = data.shape
+
+    if vis_windows.shape[3] != chans:
+        raise ValueError("channels mismatch")
+
+    if vis_windows.shape[1] != corrs:
+        raise ValueError("correlations mismatch")
+
+    if vis_windows.shape != flag_windows.shape:
+        raise ValueError("vis_windows.shape != flag_windows.shape")
+
+    # We're dealing with all baselines at once
+    assert ubl.shape == (vis_windows.shape[0], 3)
+
+    # Pack each baseline
+    for b in range(ubl.shape[0]):
+        bl, a1, a2 = ubl[b]
+
+        for r in range(rows):
+            # Only handle rows for this baseline
+            if ant1[r] != a1 or ant2[r] != a2:
+                continue
+
+            # lookup time index
+            t = time_inv[r]
+
+            for f in range(chans):
+                for c in range(corrs):
+                    vis_windows[bl, c, t, f] = data[r, f, c]
+                    flag_windows[bl, c, t, f] = flag[r, f, c]
+
+    return np.array([[[True]]])
+
+
+def _fast_pack_data(time_inv, ubl,
+                    ant1, ant2, data, flag,
+                    vis_windows, flag_windows):
+
+    # Flatten the baseline lists
+    ubl = np.concatenate([bl for bl_list in ubl for bl in bl_list])
+
+    return _numba_pack_data(time_inv, ubl,
+                            ant1, ant2,
+                            data, flag,
+                            vis_windows[0],
+                            flag_windows[0])
 
 
 def _packed_windows(dummy_result, ubl, window):
@@ -277,8 +328,15 @@ def pack_data(time_inv, ubl,
                                        backend=backend,
                                        path=path)
 
+    if backend == "numpy":
+        pack_fn = _fast_pack_data
+    elif backend == "zarr-disk":
+        pack_fn = _slow_pack_data
+    else:
+        raise ValueError("Invalid backend '%s'" % backend)
+
     # Pack data into our window objects
-    packing = da.blockwise(_pack_data, ("row", "chan", "corr"),
+    packing = da.blockwise(pack_fn, ("row", "chan", "corr"),
                            time_inv, ("row", ),
                            ubl, ("bl", "bl-comp"),
                            antenna1, ("row",),
