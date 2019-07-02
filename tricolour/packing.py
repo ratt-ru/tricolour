@@ -70,8 +70,7 @@ def _create_window(name, ntime, nchan, nbl, ncorr,
                                     read_only=False,
                                     store=pjoin(path, "-".join((name, token))))
     elif backend == "numpy":
-        return [np.full((ncorr, ntime, nchan), default, dtype=dtype)
-                for bl in range(nbl)]
+        return np.full((nbl, ncorr, ntime, nchan), default, dtype=dtype)
     else:
         raise ValueError("Invalid backend '%s'" % backend)
 
@@ -150,16 +149,16 @@ def _pack_data(time_inv, ubl,
     vis_windows = vis_windows[0]
     flag_windows = flag_windows[0]
 
+    assert vis_windows.shape == flag_windows.shape
+
     if isinstance(vis_windows, zarr.Array) and (flag_windows, zarr.Array):
-        assert vis_windows.shape == flag_windows.shape
         zarr_case = True
-    elif (isinstance(vis_windows, list) and
-          isinstance(flag_windows, list)):
-        assert vis_windows[0].shape == flag_windows[0].shape
+    elif (isinstance(vis_windows, np.ndarray) and
+            isinstance(flag_windows, np.ndarray)):
         zarr_case = False
     else:
         raise TypeError("visibility '%s' and flag '%s' types must both "
-                        "be a zarr Array or lists of numpy arrays")
+                        "be zarr or numpy arrays")
 
     # This double for loop is strange, mostly because ubl and bl_index
     # are lists (or lists of lists) of ndarrays. As the "bl" and "bl-comp"
@@ -192,8 +191,8 @@ def _pack_data(time_inv, ubl,
                 vis_windows.oindex[bl, :, time_idx, :] = data_transposed
                 flag_windows.oindex[bl, :, time_idx, :] = flag_transposed
             else:
-                vis_windows[bl][:, time_idx, :] = data_transposed
-                flag_windows[bl][:, time_idx, :] = flag_transposed
+                vis_windows[bl, :, time_idx, :] = data_transposed
+                flag_windows[bl, :, time_idx, :] = flag_transposed
 
     return np.array([[[True]]])
 
@@ -206,25 +205,21 @@ def _packed_windows(dummy_result, ubl, window):
     if np.all(np.diff(bl_index) == 1):
         bl_index = slice(bl_index[0], bl_index[-1] + 1)
 
-    if isinstance(window, zarr.Array):
-        return window[bl_index, :, :, :]
-    elif isinstance(window, list):
-        return np.stack(window[bl_index], axis=0)
-    else:
-        raise ValueError("Window must either be a single zarr Array "
-                         "or a list of numpy arrays '%s'." % type(window))
+    return window[bl_index, :, :, :]
 
 
 def pack_data(time_inv, ubl,
               antenna1, antenna2,
               data, flags, ntime,
-              backend="numpy", path=None):
+              backend="numpy", path=None,
+              return_objs=False):
 
     nchan, ncorr = data.shape[1:3]
     nbl = ubl.shape[0]
 
     token = dask.base.tokenize(time_inv, ubl, antenna1, antenna2,
-                               data, flags, ntime, backend, path)
+                               data, flags, ntime, backend, path,
+                               return_objs)
 
     vis_win_obj = create_vis_windows(ntime, nchan, nbl, ncorr, token,
                                      dtype=data.dtype,
@@ -262,6 +257,9 @@ def pack_data(time_inv, ubl,
                                 flag_win_obj, ("windim",),
                                 new_axes={"time": ntime},
                                 dtype=flags.dtype)
+
+    if return_objs:
+        return vis_windows, flag_windows, vis_win_obj, flag_win_obj
 
     return vis_windows, flag_windows
 
