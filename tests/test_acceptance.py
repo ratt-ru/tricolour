@@ -40,11 +40,11 @@ def flagged_ms(request, tmp_path_factory):
 
     # Set up our paths
     ms_filename = pjoin(str(tmp_path), '1519747221.subset.ms')
-    this_test_path = os.path.dirname(__file__)
+    test_directory = os.path.dirname(__file__)
 
     args = ['tricolour',
             '-fs', 'polarisation',
-            '-c', os.path.join(this_test_path, 'custom.yaml'),
+            '-c', os.path.join(test_directory, 'custom.yaml'),
             ms_filename]
 
     # Flag the MS, waiting for timeout period to expre
