@@ -31,14 +31,14 @@ def flagged_ms(request, tmp_path_factory):
         pytest.skip("TRICOLOUR_TEST_MS environment variable not set "
                     " to '/location/of/acceptance_test_data.tar.gz'")
 
-    tmp_path = tmp_path_factory.mktemp('data')
+    tmp_path = str(tmp_path_factory.mktemp('data'))
 
     # Open and extract tarred ms
     tarred_ms = tarfile.open(tarred_ms_filename)
-    tarred_ms.extractall(str(tmp_path))
+    tarred_ms.extractall(tmp_path)
 
     # Set up our paths
-    ms_filename = pjoin(str(tmp_path), '1519747221.subset.ms')
+    ms_filename = pjoin(tmp_path, '1519747221.subset.ms')
     test_directory = os.path.dirname(__file__)
 
     args = ['tricolour',
