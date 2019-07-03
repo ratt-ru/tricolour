@@ -23,6 +23,9 @@ import pytest
 
 @pytest.fixture(params=[250], scope="module")
 def flagged_ms(request, tmp_path_factory):
+    """
+    fixture yielding an MS flagged by tricolour
+    """
     try:
         tarred_ms_filename = os.environ["TRICOLOUR_TEST_MS"]
     except KeyError:
@@ -82,14 +85,14 @@ def test_mean_chisq(flagged_ms, tol):
         flag = t.getcol("FLAG")
         data = t.getcol("DATA")
 
-    data_sel = data[fid == fnames.index("3C286")]
-    diff = (np.abs(data_sel) - np.nanmean(np.abs(data_sel), axis=0))**2
+    abs_data_sel = np.abs(data[fid == fnames.index("3C286")])
+    diff = (abs_data_sel - np.nanmean(abs_data_sel, axis=0))**2
     chisq_unflagged_3c286 = np.nanmean(diff, axis=(0, 1))
     corrs_str = ",".join(["{0:.3f}".format(f) for f in chisq_unflagged_3c286])
     print("Chi^2 unflagged 3C286: [%s]" % corrs_str)
 
-    data_sel = data[fid == fnames.index("PKS1934-63")]
-    diff = (np.abs(data_sel) - np.nanmean(np.abs(data_sel), axis=0))**2
+    abs_data_sel = np.abs(data[fid == fnames.index("PKS1934-63")])
+    diff = (abs_data_sel - np.nanmean(abs_data_sel, axis=0))**2
     chisq_unflagged_1934 = np.nanmean(diff, axis=(0, 1))
     corrs_str = ",".join(["{0:.3f}".format(f) for f in chisq_unflagged_1934])
     print("Chi^2 unflagged PKS B1934-638: [%s]" % corrs_str)
@@ -97,14 +100,14 @@ def test_mean_chisq(flagged_ms, tol):
     # flag data
     data[flag] = np.nan
 
-    data_sel = data[fid == fnames.index("3C286")]
-    diff = (np.abs(data_sel) - np.nanmean(np.abs(data_sel), axis=0))**2
+    abs_data_sel = np.abs(data[fid == fnames.index("3C286")])
+    diff = (abs_data_sel - np.nanmean(abs_data_sel, axis=0))**2
     chisq_flagged_3c286 = np.nanmean(diff, axis=(0, 1))
     corrs_str = ",".join(["{0:.3f}".format(f) for f in chisq_flagged_3c286])
     print("Chi^2 flagged 3C286: [%s]" % corrs_str)
 
-    data_sel = data[fid == fnames.index("PKS1934-63")]
-    diff = (np.abs(data_sel) - np.nanmean(np.abs(data_sel), axis=0))**2
+    abs_data_sel = np.abs(data[fid == fnames.index("PKS1934-63")])
+    diff = (abs_data_sel - np.nanmean(abs_data_sel, axis=0))**2
     chisq_flagged_1934 = np.nanmean(diff, axis=(0, 1))
     corrs_str = ",".join(["{0:.3f}".format(f) for f in chisq_flagged_1934])
     print("Chi^2 flagged PKS B1934-638:", corrs_str)
@@ -124,13 +127,13 @@ def test_max_chisq(flagged_ms, tol):
         flag = t.getcol("FLAG")
         data = t.getcol("DATA")
 
-    abs_data_sel = data[fid == fnames.index("3C286")]
+    abs_data_sel = np.abs(data[fid == fnames.index("3C286")])
     diff = (abs_data_sel - np.nanmean(abs_data_sel, axis=0))**2
     chisq_unflagged_3c286 = np.nanmax(diff, axis=(0, 1))
     corrs_str = ",".join(["{0:.3f}".format(f) for f in chisq_unflagged_3c286])
     print("Max Chi^2 unflagged 3C286: [%s]" % corrs_str)
 
-    abs_data_sel = data[fid == fnames.index("PKS1934-63")]
+    abs_data_sel = np.abs(data[fid == fnames.index("PKS1934-63")])
     diff = (abs_data_sel - np.nanmean(abs_data_sel, axis=0))**2
     chisq_unflagged_1934 = np.nanmax(diff, axis=(0, 1))
     corrs_str = ",".join(["{0:.3f}".format(f) for f in chisq_unflagged_1934])
@@ -139,13 +142,13 @@ def test_max_chisq(flagged_ms, tol):
     # flag data
     data[flag] = np.nan
 
-    abs_data_sel = data[fid == fnames.index("3C286")]
+    abs_data_sel = np.abs(data[fid == fnames.index("3C286")])
     diff = (abs_data_sel - np.nanmean(abs_data_sel, axis=0))**2
     chisq_flagged_3c286 = np.nanmax(diff, axis=(0, 1))
     corrs_str = ",".join(["{0:.3f}".format(f) for f in chisq_flagged_3c286])
     print("Max Chi^2 flagged 3C286: [%s]" % corrs_str)
 
-    abs_data_sel = data[fid == fnames.index("PKS1934-63")]
+    abs_data_sel = np.abs(data[fid == fnames.index("PKS1934-63")])
     diff = (abs_data_sel - np.nanmean(abs_data_sel, axis=0))**2
     chisq_flagged_1934 = np.nanmax(diff, axis=(0, 1))
     corrs_str = ",".join(["{0:.3f}".format(f) for f in chisq_flagged_1934])
