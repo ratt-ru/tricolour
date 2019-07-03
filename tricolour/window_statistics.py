@@ -201,7 +201,7 @@ class WindowStatistics(object):
 
         # ddid
         for d, bins in other._bins_per_ddid.items():
-            self._bins_per_ddid[d] = bins # this is the frequency labels
+            self._bins_per_ddid[d] = bins  # this is the frequency labels
 
     def copy(self):
         """ Creates a copy of the current WindowStatistics"""

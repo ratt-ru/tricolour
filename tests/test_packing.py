@@ -11,8 +11,6 @@ import pytest
 import zarr
 
 from tricolour.packing import (unique_baselines,
-                               create_vis_windows,
-                               create_flag_windows,
                                pack_data,
                                unpack_data,
                                _WINDOW_SCHEMA)

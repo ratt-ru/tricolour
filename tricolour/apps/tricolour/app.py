@@ -8,14 +8,11 @@ from __future__ import print_function
 
 import argparse
 import contextlib
-from collections import OrderedDict
-from donfig import Config
 from functools import partial
 import logging
 import logging.handlers
 from multiprocessing.pool import ThreadPool
 import pkg_resources
-from pprint import pformat
 import os
 from os.path import join as pjoin
 import time

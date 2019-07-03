@@ -523,7 +523,7 @@ class TestSumThresholdFlagger(object):
 
     def _make_data(self, flagger, rs, shape=(1, 234, 345)):
         background = self._make_background(shape, rs).astype(np.float32)
-        data = background + (rs.standard_normal(shape) * 0.1).astype(np.float32)
+        data = background + (rs.standard_normal(shape)*0.1).astype(np.float32)
         rfi = np.zeros(shape, np.float32)
         # Some completely bad channels and bad times
         rfi[:, 12, :] = 1

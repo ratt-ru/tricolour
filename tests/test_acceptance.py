@@ -11,7 +11,6 @@ from __future__ import print_function
 import os
 from os.path import join as pjoin
 import shutil
-import sys
 import subprocess
 import tarfile
 import time
@@ -167,7 +166,6 @@ def test_flag_count(flagged_ms, tol):
     with tbl(flagged_ms) as t:
         fid = t.getcol("FIELD_ID")
         flag = t.getcol("FLAG")
-        data = t.getcol("DATA")
 
     flag_sel = flag[fid == fnames.index("3C286")]
     count_flagged_3c286 = np.nansum(flag_sel, axis=(0, 1, 2))
@@ -190,7 +188,6 @@ def test_bandwidth_flagged(flagged_ms, tol):
 
     with tbl(flagged_ms) as t:
         fid = t.getcol("FIELD_ID")
-        flag = t.getcol("FLAG")
         data = t.getcol("DATA")
 
     data_sel = data[fid == fnames.index("3C286"), :, 0]

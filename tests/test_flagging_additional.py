@@ -11,7 +11,6 @@ import pytest
 from tricolour.flagging import (flag_autos,
                                 apply_static_mask,
                                 flag_nans_and_zeros)
-from tricolour.util import casa_style_range
 
 
 @pytest.fixture

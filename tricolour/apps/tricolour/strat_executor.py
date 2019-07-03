@@ -4,12 +4,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from pprint import pformat
-
 import dask.array as da
 
 from tricolour.dask_wrappers import (sum_threshold_flagger,
-                                     polarised_intensity,
                                      uvcontsub_flagger,
                                      flag_autos,
                                      flag_nans_and_zeros,

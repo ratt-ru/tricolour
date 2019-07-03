@@ -3,7 +3,6 @@
 
 """The setup script."""
 
-from os.path import join as pjoin
 import sys
 
 from setuptools import setup, find_packages
