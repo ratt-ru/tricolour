@@ -80,9 +80,12 @@ def test_vis_and_flag_packing(tmpdir, backend):
 
     _, time_inv = da.unique(time, return_inverse=True)
 
-    vis_windows, flag_windows = pack_data(time_inv, ubl, antenna1, antenna2,
-                                          vis, flag, ntime,
-                                          backend=backend, path=tmpdir)
+    result = pack_data(time_inv, ubl, antenna1, antenna2,
+                       vis, flag, ntime,
+                       backend=backend, path=tmpdir,
+                       return_objs=True)
+
+    vis_windows, flag_windows, vis_win_obj, flag_win_obj = result
 
     flag_windows = flag_data(vis_windows, flag_windows)
 
@@ -92,8 +95,20 @@ def test_vis_and_flag_packing(tmpdir, backend):
     unpacked_vis = unpack_data(antenna1, antenna2, time_inv,
                                ubl, vis_windows)
 
-    result = da.compute(vis, flag, unpacked_vis, unpacked_flags)
-    (vis, flag, unpacked_vis, unpacked_flags) = result
+    result = da.compute(vis, flag, vis_win_obj, flag_win_obj,
+                        unpacked_vis, unpacked_flags)
+    (vis, flag, vis_win_obj, flag_win_obj,
+     unpacked_vis, unpacked_flags) = result
+
+    # Check that we've created the correct type of backend object
+    if backend == "numpy":
+        assert isinstance(vis_win_obj, np.ndarray)
+        assert isinstance(flag_win_obj, np.ndarray)
+    elif backend == "zarr-disk":
+        assert isinstance(vis_win_obj, zarr.Array)
+        assert isinstance(flag_win_obj, zarr.Array)
+    else:
+        raise ValueError("Unhandled backend '%s'" % backend)
 
     assert_array_equal(flag, unpacked_flags)
     assert_array_equal(vis, unpacked_vis)

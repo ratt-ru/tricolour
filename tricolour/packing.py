@@ -9,6 +9,7 @@ from tempfile import mkdtemp
 import dask
 import dask.array as da
 from dask.highlevelgraph import HighLevelGraph
+import numba
 import numpy as np
 import zarr
 
@@ -70,8 +71,7 @@ def _create_window(name, ntime, nchan, nbl, ncorr,
                                     read_only=False,
                                     store=pjoin(path, "-".join((name, token))))
     elif backend == "numpy":
-        return [np.full((ncorr, ntime, nchan), default, dtype=dtype)
-                for bl in range(nbl)]
+        return np.full((nbl, ncorr, ntime, nchan), default, dtype=dtype)
     else:
         raise ValueError("Invalid backend '%s'" % backend)
 
@@ -137,29 +137,77 @@ def _rand_sort(key):
     return random.random()
 
 
-def _pack_data(time_inv, ubl,
-               ant1, ant2, data, flag,
-               vis_windows, flag_windows):
+@numba.njit(nogil=True, cache=True)
+def _zarr_pack_transpose(data, valid):
+    rows, chans, corrs = data.shape
 
-    time_inv = time_inv
-    ant1 = ant1
-    ant2 = ant2
-    data = data
-    flag = flag
+    if rows != valid.shape[0]:
+        raise ValueError("data rows don't match valid rows")
 
+    valid_rows = []
+
+    for r in range(rows):
+        if valid[r]:
+            valid_rows.append(r)
+
+    result = np.empty((corrs, len(valid_rows), chans), dtype=data.dtype)
+
+    # We're selecting all times for one baseline
+    # So we order by (corr, row (time), chan) for
+    # the assignments below
+    for out_row, in_row in enumerate(valid_rows):
+        for f in range(chans):
+            for c in range(corrs):
+                result[c, out_row, f] = data[in_row, f, c]
+
+    return result
+
+
+@numba.njit(nogil=True, cache=True)
+def _numpy_pack_transpose(window, data, valid, row_idx):
+    rows, chans, corrs = data.shape
+
+    if rows != valid.shape[0]:
+        raise ValueError("data rows don't match valid rows")
+
+    valid_rows = []
+
+    for r in range(rows):
+        if valid[r]:
+            valid_rows.append(r)
+
+    if len(valid_rows) != row_idx.shape[0]:
+        raise ValueError("len(valid_rows) != row_idx.shape[0]")
+
+    # We're selecting all times for one baseline
+    # So we order by (corr, row (time), chan) for
+    # the assignments below
+    for out_row, in_row in zip(row_idx, valid_rows):
+        for f in range(chans):
+            for c in range(corrs):
+                window[c, out_row, f] = data[in_row, f, c]
+
+
+def _slow_pack_data(time_inv, ubl,
+                    ant1, ant2, data, flag,
+                    vis_windows, flag_windows):
     vis_windows = vis_windows[0]
     flag_windows = flag_windows[0]
 
-    if isinstance(vis_windows, zarr.Array) and (flag_windows, zarr.Array):
-        assert vis_windows.shape == flag_windows.shape
+    assert vis_windows.shape == flag_windows.shape
+
+    if (isinstance(vis_windows, zarr.Array) and
+            isinstance(flag_windows, zarr.Array)):
         zarr_case = True
-    elif (isinstance(vis_windows, list) and
-          isinstance(flag_windows, list)):
-        assert vis_windows[0].shape == flag_windows[0].shape
+    elif (isinstance(vis_windows, np.ndarray) and
+            isinstance(flag_windows, np.ndarray)):
         zarr_case = False
     else:
         raise TypeError("visibility '%s' and flag '%s' types must both "
-                        "be a zarr Array or lists of numpy arrays")
+                        "be numpy or zarr arrays")
+
+    # We're dealing with all baselines at once
+    assert sum(len(bl_list[0]) for bl_list in ubl) == vis_windows.shape[0]
 
     # This double for loop is strange, mostly because ubl and bl_index
     # are lists (or lists of lists) of ndarrays. As the "bl" and "bl-comp"
@@ -176,26 +224,74 @@ def _pack_data(time_inv, ubl,
             if time_idx.size == 0:
                 continue
 
-            # Slice if we have a contiguous time range of values
-            if np.all(np.diff(time_idx) == 1):
-                time_idx = slice(time_idx[0], time_idx[-1] + 1)
-
-            # We're selecting all times for one baseline
-            # So we order by (corr, row (time), chan) for
-            # the assignments below
-            data_transposed = data[valid, :, :].transpose(2, 0, 1)
-            flag_transposed = flag[valid, :, :].transpose(2, 0, 1)
-
-            # import pdb; pdb.set_trace()
-
             if zarr_case:
-                vis_windows.oindex[bl, :, time_idx, :] = data_transposed
-                flag_windows.oindex[bl, :, time_idx, :] = flag_transposed
+                # Slice if we have a contiguous time range of values
+                if np.all(np.diff(time_idx) == 1):
+                    time_idx = slice(time_idx[0], time_idx[-1] + 1)
+
+                data_t = _zarr_pack_transpose(data, valid)
+                flag_t = _zarr_pack_transpose(flag, valid)
+
+                vis_windows.oindex[bl, :, time_idx, :] = data_t
+                flag_windows.oindex[bl, :, time_idx, :] = flag_t
             else:
-                vis_windows[bl][:, time_idx, :] = data_transposed
-                flag_windows[bl][:, time_idx, :] = flag_transposed
+                # Faster path
+                _numpy_pack_transpose(vis_windows[bl], data, valid, time_idx)
+                _numpy_pack_transpose(flag_windows[bl], flag, valid, time_idx)
 
     return np.array([[[True]]])
+
+
+@numba.njit(nogil=True, cache=True)
+def _numba_pack_data(time_inv, ubl,
+                     ant1, ant2, data, flag,
+                     vis_windows, flag_windows):
+    rows, chans, corrs = data.shape
+
+    if vis_windows.shape[3] != chans:
+        raise ValueError("channels mismatch")
+
+    if vis_windows.shape[1] != corrs:
+        raise ValueError("correlations mismatch")
+
+    if vis_windows.shape != flag_windows.shape:
+        raise ValueError("vis_windows.shape != flag_windows.shape")
+
+    # We're dealing with all baselines at once
+    assert ubl.shape == (vis_windows.shape[0], 3)
+
+    # Pack each baseline
+    for b in range(ubl.shape[0]):
+        bl, a1, a2 = ubl[b]
+
+        for r in range(rows):
+            # Only handle rows for this baseline
+            if ant1[r] != a1 or ant2[r] != a2:
+                continue
+
+            # lookup time index
+            t = time_inv[r]
+
+            for f in range(chans):
+                for c in range(corrs):
+                    vis_windows[bl, c, t, f] = data[r, f, c]
+                    flag_windows[bl, c, t, f] = flag[r, f, c]
+
+    return np.array([[[True]]])
+
+
+def _fast_pack_data(time_inv, ubl,
+                    ant1, ant2, data, flag,
+                    vis_windows, flag_windows):
+
+    # Flatten the baseline lists
+    ubl = np.concatenate([bl for bl_list in ubl for bl in bl_list])
+
+    return _numba_pack_data(time_inv, ubl,
+                            ant1, ant2,
+                            data, flag,
+                            vis_windows[0],
+                            flag_windows[0])
 
 
 def _packed_windows(dummy_result, ubl, window):
@@ -206,25 +302,21 @@ def _packed_windows(dummy_result, ubl, window):
     if np.all(np.diff(bl_index) == 1):
         bl_index = slice(bl_index[0], bl_index[-1] + 1)
 
-    if isinstance(window, zarr.Array):
-        return window[bl_index, :, :, :]
-    elif isinstance(window, list):
-        return np.stack(window[bl_index], axis=0)
-    else:
-        raise ValueError("Window must either be a single zarr Array "
-                         "or a list of numpy arrays '%s'." % type(window))
+    return window[bl_index, :, :, :]
 
 
 def pack_data(time_inv, ubl,
               antenna1, antenna2,
               data, flags, ntime,
-              backend="numpy", path=None):
+              backend="numpy", path=None,
+              return_objs=False):
 
     nchan, ncorr = data.shape[1:3]
     nbl = ubl.shape[0]
 
     token = dask.base.tokenize(time_inv, ubl, antenna1, antenna2,
-                               data, flags, ntime, backend, path)
+                               data, flags, ntime, backend, path,
+                               return_objs)
 
     vis_win_obj = create_vis_windows(ntime, nchan, nbl, ncorr, token,
                                      dtype=data.dtype,
@@ -236,8 +328,15 @@ def pack_data(time_inv, ubl,
                                        backend=backend,
                                        path=path)
 
+    if backend == "numpy":
+        pack_fn = _fast_pack_data
+    elif backend == "zarr-disk":
+        pack_fn = _slow_pack_data
+    else:
+        raise ValueError("Invalid backend '%s'" % backend)
+
     # Pack data into our window objects
-    packing = da.blockwise(_pack_data, ("row", "chan", "corr"),
+    packing = da.blockwise(pack_fn, ("row", "chan", "corr"),
                            time_inv, ("row", ),
                            ubl, ("bl", "bl-comp"),
                            antenna1, ("row",),
@@ -263,7 +362,32 @@ def pack_data(time_inv, ubl,
                                 new_axes={"time": ntime},
                                 dtype=flags.dtype)
 
+    if return_objs:
+        return vis_windows, flag_windows, vis_win_obj, flag_win_obj
+
     return vis_windows, flag_windows
+
+
+@numba.njit(nogil=True, cache=True)
+def _numpy_unpack_transpose(data, window, valid, row_idx):
+    rows, chans, corrs = data.shape
+
+    valid_rows = []
+
+    for r in range(rows):
+        if valid[r]:
+            valid_rows.append(r)
+
+    if len(valid_rows) != row_idx.shape[0]:
+        raise ValueError("len(valid_rows) != row_idx.shape[0]")
+
+    # We're selecting all times for one baseline
+    # So we order by (corr, row (time), chan) for
+    # the assignments below
+    for out_row, in_row in zip(valid_rows, row_idx):
+        for f in range(chans):
+            for c in range(corrs):
+                data[out_row, f, c] = window[c, in_row, f]
 
 
 def _unpack_data(antenna1, antenna2, time_inv, ubl, windows):
@@ -288,14 +412,7 @@ def _unpack_data(antenna1, antenna2, time_inv, ubl, windows):
             if time_idx.size == 0:
                 continue
 
-            # Slice if we have a contiguous time range of values
-            if np.all(np.diff(time_idx) == 1):
-                time_idx = slice(time_idx[0], time_idx[-1] + 1)
-
-            # We're selecting all times for one baseline
-            # So we order by (row (time), chan, corr) for
-            # the assignment below
-            data[valid, :, :] = window[bl, :, time_idx, :].transpose(1, 2, 0)
+            _numpy_unpack_transpose(data, window[bl], valid, time_idx)
 
     return data
 

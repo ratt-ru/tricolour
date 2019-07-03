@@ -173,7 +173,7 @@ def create_parser():
                    "and computational efficiency")
     p.add_argument("-bc", "--baseline-chunks", type=int, default=16,
                    help="Number of baselines in a window chunk")
-    p.add_argument("-nw", "--nworkers", type=int, default=os.cpu_count() * 2,
+    p.add_argument("-nw", "--nworkers", type=int, default=os.cpu_count(),
                    help="Number of workers (threads) to use. "
                    "By default, set to twice the "
                    "number of logical CPUs on the system. "
