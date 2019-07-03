@@ -110,7 +110,7 @@ def test_mean_chisq(flagged_ms, tol):
     diff = (abs_data_sel - np.nanmean(abs_data_sel, axis=0))**2
     chisq_flagged_1934 = np.nanmean(diff, axis=(0, 1))
     corrs_str = ",".join(["{0:.3f}".format(f) for f in chisq_flagged_1934])
-    print("Chi^2 flagged PKS B1934-638:", corrs_str)
+    print("Chi^2 flagged PKS B1934-638: [%s]" % corrs_str)
 
     assert all(chisq_unflagged_3c286 > chisq_flagged_3c286 * tol)
     assert all(chisq_unflagged_1934 > chisq_flagged_1934 * tol)
@@ -152,7 +152,7 @@ def test_max_chisq(flagged_ms, tol):
     diff = (abs_data_sel - np.nanmean(abs_data_sel, axis=0))**2
     chisq_flagged_1934 = np.nanmax(diff, axis=(0, 1))
     corrs_str = ",".join(["{0:.3f}".format(f) for f in chisq_flagged_1934])
-    print("Max Chi^2 flagged PKS B1934-638:", corrs_str)
+    print("Max Chi^2 flagged PKS B1934-638: [%s]" % corrs_str)
 
     assert all(chisq_unflagged_3c286 > chisq_flagged_3c286 * tol)
     assert all(chisq_unflagged_1934 > chisq_flagged_1934 * tol)
