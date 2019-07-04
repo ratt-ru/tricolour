@@ -210,15 +210,18 @@ def create_parser():
 
 
 def main():
-    # Limit numpy/blas etc threads to 1, as we obtain
-    # our parallelism with dask threads
-    threadpool_limits(limits=1)
-
     tic = time.time()
 
     log.info(banner())
 
     args = create_parser().parse_args()
+
+    # Limit numpy/blas etc threads to 1, as we obtain
+    # our parallelism with dask threads
+    threadpool_limits(limits=1)
+
+    # Configure dask threadpoll
+    dask.config.set(pool=ThreadPool(args.nworkers))
 
     if args.disable_post_mortem:
         log.warn("Disabling crash debugging with the "
@@ -397,9 +400,6 @@ def main():
             profilers.append(stack.enter_context(Profiler()))
             profilers.append(stack.enter_context(CacheProfiler()))
             profilers.append(stack.enter_context(ResourceProfiler()))
-
-        pool = stack.enter_context(ThreadPool(args.nworkers))
-        stack.enter_context(dask.config.set(pool=pool))
 
         stack.enter_context(ProgressBar())
 
