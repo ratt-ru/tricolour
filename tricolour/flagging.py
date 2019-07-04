@@ -6,12 +6,16 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import multiprocessing
 import warnings
+
+try:
+    import concurrent.futures
+except ImportError:
+    pass
 
 import numpy as np
 import numba
-
-import dask.array as da
 
 from tricolour.util import casa_style_range
 
@@ -347,7 +351,9 @@ def _linearly_interpolate_nans(data):
 
 @numba.jit(nopython=True, nogil=True, cache=True)
 def _box_gaussian_filter1d(data, r, out, passes):
-    """Implementation of :func:`_box_gaussian_filter` along the first axis of an array.
+    """
+    Implementation of :func:`_box_gaussian_filter` along
+    the first axis of an array.
 
     It is safe to use this function in-place i.e. with `out` equal to `data`.
 
@@ -1066,7 +1072,8 @@ def sum_threshold_flagger(vis, flags, outlier_nsigma=4.5,
                           flag_all_time_frac=0.6, flag_all_freq_frac=0.8,
                           rho=1.3, num_major_iterations=5):
     """
-    Flagger that uses the SumThreshold method (Offringa, A., MNRAS, 405, 155-167, 2010)
+    Flagger that uses the SumThreshold method
+    (Offringa, A., MNRAS, 405, 155-167, 2010)
     to detect spikes in both frequency and time axes.
     The full algorithm does the following:
 
@@ -1374,8 +1381,8 @@ class SumThresholdFlagger(object):
         if pool is not None and is_multiprocess is None:
             is_multiprocess = isinstance(
                 pool, concurrent.futures.ProcessPoolExecutor)
-        futures = []
-        outputs = {}
+        # futures = []
+        # outputs = {}
         try:
             for cp in range(0, ncorrprod, chunk_size):
                 chunk_data = data[cp: cp + chunk_size, ...]

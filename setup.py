@@ -3,7 +3,6 @@
 
 """The setup script."""
 
-from os.path import join as pjoin
 import sys
 
 from setuptools import setup, find_packages
@@ -27,7 +26,7 @@ requirements = [
     'zarr >= 2.3.1'
 ]
 
-extras_require = {'testing': ['pytest']}
+extras_require = {'testing': ['pytest', 'requests']}
 
 setup(
     author="Simon Perkins",
