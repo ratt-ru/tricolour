@@ -25,6 +25,7 @@ from dask.diagnostics import (ProgressBar, Profiler,
 import numpy as np
 import xarray as xr
 from xarrayms import xds_from_ms, xds_from_table, xds_to_table
+from threadpoolctl import threadpool_limits
 
 from tricolour.apps.tricolour.strat_executor import StrategyExecutor
 from tricolour.banner import banner
@@ -209,6 +210,10 @@ def create_parser():
 
 
 def main():
+    # Limit numpy/blas etc threads to 1, as we obtain
+    # our parallelism with dask threads
+    threadpool_limits(limits=1)
+
     tic = time.time()
 
     log.info(banner())
