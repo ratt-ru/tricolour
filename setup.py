@@ -26,7 +26,7 @@ requirements = [
     'zarr >= 2.3.1'
 ]
 
-extras_require = {'testing': ['pytest']}
+extras_require = {'testing': ['pytest', 'requests']}
 
 setup(
     author="Simon Perkins",
