@@ -1,0 +1,13 @@
+FROM kernsuite/base:5
+
+# Install base requirements
+RUN docker-apt-install python3-pip
+RUN pip3 install --upgrade pip setuptools
+ADD . /code
+WORKDIR /code
+
+# Install base + testing packages
+RUN pip3 install .[testing]
+
+# Run tests
+RUN py.test -s -vvv .
