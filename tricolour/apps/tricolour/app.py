@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-"""Top-level package for Tricolour."""
+""" Main tricolour application """
 
 from __future__ import absolute_import
 from __future__ import division
@@ -210,18 +210,23 @@ def create_parser():
 
 
 def main():
+    with contextlib.ExitStack() as stack:
+        # Limit numpy/blas etc threads to 1, as we obtain
+        # our parallelism with dask threads
+        stack.enter_context(threadpool_limits(limits=1))
+
+        args = create_parser().parse_args()
+
+        # Configure dask pool
+        stack.enter_context(dask.config.set(pool=ThreadPool(args.nworkers)))
+
+        _main(args)
+
+
+def _main(args):
     tic = time.time()
 
     log.info(banner())
-
-    args = create_parser().parse_args()
-
-    # Limit numpy/blas etc threads to 1, as we obtain
-    # our parallelism with dask threads
-    threadpool_limits(limits=1)
-
-    # Configure dask threadpoll
-    dask.config.set(pool=ThreadPool(args.nworkers))
 
     if args.disable_post_mortem:
         log.warn("Disabling crash debugging with the "
