@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-"""Top-level package for Tricolour."""
+""" Main tricolour application """
 
 from __future__ import absolute_import
 from __future__ import division
@@ -25,6 +25,7 @@ from dask.diagnostics import (ProgressBar, Profiler,
 import numpy as np
 import xarray as xr
 from xarrayms import xds_from_ms, xds_from_table, xds_to_table
+from threadpoolctl import threadpool_limits
 
 from tricolour.apps.tricolour.strat_executor import StrategyExecutor
 from tricolour.banner import banner
@@ -209,11 +210,23 @@ def create_parser():
 
 
 def main():
+    with contextlib.ExitStack() as stack:
+        # Limit numpy/blas etc threads to 1, as we obtain
+        # our parallelism with dask threads
+        stack.enter_context(threadpool_limits(limits=1))
+
+        args = create_parser().parse_args()
+
+        # Configure dask pool
+        stack.enter_context(dask.config.set(pool=ThreadPool(args.nworkers)))
+
+        _main(args)
+
+
+def _main(args):
     tic = time.time()
 
     log.info(banner())
-
-    args = create_parser().parse_args()
 
     if args.disable_post_mortem:
         log.warn("Disabling crash debugging with the "
@@ -392,9 +405,6 @@ def main():
             profilers.append(stack.enter_context(Profiler()))
             profilers.append(stack.enter_context(CacheProfiler()))
             profilers.append(stack.enter_context(ResourceProfiler()))
-
-        pool = stack.enter_context(ThreadPool(args.nworkers))
-        stack.enter_context(dask.config.set(pool=pool))
 
         stack.enter_context(ProgressBar())
 
