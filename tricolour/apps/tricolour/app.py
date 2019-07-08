@@ -15,6 +15,7 @@ from multiprocessing.pool import ThreadPool
 import pkg_resources
 import os
 from os.path import join as pjoin
+import sys
 import time
 
 import dask
@@ -406,7 +407,8 @@ def _main(args):
             profilers.append(stack.enter_context(CacheProfiler()))
             profilers.append(stack.enter_context(ResourceProfiler()))
 
-        stack.enter_context(ProgressBar())
+        if sys.stdout.isatty():
+            stack.enter_context(ProgressBar())
 
         _, original_stats, final_stats = dask.compute(write_computes,
                                                       original_stats,
