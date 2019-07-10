@@ -5,6 +5,7 @@ History
 0.1.3 (YYYY-MM-DD)
 ------------------
 
+* Add Pull Request Template (:pr:`53`)
 
 
 0.1.2 (2019-07-08)
