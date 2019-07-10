@@ -1,3 +1,5 @@
+set -e
+set -u
 WORKSPACE_ROOT="$WORKSPACE/$BUILD_NUMBER"
 
 # build
