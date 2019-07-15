@@ -2,6 +2,25 @@
 History
 =======
 
+0.1.3 (YYYY-MM-DD)
+------------------
+
+* Add Pull Request Template (:pr:`53`)
+
+
+0.1.2 (2019-07-08)
+------------------
+
+* Boringify logs
+* Remove transposing
+* enlarge chunk sizes
+* Switch to python 3 only. Python 2.7 no longer supported
+
+0.1.1 (2019-06-27)
+------------------
+
+* Minor fixes to scan selection and stats computation
+
 0.1.0 (2018-06-01)
 ------------------
 
