@@ -120,7 +120,9 @@ def log_configuration(args):
         return
 
     if len(strategies) > 0:
+        log.info("*****************************************")
         log.info("The following strategies will be applied:")
+        log.info("*****************************************")
 
         for s, strategy in enumerate(strategies):
             name = strategy.get("name", "<nameless>")
@@ -134,6 +136,7 @@ def log_configuration(args):
 
             for key, value in strategy.get("kwargs", empty_dict).items():
                 log.info("\t%s: %s", key, value)
+        log.info("***************** END ********************")
 
     if args.scan_numbers != []:
         log.info("Only considering scans '{0:s}' as "
