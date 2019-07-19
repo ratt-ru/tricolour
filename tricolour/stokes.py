@@ -33,8 +33,8 @@ STOKES_TYPES = {
 stokes_deps = {
     'I': [('XX', 'YY', 0.5 + 0.0j, 1,  1), ('RR', 'LL', 0.5 + 0.0j, 1,  1)],
     'Q': [('XX', 'YY', 0.5 + 0.0j, 1, -1), ('RL', 'LR', 0.5 + 0.0j, 1,  1)],
-    'U': [('XY', 'YX', 0.0 + 0.5j, 1,  1), ('RL', 'LR', 0.0 - 0.5j, 1, -1)],
-    'V': [('XY', 'YX', 0.0 - 0.5j, 1, -1), ('RR', 'LL', 0.0 + 0.5j, 1, -1)]
+    'U': [('XY', 'YX', 0.5 + 0.0j, 1,  1), ('RL', 'LR', 0.0 - 0.5j, 1, -1)],
+    'V': [('XY', 'YX', 0.0 - 0.5j, 1, -1), ('RR', 'LL', 0.5 + 0.0j, 1, -1)]
 }
 
 # Convert to numeric stokes types
@@ -136,7 +136,8 @@ def unpolarised_intensity(vis, stokes_unpol, stokes_pol):
             for (c1, c2, a, s1, s2) in stokes_pol:
                 value = a * (s1 * vis[r, f, c1] +
                              s2 * vis[r, f, c2])
-                pol += value.real**2  # imaginary contains only noise
+                pol += np.abs(value)**2 # uncalibrated data may have a substantial amount of power in the imaginary
+                # use absolute to be certain
 
             # Unpolarised intensity (I)
             unpol = 0
@@ -144,7 +145,8 @@ def unpolarised_intensity(vis, stokes_unpol, stokes_pol):
             for (c1, c2, a, s1, s2) in stokes_unpol:
                 value = a * (s1 * vis[r, f, c1] +
                              s2 * vis[r, f, c2])
-                unpol += value.real   # imaginary contains only noise
+                unpol += np.abs(value) # uncalibrated data may have a substantial amount of power in the imaginary
+                # use absolute to be certain
 
             # I - sqrt(Q^2 + U^2 + V^2)
             out_vis[r, f, 0] = unpol - np.sqrt(pol)
@@ -161,7 +163,7 @@ def polarised_intensity(vis, stokes_pol):
 
     .. math::
 
-        I - \sqrt(Q^2 + U^2 + V^2)
+        \sqrt(Q^2 + U^2 + V^2)
 
     ``stokes_pol`` can be derived from :func:`stokes_corr_map`.
 
@@ -196,7 +198,8 @@ def polarised_intensity(vis, stokes_pol):
             for (c1, c2, a, s1, s2) in stokes_pol:
                 value = a * (s1 * vis[r, f, c1] +
                              s2 * vis[r, f, c2])
-                pol += value.real**2  # imaginary contains only noise
+                pol += np.abs(value)**2 # uncalibrated data may have a substantial amount of power in the imaginary
+                # use absolute to be certain
 
             # sqrt(Q^2 + U^2 + V^2)
             out_vis[r, f, 0] = np.sqrt(pol)

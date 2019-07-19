@@ -18,7 +18,7 @@ strategies:
         name: background_flags
         task: sum_threshold
         kwargs:
-            outlier_nsigma: 5
+            outlier_nsigma: 10
             windows_time: [1, 2, 4, 8]
             windows_freq: [1, 2, 4, 8]
             background_reject: 2.0
@@ -51,7 +51,7 @@ strategies:
         task: apply_static_mask
         kwargs:
             accumulation_mode: "or"
-            uvrange: "0~400"
+            uvrange: "0~250"
     -
         name: final_st_very_broad
         task: sum_threshold
@@ -70,12 +70,12 @@ strategies:
             flag_all_time_frac: 0.6
             flag_all_freq_frac: 0.8
             rho: 1.3
-            num_major_iterations: 2
+            num_major_iterations: 1
     -
         name: final_st_broad
         task: sum_threshold
         kwargs:
-            outlier_nsigma: 5
+            outlier_nsigma: 10
             windows_time: [1, 2, 4, 8]
             windows_freq: [1, 2, 4, 8]
             background_reject: 2.0
@@ -89,12 +89,12 @@ strategies:
             flag_all_time_frac: 0.6
             flag_all_freq_frac: 0.8
             rho: 1.3
-            num_major_iterations: 2
+            num_major_iterations: 1
     -
         name: final_st_narrow
         task: sum_threshold
         kwargs:
-            outlier_nsigma: 8
+            outlier_nsigma: 10
             windows_time: [1, 2, 4, 8]
             windows_freq: [1, 2, 4, 8]
             background_reject: 2.0
@@ -108,7 +108,7 @@ strategies:
             flag_all_time_frac: 0.6
             flag_all_freq_frac: 0.8
             rho: 1.3
-            num_major_iterations: 2
+            num_major_iterations: 1
     -
         name: residual_flag_final
         task: uvcontsub_flagger
@@ -123,3 +123,4 @@ strategies:
     -
         name: combine_with_input_flags
         task: combine_with_input_flags
+

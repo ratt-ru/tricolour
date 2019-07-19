@@ -219,7 +219,11 @@ def main():
         args = create_parser().parse_args()
 
         # Configure dask pool
-        stack.enter_context(dask.config.set(pool=ThreadPool(args.nworkers)))
+        if args.nworkers <= 1:
+            log.warn("Entering single threaded mode per user request!")
+            dask.config.set(scheduler='single-threaded')
+        else:
+            stack.enter_context(dask.config.set(pool=ThreadPool(args.nworkers)))
 
         _main(args)
 
@@ -336,7 +340,7 @@ def _main(args):
         if args.flagging_strategy == "polarisation":
             corr_type = pol_info.CORR_TYPE.data.compute().tolist()
             stokes_map = stokes_corr_map(corr_type)
-            stokes_pol = tuple(v for k, v in stokes_map.items() if k != 'I')
+            stokes_pol = tuple(v for k, v in stokes_map.items() if k != "I")
             vis = polarised_intensity(vis, stokes_pol)
             flags = da.any(flags, axis=2, keepdims=True)
         elif args.flagging_strategy == "standard":
@@ -378,17 +382,22 @@ def _main(args):
         # finally unpack back for writing
         unpacked_flags = unpack_data(antenna1, antenna2, time_inv,
                                      ubl, flag_windows)
-
-        # Polarised flagging, broadcast the single correlation
-        # back to the full correlation range (all flagged)
-        if args.flagging_strategy == "polarisation":
-            unpacked_flags = da.broadcast_to(unpacked_flags,
-                                             (nrow, nchan, ncorr))
-
+        equalized_flags = (da.sum(unpacked_flags, axis=2) > 0)
+        corr_flags = da.repeat(equalized_flags.flatten(), repeats=ncorr).reshape((nrow, nchan, ncorr))
+            
         # Create new dataset containing new flags
-        xarray_flags = xr.DataArray(unpacked_flags, dims=ds.FLAG.dims)
+        xarray_flags = xr.DataArray(corr_flags, dims=ds.FLAG.dims)
         new_ds = ds.assign(FLAG=xarray_flags)
-
+        def dbg_plt():
+                from matplotlib import pyplot as plt
+                plt.figure()
+                fd = vis.compute()
+                fdfl = equalized_flags.compute()
+                fd[fdfl] = np.nan
+                plt.fill_between(np.arange(fd.shape[1]), np.nanmax(fd, axis=0).flatten(), np.nanmin(fd, axis=0).flatten())
+                plt.xlabel("channel")
+                plt.ylabel("amp")
+                plt.show()
         # Write back to original dataset
         writes = xds_to_table(new_ds, args.ms, "FLAG")
         # original should also have .compute called because we need stats
@@ -411,9 +420,8 @@ def _main(args):
             stack.enter_context(ProgressBar())
 
         _, original_stats, final_stats = dask.compute(write_computes,
-                                                      original_stats,
-                                                      final_stats)
-
+                                                    original_stats,
+                                                    final_stats)
     if can_profile:
         visualize(profilers)
 
@@ -429,3 +437,7 @@ def _main(args):
              .format((elapsed // 60) // 60,
                      (elapsed // 60) % 60,
                      elapsed % 60))
+
+
+if __name__ == "__main__":
+    main()

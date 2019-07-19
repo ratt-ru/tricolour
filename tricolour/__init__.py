@@ -10,6 +10,6 @@ from donfig import Config
 
 __author__ = """Simon Perkins"""
 __email__ = 'sperkins@ska.ac.za'
-__version__ = '0.2.0'
+__version__ = '0.2.2'
 
 config = Config("tricolour")
