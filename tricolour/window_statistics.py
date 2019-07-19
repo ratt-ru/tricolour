@@ -23,13 +23,13 @@ def _window_stats(flag_window, ubls, chan_freqs,
     for ai, a in enumerate(antenna_names):
         # per antenna
         sel = np.logical_or(ubls[:, 1] == ai, ubls[:, 2] == ai)
-        cnt = np.sum(flag_window[sel, :, :, :])
+        cnt = np.sum(flag_window[sel, :, :, :], dtype=np.uint64)
         sz = flag_window[sel, :, :, :].size
         stats._counts_per_ant[a] += cnt
         stats._size_per_ant[a] += sz
 
         # per scan and field
-        cnt = np.sum(flag_window)
+        cnt = np.sum(flag_window, dtype=np.uint64)
         sz = flag_window.size
         stats._counts_per_field[field_name] += cnt
         stats._size_per_field[field_name] += sz
@@ -44,7 +44,7 @@ def _window_stats(flag_window, ubls, chan_freqs,
         for ch_i, ch in enumerate(bins_edges[:-1]):
             sel = np.logical_and(chan_freqs >= bins_edges[ch_i],
                                  chan_freqs < bins_edges[ch_i + 1])
-            bins[ch_i] = np.sum(flag_window[:, :, :, sel])
+            bins[ch_i] = np.sum(flag_window[:, :, :, sel], dtype=np.uint64)
 
         stats._counts_per_ddid[ddid] += bins
         stats._bins_per_ddid[ddid] = bins_edges  # frequency labels
