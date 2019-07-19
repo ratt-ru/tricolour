@@ -167,7 +167,7 @@ class WindowStatistics(object):
         self._size_per_field = defaultdict(lambda: 0)
         self._size_per_scan = defaultdict(lambda: 0)
 
-        bin_factory = partial(np.zeros, nchanbins, dtype=np.uint32)
+        bin_factory = partial(np.zeros, nchanbins, dtype=np.uint64)
         self._counts_per_ddid = defaultdict(bin_factory)
         self._bins_per_ddid = defaultdict(lambda: 0)
         self._size_per_ddid = defaultdict(lambda: 0)
