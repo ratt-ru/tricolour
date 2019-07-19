@@ -361,7 +361,7 @@ def _main(args):
             stokes_pol = tuple(v for k, v in stokes_map.items() if k != "I")
             vis = polarised_intensity(vis, stokes_pol)
             flags = da.any(flags, axis=2, keepdims=True)
-        if args.flagging_strategy == "total_power":
+        elif args.flagging_strategy == "total_power":
             if args.subtract_model_column is None:
                 log.warn("CRITICAL: You requested to flag total quadrature power, but not on residuals. "
                          "This is not advisable and the flagger may mistake fringes of off-axis sources for broadband RFI.")

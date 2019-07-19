@@ -250,11 +250,11 @@ def summarise_stats(final, original):
 
     for d in final._counts_per_ddid:
         ratios = final._counts_per_ddid[d] * 100.0 / final._size_per_ddid[d]
-        ratio_str = '\t'.join(["{0:.2f}".format(r) for r in ratios])
+        ratio_str = '\t'.join(["{0:<7.2f}".format(r) for r in ratios])
         l.append("\t {0:d}: {1:s}%".format(d, ratio_str))
 
         ddid_freqs = final._bins_per_ddid[d] / 1e6
-        ddid_freqs_str = '\t'.join(["{0:.1f}".format(f) for f in ddid_freqs])
+        ddid_freqs_str = '\t'.join(["{0:<7.1f}".format(f) for f in ddid_freqs])
         l.append("\t    {0:s} MHz".format(ddid_freqs_str))
 
     l.append("********************************")
