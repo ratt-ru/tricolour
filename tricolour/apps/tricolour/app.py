@@ -142,8 +142,9 @@ def log_configuration(args):
 
     if args.flagging_strategy == "polarisation":
         log.info("Flagging based on quadrature polarized power")
-    else:
-        log.info("Flagging per correlation ('standard' mode)")
+    elif args.flagging_strategy == "total_power":
+        log.info("Flagging on total quadrature power")
+    else: log.info("Flagging per correlation ('standard' mode)")
 
 
 def create_parser():
@@ -156,14 +157,17 @@ def create_parser():
                    "the flagger in the 'sum_threshold' key.")
     p.add_argument("-if", "--ignore-flags", action="store_true")
     p.add_argument("-fs", "--flagging-strategy", default="standard",
-                   choices=["standard", "polarisation"],
+                   choices=["standard", "polarisation", "total_power"],
                    help="Flagging Strategy. "
                         "If 'standard' all correlations in the visibility "
                           "are flagged independently. "
                         "If 'polarisation' the polarised intensity "
                           "sqrt(Q^2 + U^2 + V^2) is "
                           "calculated and used to flag all correlations "
-                          "in the visibility.")
+                          "in the visibility."
+                        "If 'total_power' the available quadrature power is computed "
+                          "sqrt(I^2 + Q^2 + U^2 + V^2) or a subset, and used to flag "
+                          "all correlations in the visibility")
     p.add_argument("-rc", "--row-chunks", type=int, default=10000,
                    help="Hint indicating the number of Measurement Set rows "
                    "to read in a single chunk. "
@@ -206,7 +210,9 @@ def create_parser():
                         "necessary to reorder the data on disk.")
     p.add_argument("-td", "--temporary-directory", default=None,
                    help="Directory Location of Temporary data")
-
+    p.add_argument("-smc", "--subtract-model-column", default=None, type=str,
+                   help="Subtracts specified column from data column specified. "
+                        "Flagging will proceed on residual data.")
     return p
 
 
@@ -253,9 +259,15 @@ def _main(args):
 
     # Reopen the datasets using the aggregated row ordering
     table_kwargs = {'ack': False}
+    columns=[data_column,
+             "FLAG",
+             "TIME",
+             "ANTENNA1",
+             "ANTENNA2"]
+    if args.subtract_model_column is not None:
+        columns.append(args.subtract_model_column)
     xds = list(xds_from_ms(args.ms,
-                           columns=(data_column, "FLAG",
-                                    "TIME", "ANTENNA1", "ANTENNA2"),
+                           columns=tuple(columns),
                            group_cols=group_cols,
                            index_cols=index_cols,
                            chunks={"row": args.row_chunks},
@@ -320,6 +332,12 @@ def _main(args):
 
         # Visibilities from the dataset
         vis = getattr(ds, data_column).data
+        if args.subtract_model_column is not None:
+            log.info("Forming residual data between '{0:s}' and '{1:s}' for flagging.".format(
+                data_column, args.subtract_model_column))
+            vismod = getattr(ds, args.subtract_model_column).data
+            vis = vis - vismod
+
         antenna1 = ds.ANTENNA1.data
         antenna2 = ds.ANTENNA2.data
         chan_freq = spw_info.CHAN_FREQ.values
@@ -329,8 +347,8 @@ def _main(args):
         # otherwise take flags from the dataset
         if args.ignore_flags is True:
             flags = da.full_like(vis, False, dtype=np.bool)
-            log.warn("!!!NOTE: COMPLETELY IGNORING MEASUREMENT SET FLAGS "
-                     " AS PER -IF FLAG REQUEST!!!")
+            log.warn("CRITICAL: Completely ignoring measurement set flags as per '-if' request. "
+                     "Strategy WILL NOT or with original flags, even if specified!")
         else:
             flags = ds.FLAG.data
 
@@ -343,8 +361,19 @@ def _main(args):
             stokes_pol = tuple(v for k, v in stokes_map.items() if k != "I")
             vis = polarised_intensity(vis, stokes_pol)
             flags = da.any(flags, axis=2, keepdims=True)
+        if args.flagging_strategy == "total_power":
+            if args.subtract_model_column is None:
+                log.warn("CRITICAL: You requested to flag total quadrature power, but not on residuals. "
+                         "This is not advisable and the flagger may mistake fringes of off-axis sources for broadband RFI.")
+            corr_type = pol_info.CORR_TYPE.data.compute().tolist()
+            stokes_map = stokes_corr_map(corr_type)
+            stokes_pol = tuple(v for k, v in stokes_map.items())
+            vis = polarised_intensity(vis, stokes_pol)
+            flags = da.any(flags, axis=2, keepdims=True)
         elif args.flagging_strategy == "standard":
-            pass
+            if args.subtract_model_column is None:
+                log.warn("CRITICAL: You requested to flag per correlation, but not on residuals. "
+                         "This is not advisable and the flagger may mistake fringes of off-axis sources for broadband RFI.")
         else:
             raise ValueError("Invalid flagging strategy '%s'" %
                              args.flagging_strategy)
@@ -384,20 +413,11 @@ def _main(args):
                                      ubl, flag_windows)
         equalized_flags = (da.sum(unpacked_flags, axis=2) > 0)
         corr_flags = da.repeat(equalized_flags.flatten(), repeats=ncorr).reshape((nrow, nchan, ncorr))
-            
+
         # Create new dataset containing new flags
         xarray_flags = xr.DataArray(corr_flags, dims=ds.FLAG.dims)
         new_ds = ds.assign(FLAG=xarray_flags)
-        def dbg_plt():
-                from matplotlib import pyplot as plt
-                plt.figure()
-                fd = vis.compute()
-                fdfl = equalized_flags.compute()
-                fd[fdfl] = np.nan
-                plt.fill_between(np.arange(fd.shape[1]), np.nanmax(fd, axis=0).flatten(), np.nanmin(fd, axis=0).flatten())
-                plt.xlabel("channel")
-                plt.ylabel("amp")
-                plt.show()
+
         # Write back to original dataset
         writes = xds_to_table(new_ds, args.ms, "FLAG")
         # original should also have .compute called because we need stats
