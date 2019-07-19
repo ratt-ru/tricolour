@@ -39,8 +39,8 @@ strategies:
         kwargs:
             major_cycles: 7
             or_original_from_cycle: 1
-            taylor_degrees: 10
-            sigma: 7.0
+            taylor_degrees: 20
+            sigma: 15.0
     # flags are discarded at this point since we or from cycle 1
     # reflag nans and zeros
     -
@@ -51,7 +51,7 @@ strategies:
         task: apply_static_mask
         kwargs:
             accumulation_mode: "or"
-            uvrange: "0~250"
+            uvrange: "0~550"
     -
         name: final_st_very_broad
         task: sum_threshold
@@ -113,10 +113,10 @@ strategies:
         name: residual_flag_final
         task: uvcontsub_flagger
         kwargs:
-            major_cycles: 7
+            major_cycles: 10
             or_original_from_cycle: 0
-            taylor_degrees: 15
-            sigma: 7.0
+            taylor_degrees: 25
+            sigma: 13.0
     -
         name: flag_autos
         task: flag_autos
