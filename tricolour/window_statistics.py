@@ -20,35 +20,46 @@ def _window_stats(flag_window, ubls, chan_freqs,
 
     stats = WindowStatistics(nchanbins)
 
+    # per antenna
     for ai, a in enumerate(antenna_names):
-        # per antenna
         sel = np.logical_or(ubls[:, 1] == ai, ubls[:, 2] == ai)
         cnt = np.sum(flag_window[sel, :, :, :], dtype=np.uint64)
         sz = flag_window[sel, :, :, :].size
         stats._counts_per_ant[a] += cnt
         stats._size_per_ant[a] += sz
 
-        # per scan and field
-        cnt = np.sum(flag_window, dtype=np.uint64)
-        sz = flag_window.size
-        stats._counts_per_field[field_name] += cnt
-        stats._size_per_field[field_name] += sz
-        stats._counts_per_scan[scan_no] += cnt
-        stats._size_per_scan[scan_no] += sz
+    # per baseline
+    for bi, b in enumerate(np.unique(ubls[:, 0])):
+        sel = ubls[:, 0] == b
+        sela1 = antenna_names[ubls[sel, 1][0]]
+        sela2 = antenna_names[ubls[sel, 2][0]]
+        blname = "{0:s}&{1:s}".format(sela1, sela2)
+        cnt = np.sum(flag_window[sel, :, :, :], dtype=np.uint64)
+        sz = flag_window[sel, :, :, :].size
+        stats._counts_per_bl[blname] += cnt
+        stats._size_per_bl[blname] += sz
 
-        # binned per channel
-        bins_edges = np.linspace(np.min(chan_freqs), np.max(chan_freqs),
-                                 nchanbins)
-        bins = np.zeros(nchanbins, dtype=np.uint32)
+    # per scan and field
+    cnt = np.sum(flag_window, dtype=np.uint64)
+    sz = flag_window.size
+    stats._counts_per_field[field_name] += cnt
+    stats._size_per_field[field_name] += sz
+    stats._counts_per_scan[scan_no] += cnt
+    stats._size_per_scan[scan_no] += sz
 
-        for ch_i, ch in enumerate(bins_edges[:-1]):
-            sel = np.logical_and(chan_freqs >= bins_edges[ch_i],
-                                 chan_freqs < bins_edges[ch_i + 1])
-            bins[ch_i] = np.sum(flag_window[:, :, :, sel], dtype=np.uint64)
+    # binned per channel
+    bins_edges = np.linspace(np.min(chan_freqs), np.max(chan_freqs),
+                             nchanbins)
+    bins = np.zeros(nchanbins, dtype=np.uint32)
 
-        stats._counts_per_ddid[ddid] += bins
-        stats._bins_per_ddid[ddid] = bins_edges  # frequency labels
-        stats._size_per_ddid[ddid] += flag_window.size
+    for ch_i, ch in enumerate(bins_edges[:-1]):
+        sel = np.logical_and(chan_freqs >= bins_edges[ch_i],
+                             chan_freqs < bins_edges[ch_i + 1])
+        bins[ch_i] = np.sum(flag_window[:, :, :, sel], dtype=np.uint64)
+
+    stats._counts_per_ddid[ddid] += bins
+    stats._bins_per_ddid[ddid] = bins_edges  # frequency labels
+    stats._size_per_ddid[ddid] += flag_window.size
 
     return stats
 
@@ -163,9 +174,11 @@ class WindowStatistics(object):
         self._counts_per_ant = defaultdict(lambda: 0)
         self._counts_per_field = defaultdict(lambda: 0)
         self._counts_per_scan = defaultdict(lambda: 0)
+        self._counts_per_bl = defaultdict(lambda: 0)
         self._size_per_ant = defaultdict(lambda: 0)
         self._size_per_field = defaultdict(lambda: 0)
         self._size_per_scan = defaultdict(lambda: 0)
+        self._size_per_bl = defaultdict(lambda: 0)
 
         bin_factory = partial(np.zeros, nchanbins, dtype=np.uint64)
         self._counts_per_ddid = defaultdict(bin_factory)
@@ -186,6 +199,10 @@ class WindowStatistics(object):
         for d, count in other._counts_per_ddid.items():
             self._counts_per_ddid[d] += count
 
+        for b, count in other._counts_per_bl.items():
+            self._counts_per_bl[b] += count
+
+
         # Sizes
         for a, size in other._size_per_ant.items():
             self._size_per_ant[a] += size
@@ -198,6 +215,10 @@ class WindowStatistics(object):
 
         for s, size in other._size_per_ddid.items():
             self._size_per_ddid[s] += size
+
+        for b, size in other._size_per_bl.items():
+            self._size_per_bl[b] += size
+
 
         # ddid
         for d, bins in other._bins_per_ddid.items():
@@ -230,6 +251,7 @@ def summarise_stats(final, original):
                  final._size_per_ant[a],
                  original._counts_per_ant[a] * 100.0 /
                  original._size_per_ant[a]))
+
     l.append("Per scan:")
     for s in final._counts_per_scan:
         l.append("\t {0:d}: {1:.3f}%, original {2:.3f}%".format(s,
@@ -245,6 +267,14 @@ def summarise_stats(final, original):
                  final._size_per_field[f],
                  original._counts_per_field[f] * 100.0 /
                  original._size_per_field[f]))
+
+    l.append("Per baseline:")
+    for b in final._counts_per_bl:
+        l.append("\t {0:s}: {1:.3f}%, original {2:.3f}%".format(b,
+                 final._counts_per_bl[b] * 100.0 /
+                 final._size_per_bl[b],
+                 original._counts_per_bl[b] * 100.0 /
+                 original._size_per_bl[b]))
 
     l.append("Per data descriptor id:")
 
