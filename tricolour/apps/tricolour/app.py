@@ -292,7 +292,8 @@ def _main(args):
     fieldnames = field_ds[0].NAME.values
 
     avail_scans = [ds.SCAN_NUMBER for ds in xds]
-    args.scan_numbers = list(set(avail_scans).intersection(args.scan_numbers))
+    args.scan_numbers = list(set(avail_scans).intersection(
+        args.scan_numbers if args.scan_numbers is not None else avail_scans))
 
     if args.scan_numbers != []:
         log.info("Only considering scans '{0:s}' as "

@@ -80,7 +80,7 @@ def aggregate_chunks(chunks, max_chunks, return_groups=False):
 
 
 def casa_style_range(val, argparse=False, opt_unit="m"):
-    """ returns list of ints """
+    """ returns list of floats """
     RangeException = ArgumentTypeError if argparse else ValueError
 
     if not isinstance(val, str):
