@@ -37,7 +37,8 @@ from tricolour.dask_wrappers import polarised_intensity
 from tricolour.packing import (unique_baselines,
                                pack_data,
                                unpack_data)
-from tricolour.util import casa_style_range
+from tricolour.util import (casa_style_range,
+                            casa_style_int_list)
 from tricolour.window_statistics import (window_stats,
                                          combine_window_stats,
                                          summarise_stats)
@@ -138,11 +139,6 @@ def log_configuration(args):
                 log.info("\t%s: %s", key, value)
         log.info("***************** END ********************")
 
-    if args.scan_numbers != []:
-        log.info("Only considering scans '{0:s}' as "
-                 "per user selection criterion"
-                 .format(",".join(map(str, args.scan_numbers))))
-
     if args.flagging_strategy == "polarisation":
         log.info("Flagging based on quadrature polarized power")
     elif args.flagging_strategy == "total_power":
@@ -194,8 +190,8 @@ def create_parser():
                    default=[],
                    help="Name(s) of fields to flag. Defaults to flagging all")
     p.add_argument("-sn", "--scan-numbers",
-                   type=partial(casa_style_range, argparse=True),
-                   default=[],
+                   type=partial(casa_style_int_list, argparse=True, opt_unit=" "),
+                   default=None,
                    help="Scan numbers to flag (casa style range like 5~9)")
     p.add_argument("-dpm", "--disable-post-mortem", action="store_true",
                    help="Disable the default behaviour of starting "
@@ -295,6 +291,14 @@ def _main(args):
     field_ds = list(xds_from_table(fld_tab, table_kwargs=table_kwargs))
     fieldnames = field_ds[0].NAME.values
 
+    avail_scans = [ds.SCAN_NUMBER for ds in xds]
+    args.scan_numbers = list(set(avail_scans).intersection(args.scan_numbers))
+
+    if args.scan_numbers != []:
+        log.info("Only considering scans '{0:s}' as "
+                 "per user selection criterion"
+                 .format(", ".join(map(str, map(int, args.scan_numbers)))))
+
     if args.field_names != []:
         if not set(args.field_names) <= set(fieldnames):
             raise ValueError("One or more fields cannot be "
@@ -320,7 +324,7 @@ def _main(args):
         if ds.FIELD_ID not in field_dict:
             continue
 
-        if args.scan_numbers != [] and ds.SCAN_NUMBER not in args.scan_numbers:
+        if args.scan_numbers is not None and ds.SCAN_NUMBER not in args.scan_numbers:
             continue
 
         log.info("Adding field '{0:s}' scan {1:d} to "
@@ -425,42 +429,43 @@ def _main(args):
         writes = xds_to_table(new_ds, args.ms, "FLAG")
         # original should also have .compute called because we need stats
         write_computes.append(writes)
+    if len(write_computes) > 0:
+        # Combine stats from all datasets
+        original_stats = combine_window_stats(original_stats)
+        final_stats = combine_window_stats(final_stats)
 
-    # Combine stats from all datasets
-    original_stats = combine_window_stats(original_stats)
-    final_stats = combine_window_stats(final_stats)
+        with contextlib.ExitStack() as stack:
+            # Create dask profiling contexts
+            profilers = []
 
-    with contextlib.ExitStack() as stack:
-        # Create dask profiling contexts
-        profilers = []
+            if can_profile:
+                profilers.append(stack.enter_context(Profiler()))
+                profilers.append(stack.enter_context(CacheProfiler()))
+                profilers.append(stack.enter_context(ResourceProfiler()))
 
+            if sys.stdout.isatty():
+                stack.enter_context(ProgressBar())
+
+            _, original_stats, final_stats = dask.compute(write_computes,
+                                                        original_stats,
+                                                        final_stats)
         if can_profile:
-            profilers.append(stack.enter_context(Profiler()))
-            profilers.append(stack.enter_context(CacheProfiler()))
-            profilers.append(stack.enter_context(ResourceProfiler()))
+            visualize(profilers)
 
-        if sys.stdout.isatty():
-            stack.enter_context(ProgressBar())
+        toc = time.time()
 
-        _, original_stats, final_stats = dask.compute(write_computes,
-                                                    original_stats,
-                                                    final_stats)
-    if can_profile:
-        visualize(profilers)
+        # Log each summary line
+        for line in summarise_stats(final_stats, original_stats):
+            log.info(line)
 
-    toc = time.time()
-
-    # Log each summary line
-    for line in summarise_stats(final_stats, original_stats):
-        log.info(line)
-
-    elapsed = toc - tic
-    log.info("Data flagged successfully in "
-             "{0:02.0f}h{1:02.0f}m{2:02.0f}s"
-             .format((elapsed // 60) // 60,
-                     (elapsed // 60) % 60,
-                     elapsed % 60))
-
+        elapsed = toc - tic
+        log.info("Data flagged successfully in "
+                 "{0:02.0f}h{1:02.0f}m{2:02.0f}s"
+                 .format((elapsed // 60) // 60,
+                         (elapsed // 60) % 60,
+                         elapsed % 60))
+    else:
+        log.info("User data selection criteria resulted in empty dataset. Nothing to be done. Bye!")
 
 if __name__ == "__main__":
     main()
