@@ -6,6 +6,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import re
 import argparse
 import contextlib
 from functools import partial
@@ -301,17 +302,26 @@ def _main(args):
                  .format(", ".join(map(str, map(int, args.scan_numbers)))))
 
     if args.field_names != []:
-        if not set(args.field_names) <= set(fieldnames):
+        flatten_field_names = []
+        for f in args.field_names:
+            flatten_field_names += [x.strip() for x in f.split(",")] #accept comma lists per specification
+        for f in flatten_field_names:
+            if re.match(r"^\d+$", f) and int(f) < len(fieldnames):
+                flatten_field_names.append(fieldnames[int(f)])
+        flatten_field_names = list(set(filter(lambda x: not re.match(r"^\d+$", x), flatten_field_names)))
+        log.info("Only considering fields '{0:s}' for flagging per user selection criterion.".format(
+            ", ".join(flatten_field_names)))
+        if not set(flatten_field_names) <= set(fieldnames):
             raise ValueError("One or more fields cannot be "
                              "found in dataset '{0:s}' "
                              "You specified {1:s}, but "
                              "only {2:s} are available".format(
                                 args.ms,
-                                ",".join(args.field_names),
+                                ",".join(flatten_field_names),
                                 ",".join(fieldnames)))
 
         field_dict = dict([(np.where(fieldnames == fn)[0][0], fn)
-                           for fn in args.field_names])
+                           for fn in flatten_field_names])
     else:
         field_dict = dict([(findx, fn) for findx, fn in enumerate(fieldnames)])
 
