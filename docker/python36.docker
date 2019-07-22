@@ -2,15 +2,12 @@ FROM kernsuite/base:5
 
 # Install base requirements
 RUN docker-apt-install python3-pip
-RUN pip3 install --upgrade pip setuptools flake8
+RUN pip3 install --upgrade pip setuptools
 ADD . /code
 WORKDIR /code
 
 # Install base + testing packages
 RUN pip3 install .[testing]
 
-# Run tests
-RUN py.test -s -vvv .
-
-# Flake the repository
-RUN flake8 .
+# Run tests and flake at the same time
+RUN py.test --flake8 -s -vvv .
