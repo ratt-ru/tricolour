@@ -5,6 +5,7 @@ History
 0.1.3 (YYYY-MM-DD)
 ------------------
 
+* Use pytest-flake8 when running test cases (:pr:`56`)
 * Fix polarisation flagging for uncalibrated data (:pr:`55`)
 * Add ability to flag on total power (:pr:`55`)
 * Baseline statistics (:pr:`55`)
