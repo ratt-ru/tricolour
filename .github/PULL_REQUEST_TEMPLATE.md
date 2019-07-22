@@ -14,7 +14,7 @@ If you encounter flake8 failures, a quick way to correct
 this is to run `autopep8` and `flake8` again.
 
 ```bash
-$ pip install -U autopep8 black
+$ pip install -U autopep8
 $ autopep8 -r -i tricolour
 $ flake8 tricolour
 ```
