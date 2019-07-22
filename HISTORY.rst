@@ -5,6 +5,10 @@ History
 0.1.3 (YYYY-MM-DD)
 ------------------
 
+* Fix polarisation flagging for uncalibrated data (:pr:`55`)
+* Add ability to flag on total power (:pr:`55`)
+* Baseline statistics (:pr:`55`)
+* 4K UHF mask (:pr:`55`)
 * Add Pull Request Template (:pr:`53`)
 
 
