@@ -79,20 +79,47 @@ def aggregate_chunks(chunks, max_chunks, return_groups=False):
     return agg_chunks[0] if singleton else agg_chunks
 
 
-def casa_style_range(val, argparse=False):
-    """ returns list of ints """
+def casa_style_range(val, argparse=False, opt_unit="m"):
+    """ returns list of floats """
     RangeException = ArgumentTypeError if argparse else ValueError
 
     if not isinstance(val, str):
         raise RangeException("Value must be a string")
-    if val == "":
+    if val.strip() == "" or val.strip() == "*":
         return (0, np.inf)
     elif re.match(r"^(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?~"
-                  r"(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?[\s]*[m]?$", val):
-
-        return list(map(float, val.replace(" ", "")
-                                  .replace("\t", "")
-                                  .replace("m", "")
-                                  .split("~")))
+                  r"(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?[\s]*[" +
+                  opt_unit + "]?$", val):
+        val = val.replace(" ", "").replace("\t", "")
+        for u in opt_unit:
+            val = val.replace(opt_unit, "")
+        vals = list(map(float, val.split("~")))
+        return vals
     else:
         raise RangeException("Value must be range or blank")
+
+
+def casa_style_int_list(val, argparse=False, opt_unit="m"):
+    """ returns list of ints """
+    RangeException = ArgumentTypeError if argparse else ValueError
+    if val.strip() == "" or val.strip() == "*":
+        return None
+    elif re.match(r"^(\d+)(~\d+[" + opt_unit +
+                  r"]?)?(,(\d+)(~\d+[" + opt_unit +
+                  r"]?)?)*$", val):
+        val = val.replace(" ", "").replace("\t", "")
+        for u in opt_unit:
+            val = val.replace(opt_unit, "")
+        vals = val.split(",")
+        range_vals = list(filter(lambda x: "~" in x, vals))
+        list_vals = filter(lambda x: "~" not in x, vals)
+        list_vals = list(map(int, list_vals))
+        range_vals = [tuple(map(int, v.split("~"))) for v in range_vals]
+        range_vals = [np.arange(rmin, rmax + 1) for rmin, rmax in range_vals]
+        range_vals_flat = []
+        for r in range_vals:
+            range_vals_flat += list(r)
+        vals = list(set(range_vals_flat + list_vals))
+        return vals
+    else:
+        raise RangeException("Value must be range, comma list or blank")

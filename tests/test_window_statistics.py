@@ -33,7 +33,7 @@ def unique_baselines(antenna_names):
 
 @pytest.fixture
 def channels():
-    return np.linspace(.856e9, 2*.856e9, nchan)
+    return np.linspace(.856e9, 2 * .856e9, nchan)
 
 
 @pytest.fixture

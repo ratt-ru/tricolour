@@ -6,6 +6,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import re
 import argparse
 import contextlib
 from functools import partial
@@ -37,7 +38,7 @@ from tricolour.dask_wrappers import polarised_intensity
 from tricolour.packing import (unique_baselines,
                                pack_data,
                                unpack_data)
-from tricolour.util import casa_style_range
+from tricolour.util import (casa_style_int_list)
 from tricolour.window_statistics import (window_stats,
                                          combine_window_stats,
                                          summarise_stats)
@@ -120,7 +121,9 @@ def log_configuration(args):
         return
 
     if len(strategies) > 0:
+        log.info("*****************************************")
         log.info("The following strategies will be applied:")
+        log.info("*****************************************")
 
         for s, strategy in enumerate(strategies):
             name = strategy.get("name", "<nameless>")
@@ -134,14 +137,12 @@ def log_configuration(args):
 
             for key, value in strategy.get("kwargs", empty_dict).items():
                 log.info("\t%s: %s", key, value)
-
-    if args.scan_numbers != []:
-        log.info("Only considering scans '{0:s}' as "
-                 "per user selection criterion"
-                 .format(",".join(map(str, args.scan_numbers))))
+        log.info("***************** END ********************")
 
     if args.flagging_strategy == "polarisation":
         log.info("Flagging based on quadrature polarized power")
+    elif args.flagging_strategy == "total_power":
+        log.info("Flagging on total quadrature power")
     else:
         log.info("Flagging per correlation ('standard' mode)")
 
@@ -156,14 +157,19 @@ def create_parser():
                    "the flagger in the 'sum_threshold' key.")
     p.add_argument("-if", "--ignore-flags", action="store_true")
     p.add_argument("-fs", "--flagging-strategy", default="standard",
-                   choices=["standard", "polarisation"],
+                   choices=["standard", "polarisation", "total_power"],
                    help="Flagging Strategy. "
                         "If 'standard' all correlations in the visibility "
                           "are flagged independently. "
                         "If 'polarisation' the polarised intensity "
                           "sqrt(Q^2 + U^2 + V^2) is "
                           "calculated and used to flag all correlations "
-                          "in the visibility.")
+                          "in the visibility."
+                        "If 'total_power' the available quadrature power "
+                        "is computed "
+                        "sqrt(I^2 + Q^2 + U^2 + V^2) or a subset, and used "
+                        "to flag "
+                        "all correlations in the visibility")
     p.add_argument("-rc", "--row-chunks", type=int, default=10000,
                    help="Hint indicating the number of Measurement Set rows "
                    "to read in a single chunk. "
@@ -187,8 +193,9 @@ def create_parser():
                    default=[],
                    help="Name(s) of fields to flag. Defaults to flagging all")
     p.add_argument("-sn", "--scan-numbers",
-                   type=partial(casa_style_range, argparse=True),
-                   default=[],
+                   type=partial(casa_style_int_list,
+                                argparse=True, opt_unit=" "),
+                   default=None,
                    help="Scan numbers to flag (casa style range like 5~9)")
     p.add_argument("-dpm", "--disable-post-mortem", action="store_true",
                    help="Disable the default behaviour of starting "
@@ -206,7 +213,11 @@ def create_parser():
                         "necessary to reorder the data on disk.")
     p.add_argument("-td", "--temporary-directory", default=None,
                    help="Directory Location of Temporary data")
-
+    p.add_argument("-smc", "--subtract-model-column", default=None, type=str,
+                   help="Subtracts specified column from data column "
+                        "specified. "
+                        "Flagging will proceed on residual "
+                        "data.")
     return p
 
 
@@ -219,7 +230,12 @@ def main():
         args = create_parser().parse_args()
 
         # Configure dask pool
-        stack.enter_context(dask.config.set(pool=ThreadPool(args.nworkers)))
+        if args.nworkers <= 1:
+            log.warn("Entering single threaded mode per user request!")
+            dask.config.set(scheduler='single-threaded')
+        else:
+            stack.enter_context(dask.config.set(
+                pool=ThreadPool(args.nworkers)))
 
         _main(args)
 
@@ -249,9 +265,15 @@ def _main(args):
 
     # Reopen the datasets using the aggregated row ordering
     table_kwargs = {'ack': False}
+    columns = [data_column,
+               "FLAG",
+               "TIME",
+               "ANTENNA1",
+               "ANTENNA2"]
+    if args.subtract_model_column is not None:
+        columns.append(args.subtract_model_column)
     xds = list(xds_from_ms(args.ms,
-                           columns=(data_column, "FLAG",
-                                    "TIME", "ANTENNA1", "ANTENNA2"),
+                           columns=tuple(columns),
                            group_cols=group_cols,
                            index_cols=index_cols,
                            chunks={"row": args.row_chunks},
@@ -276,18 +298,41 @@ def _main(args):
     field_ds = list(xds_from_table(fld_tab, table_kwargs=table_kwargs))
     fieldnames = field_ds[0].NAME.values
 
+    avail_scans = [ds.SCAN_NUMBER for ds in xds]
+    args.scan_numbers = list(set(avail_scans).intersection(
+        args.scan_numbers if args.scan_numbers is not None else avail_scans))
+
+    if args.scan_numbers != []:
+        log.info("Only considering scans '{0:s}' as "
+                 "per user selection criterion"
+                 .format(", ".join(map(str, map(int, args.scan_numbers)))))
+
     if args.field_names != []:
-        if not set(args.field_names) <= set(fieldnames):
+        flatten_field_names = []
+        for f in args.field_names:
+            # accept comma lists per specification
+            flatten_field_names += [x.strip() for x in f.split(",")]
+        for f in flatten_field_names:
+            if re.match(r"^\d+$", f) and int(f) < len(fieldnames):
+                flatten_field_names.append(fieldnames[int(f)])
+        flatten_field_names = list(
+            set(filter(lambda x: not re.match(r"^\d+$", x),
+                       flatten_field_names)))
+        log.info("Only considering fields '{0:s}' for flagging per "
+                 "user "
+                 "selection criterion.".format(
+                    ", ".join(flatten_field_names)))
+        if not set(flatten_field_names) <= set(fieldnames):
             raise ValueError("One or more fields cannot be "
                              "found in dataset '{0:s}' "
                              "You specified {1:s}, but "
                              "only {2:s} are available".format(
-                                args.ms,
-                                ",".join(args.field_names),
-                                ",".join(fieldnames)))
+                                 args.ms,
+                                 ",".join(flatten_field_names),
+                                 ",".join(fieldnames)))
 
         field_dict = dict([(np.where(fieldnames == fn)[0][0], fn)
-                           for fn in args.field_names])
+                           for fn in flatten_field_names])
     else:
         field_dict = dict([(findx, fn) for findx, fn in enumerate(fieldnames)])
 
@@ -301,7 +346,8 @@ def _main(args):
         if ds.FIELD_ID not in field_dict:
             continue
 
-        if args.scan_numbers != [] and ds.SCAN_NUMBER not in args.scan_numbers:
+        if args.scan_numbers is not None and \
+                ds.SCAN_NUMBER not in args.scan_numbers:
             continue
 
         log.info("Adding field '{0:s}' scan {1:d} to "
@@ -316,6 +362,13 @@ def _main(args):
 
         # Visibilities from the dataset
         vis = getattr(ds, data_column).data
+        if args.subtract_model_column is not None:
+            log.info("Forming residual data between '{0:s}' and "
+                     "'{1:s}' for flagging.".format(
+                        data_column, args.subtract_model_column))
+            vismod = getattr(ds, args.subtract_model_column).data
+            vis = vis - vismod
+
         antenna1 = ds.ANTENNA1.data
         antenna2 = ds.ANTENNA2.data
         chan_freq = spw_info.CHAN_FREQ.values
@@ -325,8 +378,11 @@ def _main(args):
         # otherwise take flags from the dataset
         if args.ignore_flags is True:
             flags = da.full_like(vis, False, dtype=np.bool)
-            log.warn("!!!NOTE: COMPLETELY IGNORING MEASUREMENT SET FLAGS "
-                     " AS PER -IF FLAG REQUEST!!!")
+            log.warn("CRITICAL: Completely ignoring measurement set "
+                     "flags as per "
+                     "'-if' request. "
+                     "Strategy WILL NOT or with original flags, even if "
+                     "specified!")
         else:
             flags = ds.FLAG.data
 
@@ -336,11 +392,29 @@ def _main(args):
         if args.flagging_strategy == "polarisation":
             corr_type = pol_info.CORR_TYPE.data.compute().tolist()
             stokes_map = stokes_corr_map(corr_type)
-            stokes_pol = tuple(v for k, v in stokes_map.items() if k != 'I')
+            stokes_pol = tuple(v for k, v in stokes_map.items() if k != "I")
+            vis = polarised_intensity(vis, stokes_pol)
+            flags = da.any(flags, axis=2, keepdims=True)
+        elif args.flagging_strategy == "total_power":
+            if args.subtract_model_column is None:
+                log.warn("CRITICAL: You requested to flag total quadrature "
+                         "power, but not on residuals. "
+                         "This is not advisable and the flagger may mistake "
+                         "fringes of "
+                         "off-axis sources for broadband RFI.")
+            corr_type = pol_info.CORR_TYPE.data.compute().tolist()
+            stokes_map = stokes_corr_map(corr_type)
+            stokes_pol = tuple(v for k, v in stokes_map.items())
             vis = polarised_intensity(vis, stokes_pol)
             flags = da.any(flags, axis=2, keepdims=True)
         elif args.flagging_strategy == "standard":
-            pass
+            if args.subtract_model_column is None:
+                log.warn("CRITICAL: You requested to flag per correlation, "
+                         "but "
+                         "not on residuals. "
+                         "This is not advisable and the flagger may mistake "
+                         "fringes of "
+                         "off-axis sources for broadband RFI.")
         else:
             raise ValueError("Invalid flagging strategy '%s'" %
                              args.flagging_strategy)
@@ -378,54 +452,58 @@ def _main(args):
         # finally unpack back for writing
         unpacked_flags = unpack_data(antenna1, antenna2, time_inv,
                                      ubl, flag_windows)
-
-        # Polarised flagging, broadcast the single correlation
-        # back to the full correlation range (all flagged)
-        if args.flagging_strategy == "polarisation":
-            unpacked_flags = da.broadcast_to(unpacked_flags,
-                                             (nrow, nchan, ncorr))
+        equalized_flags = (da.sum(unpacked_flags, axis=2) > 0)
+        corr_flags = da.repeat(equalized_flags.flatten(
+        ), repeats=ncorr).reshape((nrow, nchan, ncorr))
 
         # Create new dataset containing new flags
-        xarray_flags = xr.DataArray(unpacked_flags, dims=ds.FLAG.dims)
+        xarray_flags = xr.DataArray(corr_flags, dims=ds.FLAG.dims)
         new_ds = ds.assign(FLAG=xarray_flags)
 
         # Write back to original dataset
         writes = xds_to_table(new_ds, args.ms, "FLAG")
         # original should also have .compute called because we need stats
         write_computes.append(writes)
+    if len(write_computes) > 0:
+        # Combine stats from all datasets
+        original_stats = combine_window_stats(original_stats)
+        final_stats = combine_window_stats(final_stats)
 
-    # Combine stats from all datasets
-    original_stats = combine_window_stats(original_stats)
-    final_stats = combine_window_stats(final_stats)
+        with contextlib.ExitStack() as stack:
+            # Create dask profiling contexts
+            profilers = []
 
-    with contextlib.ExitStack() as stack:
-        # Create dask profiling contexts
-        profilers = []
+            if can_profile:
+                profilers.append(stack.enter_context(Profiler()))
+                profilers.append(stack.enter_context(CacheProfiler()))
+                profilers.append(stack.enter_context(ResourceProfiler()))
 
+            if sys.stdout.isatty():
+                stack.enter_context(ProgressBar())
+
+            _, original_stats, final_stats = dask.compute(write_computes,
+                                                          original_stats,
+                                                          final_stats)
         if can_profile:
-            profilers.append(stack.enter_context(Profiler()))
-            profilers.append(stack.enter_context(CacheProfiler()))
-            profilers.append(stack.enter_context(ResourceProfiler()))
+            visualize(profilers)
 
-        if sys.stdout.isatty():
-            stack.enter_context(ProgressBar())
+        toc = time.time()
 
-        _, original_stats, final_stats = dask.compute(write_computes,
-                                                      original_stats,
-                                                      final_stats)
+        # Log each summary line
+        for line in summarise_stats(final_stats, original_stats):
+            log.info(line)
 
-    if can_profile:
-        visualize(profilers)
+        elapsed = toc - tic
+        log.info("Data flagged successfully in "
+                 "{0:02.0f}h{1:02.0f}m{2:02.0f}s"
+                 .format((elapsed // 60) // 60,
+                         (elapsed // 60) % 60,
+                         elapsed % 60))
+    else:
+        log.info(
+            "User data selection criteria resulted in empty dataset. "
+            "Nothing to be done. Bye!")
 
-    toc = time.time()
 
-    # Log each summary line
-    for line in summarise_stats(final_stats, original_stats):
-        log.info(line)
-
-    elapsed = toc - tic
-    log.info("Data flagged successfully in "
-             "{0:02.0f}h{1:02.0f}m{2:02.0f}s"
-             .format((elapsed // 60) // 60,
-                     (elapsed // 60) % 60,
-                     elapsed % 60))
+if __name__ == "__main__":
+    main()

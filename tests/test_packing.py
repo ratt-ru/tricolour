@@ -48,7 +48,7 @@ def test_vis_and_flag_packing(tmpdir, backend):
     nrow = time.size
 
     vis = (rs.standard_normal((nrow, nchan, ncorr)) +
-           rs.standard_normal((nrow, nchan, ncorr))*1j)
+           rs.standard_normal((nrow, nchan, ncorr)) * 1j)
 
     flag = rs.randint(0, 2, (nrow, nchan, ncorr))
 

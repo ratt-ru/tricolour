@@ -619,7 +619,7 @@ def _sum_threshold1d(input_data, input_flags, output_flags, windows,
 
         padded_slice = slice(max(chunks[ci] - np.max(windows) + 1, 0),
                              min(chunks[ci + 1] + np.max(windows) - 1,
-                             input_data.size))
+                                 input_data.size))
         padded_data = input_data[padded_slice]
         # TODO: can pre-allocate these outside the loop (but will need
         # resizing)
@@ -1010,8 +1010,8 @@ def uvcontsub_flagger(vis, flags, major_cycles=5,
 
     nbl, ncorr, ntime, nfreq = vis.shape
 
-    vis = vis.reshape(nbl*ncorr, ntime, nfreq)
-    flags = flags.reshape(nbl*ncorr, ntime, nfreq)
+    vis = vis.reshape(nbl * ncorr, ntime, nfreq)
+    flags = flags.reshape(nbl * ncorr, ntime, nfreq)
 
     vis.flags.writeable = True
 
@@ -1144,8 +1144,8 @@ def sum_threshold_flagger(vis, flags, outlier_nsigma=4.5,
 
     # Collapse baseline and correlation dimensions together
     nbl, ncorr, ntime, nchan = vis.shape
-    vis = vis.reshape(nbl*ncorr, ntime, nchan)
-    flags = flags.reshape(nbl*ncorr, ntime, nchan)
+    vis = vis.reshape(nbl * ncorr, ntime, nchan)
+    flags = flags.reshape(nbl * ncorr, ntime, nchan)
 
     windows_freq = np.asarray(windows_freq, dtype=np.float32)
     windows_freq = np.ceil(windows_freq) / average_freq
