@@ -38,8 +38,7 @@ from tricolour.dask_wrappers import polarised_intensity
 from tricolour.packing import (unique_baselines,
                                pack_data,
                                unpack_data)
-from tricolour.util import (casa_style_range,
-                            casa_style_int_list)
+from tricolour.util import (casa_style_int_list)
 from tricolour.window_statistics import (window_stats,
                                          combine_window_stats,
                                          summarise_stats)
@@ -144,7 +143,8 @@ def log_configuration(args):
         log.info("Flagging based on quadrature polarized power")
     elif args.flagging_strategy == "total_power":
         log.info("Flagging on total quadrature power")
-    else: log.info("Flagging per correlation ('standard' mode)")
+    else:
+        log.info("Flagging per correlation ('standard' mode)")
 
 
 def create_parser():
@@ -165,9 +165,11 @@ def create_parser():
                           "sqrt(Q^2 + U^2 + V^2) is "
                           "calculated and used to flag all correlations "
                           "in the visibility."
-                        "If 'total_power' the available quadrature power is computed "
-                          "sqrt(I^2 + Q^2 + U^2 + V^2) or a subset, and used to flag "
-                          "all correlations in the visibility")
+                        "If 'total_power' the available quadrature power "
+                        "is computed "
+                        "sqrt(I^2 + Q^2 + U^2 + V^2) or a subset, and used "
+                        "to flag "
+                        "all correlations in the visibility")
     p.add_argument("-rc", "--row-chunks", type=int, default=10000,
                    help="Hint indicating the number of Measurement Set rows "
                    "to read in a single chunk. "
@@ -191,7 +193,8 @@ def create_parser():
                    default=[],
                    help="Name(s) of fields to flag. Defaults to flagging all")
     p.add_argument("-sn", "--scan-numbers",
-                   type=partial(casa_style_int_list, argparse=True, opt_unit=" "),
+                   type=partial(casa_style_int_list,
+                                argparse=True, opt_unit=" "),
                    default=None,
                    help="Scan numbers to flag (casa style range like 5~9)")
     p.add_argument("-dpm", "--disable-post-mortem", action="store_true",
@@ -211,8 +214,10 @@ def create_parser():
     p.add_argument("-td", "--temporary-directory", default=None,
                    help="Directory Location of Temporary data")
     p.add_argument("-smc", "--subtract-model-column", default=None, type=str,
-                   help="Subtracts specified column from data column specified. "
-                        "Flagging will proceed on residual data.")
+                   help="Subtracts specified column from data column "
+                        "specified. "
+                        "Flagging will proceed on residual "
+                        "data.")
     return p
 
 
@@ -229,7 +234,8 @@ def main():
             log.warn("Entering single threaded mode per user request!")
             dask.config.set(scheduler='single-threaded')
         else:
-            stack.enter_context(dask.config.set(pool=ThreadPool(args.nworkers)))
+            stack.enter_context(dask.config.set(
+                pool=ThreadPool(args.nworkers)))
 
         _main(args)
 
@@ -259,11 +265,11 @@ def _main(args):
 
     # Reopen the datasets using the aggregated row ordering
     table_kwargs = {'ack': False}
-    columns=[data_column,
-             "FLAG",
-             "TIME",
-             "ANTENNA1",
-             "ANTENNA2"]
+    columns = [data_column,
+               "FLAG",
+               "TIME",
+               "ANTENNA1",
+               "ANTENNA2"]
     if args.subtract_model_column is not None:
         columns.append(args.subtract_model_column)
     xds = list(xds_from_ms(args.ms,
@@ -304,21 +310,26 @@ def _main(args):
     if args.field_names != []:
         flatten_field_names = []
         for f in args.field_names:
-            flatten_field_names += [x.strip() for x in f.split(",")] #accept comma lists per specification
+            # accept comma lists per specification
+            flatten_field_names += [x.strip() for x in f.split(",")]
         for f in flatten_field_names:
             if re.match(r"^\d+$", f) and int(f) < len(fieldnames):
                 flatten_field_names.append(fieldnames[int(f)])
-        flatten_field_names = list(set(filter(lambda x: not re.match(r"^\d+$", x), flatten_field_names)))
-        log.info("Only considering fields '{0:s}' for flagging per user selection criterion.".format(
-            ", ".join(flatten_field_names)))
+        flatten_field_names = list(
+            set(filter(lambda x: not re.match(r"^\d+$", x),
+                       flatten_field_names)))
+        log.info("Only considering fields '{0:s}' for flagging per "
+                 "user "
+                 "selection criterion.".format(
+                    ", ".join(flatten_field_names)))
         if not set(flatten_field_names) <= set(fieldnames):
             raise ValueError("One or more fields cannot be "
                              "found in dataset '{0:s}' "
                              "You specified {1:s}, but "
                              "only {2:s} are available".format(
-                                args.ms,
-                                ",".join(flatten_field_names),
-                                ",".join(fieldnames)))
+                                 args.ms,
+                                 ",".join(flatten_field_names),
+                                 ",".join(fieldnames)))
 
         field_dict = dict([(np.where(fieldnames == fn)[0][0], fn)
                            for fn in flatten_field_names])
@@ -335,7 +346,8 @@ def _main(args):
         if ds.FIELD_ID not in field_dict:
             continue
 
-        if args.scan_numbers is not None and ds.SCAN_NUMBER not in args.scan_numbers:
+        if args.scan_numbers is not None and \
+                ds.SCAN_NUMBER not in args.scan_numbers:
             continue
 
         log.info("Adding field '{0:s}' scan {1:d} to "
@@ -351,8 +363,9 @@ def _main(args):
         # Visibilities from the dataset
         vis = getattr(ds, data_column).data
         if args.subtract_model_column is not None:
-            log.info("Forming residual data between '{0:s}' and '{1:s}' for flagging.".format(
-                data_column, args.subtract_model_column))
+            log.info("Forming residual data between '{0:s}' and "
+                     "'{1:s}' for flagging.".format(
+                        data_column, args.subtract_model_column))
             vismod = getattr(ds, args.subtract_model_column).data
             vis = vis - vismod
 
@@ -365,8 +378,11 @@ def _main(args):
         # otherwise take flags from the dataset
         if args.ignore_flags is True:
             flags = da.full_like(vis, False, dtype=np.bool)
-            log.warn("CRITICAL: Completely ignoring measurement set flags as per '-if' request. "
-                     "Strategy WILL NOT or with original flags, even if specified!")
+            log.warn("CRITICAL: Completely ignoring measurement set "
+                     "flags as per "
+                     "'-if' request. "
+                     "Strategy WILL NOT or with original flags, even if "
+                     "specified!")
         else:
             flags = ds.FLAG.data
 
@@ -381,8 +397,11 @@ def _main(args):
             flags = da.any(flags, axis=2, keepdims=True)
         elif args.flagging_strategy == "total_power":
             if args.subtract_model_column is None:
-                log.warn("CRITICAL: You requested to flag total quadrature power, but not on residuals. "
-                         "This is not advisable and the flagger may mistake fringes of off-axis sources for broadband RFI.")
+                log.warn("CRITICAL: You requested to flag total quadrature "
+                         "power, but not on residuals. "
+                         "This is not advisable and the flagger may mistake "
+                         "fringes of "
+                         "off-axis sources for broadband RFI.")
             corr_type = pol_info.CORR_TYPE.data.compute().tolist()
             stokes_map = stokes_corr_map(corr_type)
             stokes_pol = tuple(v for k, v in stokes_map.items())
@@ -390,8 +409,12 @@ def _main(args):
             flags = da.any(flags, axis=2, keepdims=True)
         elif args.flagging_strategy == "standard":
             if args.subtract_model_column is None:
-                log.warn("CRITICAL: You requested to flag per correlation, but not on residuals. "
-                         "This is not advisable and the flagger may mistake fringes of off-axis sources for broadband RFI.")
+                log.warn("CRITICAL: You requested to flag per correlation, "
+                         "but "
+                         "not on residuals. "
+                         "This is not advisable and the flagger may mistake "
+                         "fringes of "
+                         "off-axis sources for broadband RFI.")
         else:
             raise ValueError("Invalid flagging strategy '%s'" %
                              args.flagging_strategy)
@@ -430,7 +453,8 @@ def _main(args):
         unpacked_flags = unpack_data(antenna1, antenna2, time_inv,
                                      ubl, flag_windows)
         equalized_flags = (da.sum(unpacked_flags, axis=2) > 0)
-        corr_flags = da.repeat(equalized_flags.flatten(), repeats=ncorr).reshape((nrow, nchan, ncorr))
+        corr_flags = da.repeat(equalized_flags.flatten(
+        ), repeats=ncorr).reshape((nrow, nchan, ncorr))
 
         # Create new dataset containing new flags
         xarray_flags = xr.DataArray(corr_flags, dims=ds.FLAG.dims)
@@ -458,8 +482,8 @@ def _main(args):
                 stack.enter_context(ProgressBar())
 
             _, original_stats, final_stats = dask.compute(write_computes,
-                                                        original_stats,
-                                                        final_stats)
+                                                          original_stats,
+                                                          final_stats)
         if can_profile:
             visualize(profilers)
 
@@ -476,7 +500,10 @@ def _main(args):
                          (elapsed // 60) % 60,
                          elapsed % 60))
     else:
-        log.info("User data selection criteria resulted in empty dataset. Nothing to be done. Bye!")
+        log.info(
+            "User data selection criteria resulted in empty dataset. "
+            "Nothing to be done. Bye!")
+
 
 if __name__ == "__main__":
     main()

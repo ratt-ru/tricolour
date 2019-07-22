@@ -88,7 +88,8 @@ def casa_style_range(val, argparse=False, opt_unit="m"):
     if val.strip() == "" or val.strip() == "*":
         return (0, np.inf)
     elif re.match(r"^(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?~"
-                  r"(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?[\s]*["+opt_unit+"]?$", val):
+                  r"(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?[\s]*[" +
+                  opt_unit + "]?$", val):
         val = val.replace(" ", "").replace("\t", "")
         for u in opt_unit:
             val = val.replace(opt_unit, "")
@@ -97,12 +98,15 @@ def casa_style_range(val, argparse=False, opt_unit="m"):
     else:
         raise RangeException("Value must be range or blank")
 
+
 def casa_style_int_list(val, argparse=False, opt_unit="m"):
     """ returns list of ints """
     RangeException = ArgumentTypeError if argparse else ValueError
     if val.strip() == "" or val.strip() == "*":
         return None
-    elif re.match(r"^(\d+)(~\d+["+opt_unit+"]?)?(,(\d+)(~\d+["+opt_unit+"]?)?)*$", val):
+    elif re.match(r"^(\d+)(~\d+[" + opt_unit +
+                  r"]?)?(,(\d+)(~\d+[" + opt_unit +
+                  r"]?)?)*$", val):
         val = val.replace(" ", "").replace("\t", "")
         for u in opt_unit:
             val = val.replace(opt_unit, "")

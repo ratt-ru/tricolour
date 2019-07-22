@@ -79,11 +79,11 @@ def load_mask(filename, dilate):
     log.info("Loaded mask {0:s} {1:s} with {2:.2f}% "
              "flagged bandwidth between {3:.3f} "
              "and {4:.3f} GHz".format(
-                filename,
-                "(dilated)" if dilate else "(non-dilated)",
-                100.0 * masked_channels.size / mask_chans.size,
-                np.min(mask_chans) / 1.0e9,
-                np.max(mask_chans) / 1.0e9))
+                 filename,
+                 "(dilated)" if dilate else "(non-dilated)",
+                 100.0 * masked_channels.size / mask_chans.size,
+                 np.min(mask_chans) / 1.0e9,
+                 np.max(mask_chans) / 1.0e9))
 
     return masked_channels
 

@@ -31,9 +31,9 @@ STOKES_TYPES = {
 # Correlation dependencies required for reconstructing stokes values
 # (corr1, corr2, a, s1, s2). stokes = a*(s1*corr1 + s2*corr2)
 stokes_deps = {
-    'I': [('XX', 'YY', 0.5 + 0.0j, 1,  1), ('RR', 'LL', 0.5 + 0.0j, 1,  1)],
-    'Q': [('XX', 'YY', 0.5 + 0.0j, 1, -1), ('RL', 'LR', 0.5 + 0.0j, 1,  1)],
-    'U': [('XY', 'YX', 0.5 + 0.0j, 1,  1), ('RL', 'LR', 0.0 - 0.5j, 1, -1)],
+    'I': [('XX', 'YY', 0.5 + 0.0j, 1, 1), ('RR', 'LL', 0.5 + 0.0j, 1, 1)],
+    'Q': [('XX', 'YY', 0.5 + 0.0j, 1, -1), ('RL', 'LR', 0.5 + 0.0j, 1, 1)],
+    'U': [('XY', 'YX', 0.5 + 0.0j, 1, 1), ('RL', 'LR', 0.0 - 0.5j, 1, -1)],
     'V': [('XY', 'YX', 0.0 - 0.5j, 1, -1), ('RR', 'LL', 0.5 + 0.0j, 1, -1)]
 }
 
@@ -136,7 +136,9 @@ def unpolarised_intensity(vis, stokes_unpol, stokes_pol):
             for (c1, c2, a, s1, s2) in stokes_pol:
                 value = a * (s1 * vis[r, f, c1] +
                              s2 * vis[r, f, c2])
-                pol += np.abs(value)**2 # uncalibrated data may have a substantial amount of power in the imaginary
+                # uncalibrated data may have a substantial amount of power in
+                # the imaginary
+                pol += np.abs(value)**2
                 # use absolute to be certain
 
             # Unpolarised intensity (I)
@@ -145,7 +147,9 @@ def unpolarised_intensity(vis, stokes_unpol, stokes_pol):
             for (c1, c2, a, s1, s2) in stokes_unpol:
                 value = a * (s1 * vis[r, f, c1] +
                              s2 * vis[r, f, c2])
-                unpol += np.abs(value) # uncalibrated data may have a substantial amount of power in the imaginary
+                # uncalibrated data may have a substantial amount of power in
+                # the imaginary
+                unpol += np.abs(value)
                 # use absolute to be certain
 
             # I - sqrt(Q^2 + U^2 + V^2)
@@ -198,7 +202,9 @@ def polarised_intensity(vis, stokes_pol):
             for (c1, c2, a, s1, s2) in stokes_pol:
                 value = a * (s1 * vis[r, f, c1] +
                              s2 * vis[r, f, c2])
-                pol += np.abs(value)**2 # uncalibrated data may have a substantial amount of power in the imaginary
+                # uncalibrated data may have a substantial amount of power in
+                # the imaginary
+                pol += np.abs(value)**2
                 # use absolute to be certain
 
             # sqrt(Q^2 + U^2 + V^2)

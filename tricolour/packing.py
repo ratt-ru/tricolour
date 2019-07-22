@@ -96,7 +96,7 @@ def _create_window_dask(name, ntime, nchan, nbl, ncorr, token,
 
 
 def create_vis_windows(ntime, nchan, nbl, ncorr, token,
-                       dtype, default=np.nan + np.nan*1j,
+                       dtype, default=np.nan + np.nan * 1j,
                        backend="numpy", path=None):
     """
     Returns

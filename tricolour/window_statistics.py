@@ -202,7 +202,6 @@ class WindowStatistics(object):
         for b, count in other._counts_per_bl.items():
             self._counts_per_bl[b] += count
 
-
         # Sizes
         for a, size in other._size_per_ant.items():
             self._size_per_ant[a] += size
@@ -218,7 +217,6 @@ class WindowStatistics(object):
 
         for b, size in other._size_per_bl.items():
             self._size_per_bl[b] += size
-
 
         # ddid
         for d, bins in other._bins_per_ddid.items():
@@ -246,35 +244,35 @@ def summarise_stats(final, original):
 
     l.append("Per antenna:")
     for a in final._counts_per_ant:
-        l.append("\t {0:s}: {1:.3f}%, original {2:.3f}%".format(a,
-                 final._counts_per_ant[a] * 100.0 /
-                 final._size_per_ant[a],
-                 original._counts_per_ant[a] * 100.0 /
-                 original._size_per_ant[a]))
+        l.append("\t {0:s}: {1:.3f}%, original {2:.3f}%".format(
+            a, final._counts_per_ant[a] * 100.0 /
+            final._size_per_ant[a],
+            original._counts_per_ant[a] * 100.0 /
+            original._size_per_ant[a]))
 
     l.append("Per scan:")
     for s in final._counts_per_scan:
-        l.append("\t {0:d}: {1:.3f}%, original {2:.3f}%".format(s,
-                 final._counts_per_scan[s] * 100.0 /
-                 final._size_per_scan[s],
-                 original._counts_per_scan[s] * 100.0 /
-                 original._size_per_scan[s]))
+        l.append("\t {0:d}: {1:.3f}%, original {2:.3f}%".format(
+            s, final._counts_per_scan[s] * 100.0 /
+            final._size_per_scan[s],
+            original._counts_per_scan[s] * 100.0 /
+            original._size_per_scan[s]))
 
     l.append("Per field:")
     for f in final._counts_per_field:
-        l.append("\t {0:s}: {1:.3f}%, original {2:.3f}%".format(f,
-                 final._counts_per_field[f] * 100.0 /
-                 final._size_per_field[f],
-                 original._counts_per_field[f] * 100.0 /
-                 original._size_per_field[f]))
+        l.append("\t {0:s}: {1:.3f}%, original {2:.3f}%".format(
+            f, final._counts_per_field[f] * 100.0 /
+            final._size_per_field[f],
+            original._counts_per_field[f] * 100.0 /
+            original._size_per_field[f]))
 
     l.append("Per baseline:")
     for b in final._counts_per_bl:
-        l.append("\t {0:s}: {1:.3f}%, original {2:.3f}%".format(b,
-                 final._counts_per_bl[b] * 100.0 /
-                 final._size_per_bl[b],
-                 original._counts_per_bl[b] * 100.0 /
-                 original._size_per_bl[b]))
+        l.append("\t {0:s}: {1:.3f}%, original {2:.3f}%".format(
+            b, final._counts_per_bl[b] * 100.0 /
+            final._size_per_bl[b],
+            original._counts_per_bl[b] * 100.0 /
+            original._size_per_bl[b]))
 
     l.append("Per data descriptor id:")
 
