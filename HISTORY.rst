@@ -2,7 +2,7 @@
 History
 =======
 
-0.1.3 (YYYY-MM-DD)
+0.1.3 (2019-07-22)
 ------------------
 
 * Use pytest-flake8 when running test cases (:pr:`56`)
