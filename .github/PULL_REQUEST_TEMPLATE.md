@@ -3,20 +3,20 @@
       and one of the `docs/*-api.rst` files for new API
 
 
-<details> <summary>
-Howto run test cases and lint the code base </summary>
-  ```bash
-  $ py.test -v -s tricolour
-  ```
-If the pep8 tests fail, the quickest way to correct
-this is to run `autopep8` and then `flake8` and
-`pycodestyle` to fix the remaining issues.
+<details>
+<summary> Howto run test cases and lint the code base </summary>
 
 ```bash
-$ pip install -U autopep8 flake8 pycodestyle
+$ py.test --flake8 -v -s tricolour
+```
+
+If you encounter flake8 failures, a quick way to correct
+this is to run `autopep8` and `flake8` again.
+
+```bash
+$ pip install -U autopep8 black
 $ autopep8 -r -i tricolour
 $ flake8 tricolour
-$ pycodestyle tricolour
 ```
 
 </details>
@@ -25,11 +25,12 @@ $ pycodestyle tricolour
 <details>
 <summary> Howto build the documentation </summary>
 
-  To build the docs locally:
+To build the docs locally:
 
-  ```
-  pip install -r requirements.readthedocs.txt
-  cd docs
-  READTHEDOCS=True make html
-  ```
+```bash
+$ pip install -r requirements.readthedocs.txt
+$ cd docs
+$ READTHEDOCS=True make html
+```
+
 </details>
