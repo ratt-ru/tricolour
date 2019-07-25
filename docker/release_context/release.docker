@@ -1,0 +1,17 @@
+FROM kernsuite/base:5
+
+# Install base requirements
+RUN docker-apt-install python3-pip
+RUN pip3 install --upgrade pip setuptools
+
+# Install base
+ADD dist /code/dist
+ENV PYTHONPATH /code/dist/tricolour:$PYTHONPATH
+RUN chmod a+rx /code/dist/tricolourexe/tricolourexe
+RUN ln -s /code/dist/tricolourexe/tricolourexe /usr/bin/tricolour
+
+# check that it runs
+RUN tricolour --help
+
+ENTRYPOINT tricolour
+CMD ['--help']

@@ -1,6 +1,9 @@
 =======
 History
 =======
+0.1.4 (2019-07-25)
+------------------
+* Obfuscate releases to comply with IP policy
 
 0.1.3 (2019-07-22)
 ------------------

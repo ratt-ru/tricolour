@@ -27,7 +27,10 @@ requirements = [
     'zarr >= 2.3.1'
 ]
 
-extras_require = {'testing': ['pytest', 'pytest-flake8', 'requests']}
+extras_require = {
+    'testing': ['pytest', 'pytest-flake8', 'requests'],
+    'obfuscation': ['pyinstaller']
+}
 
 setup(
     author="Simon Perkins",
@@ -42,7 +45,8 @@ setup(
     ],
     description="Science Data Processing flagging code, wrapped in dask",
     entry_points={
-        'console_scripts': ['tricolour=tricolour.apps.tricolour.app:main'],
+        'console_scripts': 
+            ['tricolour=tricolour.apps.tricolour.tricolourexe:main'],
     },
     extras_require=extras_require,
     install_requires=requirements,
@@ -52,6 +56,6 @@ setup(
     name='tricolour',
     packages=find_packages(),
     url='https://github.com/ska-sa/tricolour',
-    version='0.1.3',
+    version='0.1.4',
     zip_safe=False,
 )
