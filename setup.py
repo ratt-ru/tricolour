@@ -45,7 +45,7 @@ setup(
     ],
     description="Science Data Processing flagging code, wrapped in dask",
     entry_points={
-        'console_scripts': 
+        'console_scripts':
             ['tricolour=tricolour.apps.tricolour.tricolourexe:main'],
     },
     extras_require=extras_require,
