@@ -56,6 +56,6 @@ setup(
     name='tricolour',
     packages=find_packages(),
     url='https://github.com/ska-sa/tricolour',
-    version='0.1.4',
+    version='0.1.3',
     zip_safe=False,
 )
