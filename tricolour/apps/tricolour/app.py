@@ -272,8 +272,6 @@ def _main(args):
     if args.subtract_model_column is not None:
         columns.append(args.subtract_model_column)
 
-    log.info("ROWCHUNKS %s", args.row_chunks)
-
     xds = list(xds_from_ms(args.ms,
                            columns=tuple(columns),
                            group_cols=group_cols,
@@ -376,11 +374,10 @@ def _main(args):
         # otherwise take flags from the dataset
         if args.ignore_flags is True:
             flags = da.full_like(vis, False, dtype=np.bool)
-            log.warn("CRITICAL: Completely ignoring measurement set "
-                     "flags as per "
-                     "'-if' request. "
-                     "Strategy WILL NOT or with original flags, even if "
-                     "specified!")
+            log.critical("Completely ignoring measurement set "
+                         "flags as per '-if' request. "
+                         "Strategy WILL NOT or with original flags, even if "
+                         "specified!")
         else:
             flags = ds.FLAG.data
 
@@ -395,11 +392,11 @@ def _main(args):
             flags = da.any(flags, axis=2, keepdims=True)
         elif args.flagging_strategy == "total_power":
             if args.subtract_model_column is None:
-                log.warn("CRITICAL: You requested to flag total quadrature "
-                         "power, but not on residuals. "
-                         "This is not advisable and the flagger may mistake "
-                         "fringes of "
-                         "off-axis sources for broadband RFI.")
+                log.critical("You requested to flag total quadrature "
+                             "power, but not on residuals. "
+                             "This is not advisable and the flagger "
+                             "may mistake fringes of "
+                             "off-axis sources for broadband RFI.")
             corr_type = pol_info.CORR_TYPE.data.compute().tolist()
             stokes_map = stokes_corr_map(corr_type)
             stokes_pol = tuple(v for k, v in stokes_map.items())
@@ -407,12 +404,11 @@ def _main(args):
             flags = da.any(flags, axis=2, keepdims=True)
         elif args.flagging_strategy == "standard":
             if args.subtract_model_column is None:
-                log.warn("CRITICAL: You requested to flag per correlation, "
-                         "but "
-                         "not on residuals. "
-                         "This is not advisable and the flagger may mistake "
-                         "fringes of "
-                         "off-axis sources for broadband RFI.")
+                log.critical("You requested to flag per correlation, "
+                             "but not on residuals. "
+                             "This is not advisable and the flagger "
+                             "may mistake fringes of off-axis sources "
+                             "for broadband RFI.")
         else:
             raise ValueError("Invalid flagging strategy '%s'" %
                              args.flagging_strategy)
