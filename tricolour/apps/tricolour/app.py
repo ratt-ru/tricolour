@@ -25,8 +25,7 @@ from dask.diagnostics import (ProgressBar, Profiler,
                               ResourceProfiler,
                               CacheProfiler, visualize)
 import numpy as np
-import xarray as xr
-from xarrayms import xds_from_ms, xds_from_table, xds_to_table
+from daskms import xds_from_ms, xds_from_table, xds_to_table
 from threadpoolctl import threadpool_limits
 
 from tricolour.apps.tricolour.strat_executor import StrategyExecutor
@@ -264,38 +263,37 @@ def _main(args):
     index_cols = ['TIME']
 
     # Reopen the datasets using the aggregated row ordering
-    table_kwargs = {'ack': False}
     columns = [data_column,
                "FLAG",
                "TIME",
                "ANTENNA1",
                "ANTENNA2"]
+
     if args.subtract_model_column is not None:
         columns.append(args.subtract_model_column)
+
+    log.info("ROWCHUNKS %s", args.row_chunks)
+
     xds = list(xds_from_ms(args.ms,
                            columns=tuple(columns),
                            group_cols=group_cols,
                            index_cols=index_cols,
-                           chunks={"row": args.row_chunks},
-                           table_kwargs=table_kwargs))
+                           chunks={"row": args.row_chunks}))
 
     # Get datasets for DATA_DESCRIPTION and POLARIZATION,
     # partitioned by row
     data_desc_tab = "::".join((args.ms, "DATA_DESCRIPTION"))
-    ddid_ds = list(xds_from_table(data_desc_tab, group_cols="__row__",
-                                  table_kwargs=table_kwargs))
+    ddid_ds = list(xds_from_table(data_desc_tab, group_cols="__row__"))
     pol_tab = "::".join((args.ms, "POLARIZATION"))
-    pol_ds = list(xds_from_table(pol_tab, group_cols="__row__",
-                                 table_kwargs=table_kwargs))
+    pol_ds = list(xds_from_table(pol_tab, group_cols="__row__"))
     ant_tab = "::".join((args.ms, "ANTENNA"))
     ads = list(xds_from_table(ant_tab))
     spw_tab = "::".join((args.ms, "SPECTRAL_WINDOW"))
-    spw_ds = list(xds_from_table(spw_tab, group_cols="__row__",
-                                 table_kwargs=table_kwargs))
+    spw_ds = list(xds_from_table(spw_tab, group_cols="__row__"))
     antspos = ads[0].POSITION.values
     antsnames = ads[0].NAME.values
     fld_tab = "::".join((args.ms, "FIELD"))
-    field_ds = list(xds_from_table(fld_tab, table_kwargs=table_kwargs))
+    field_ds = list(xds_from_table(fld_tab))
     fieldnames = field_ds[0].NAME.values
 
     avail_scans = [ds.SCAN_NUMBER for ds in xds]
@@ -346,8 +344,8 @@ def _main(args):
         if ds.FIELD_ID not in field_dict:
             continue
 
-        if args.scan_numbers is not None and \
-                ds.SCAN_NUMBER not in args.scan_numbers:
+        if (args.scan_numbers is not None and
+                ds.SCAN_NUMBER not in args.scan_numbers):
             continue
 
         log.info("Adding field '{0:s}' scan {1:d} to "
@@ -449,21 +447,26 @@ def _main(args):
                                         field_dict[ds.FIELD_ID],
                                         ds.attrs['DATA_DESC_ID']))
 
-        # finally unpack back for writing
+        # Unpack window data for writing back to the MS
         unpacked_flags = unpack_data(antenna1, antenna2, time_inv,
                                      ubl, flag_windows)
-        equalized_flags = (da.sum(unpacked_flags, axis=2) > 0)
-        corr_flags = da.repeat(equalized_flags.flatten(
-        ), repeats=ncorr).reshape((nrow, nchan, ncorr))
+
+        # Flag entire visibility if any correlations are flagged
+        equalized_flags = da.sum(unpacked_flags, axis=2, keepdims=True) > 0
+        corr_flags = da.broadcast_to(equalized_flags, (nrow, nchan, ncorr))
+
+        if corr_flags.chunks != ds.FLAG.data.chunks:
+            raise ValueError("Output flag chunking does not "
+                             "match input flag chunking")
 
         # Create new dataset containing new flags
-        xarray_flags = xr.DataArray(corr_flags, dims=ds.FLAG.dims)
-        new_ds = ds.assign(FLAG=xarray_flags)
+        new_ds = ds.assign(FLAG=(("row", "chan", "corr"), corr_flags))
 
         # Write back to original dataset
         writes = xds_to_table(new_ds, args.ms, "FLAG")
         # original should also have .compute called because we need stats
         write_computes.append(writes)
+
     if len(write_computes) > 0:
         # Combine stats from all datasets
         original_stats = combine_window_stats(original_stats)

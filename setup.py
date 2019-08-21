@@ -17,13 +17,13 @@ with open('HISTORY.rst') as history_file:
     history = history_file.read()
 
 requirements = [
-    'dask[array] <= 1.2.0',
+    'dask[array] >= 2.2.0',
     'donfig >= 0.4.0',
     'numpy >= 1.14.0',
     'numba >= 0.43.0',
     'scipy >= 1.2.0',
     'threadpoolctl >= 1.0.0',
-    'xarray-ms >= 0.1.9',
+    'dask-ms == 0.2.0a2',
     'zarr >= 2.3.1'
 ]
 
