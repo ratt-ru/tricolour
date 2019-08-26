@@ -3,12 +3,7 @@
 
 """The setup script."""
 
-import sys
-
 from setuptools import setup, find_packages
-
-if sys.version_info.major < 3:
-    raise ValueError("python 2 is not supported")
 
 with open('README.rst') as readme_file:
     readme = readme_file.read()
@@ -23,7 +18,7 @@ requirements = [
     'numba >= 0.43.0',
     'scipy >= 1.2.0',
     'threadpoolctl >= 1.0.0',
-    'dask-ms == 0.2.0a2',
+    'dask-ms == 0.2.0rc1',
     'zarr >= 2.3.1'
 ]
 
@@ -51,6 +46,7 @@ setup(
     keywords='tricolour',
     name='tricolour',
     packages=find_packages(),
+    python_requires=">=3.5",
     url='https://github.com/ska-sa/tricolour',
     version='0.1.3',
     zip_safe=False,
