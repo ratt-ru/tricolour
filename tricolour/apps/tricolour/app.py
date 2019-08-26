@@ -220,6 +220,29 @@ def create_parser():
     return p
 
 
+def support_tables(ms):
+    """
+    Parameters
+    ----------
+    ms : str
+        base measurement set
+    Returns
+    -------
+    table_map : dict of Dataset
+        {name: dataset}
+    """
+
+    # Get datasets for sub-tables partitioned by row when variably shaped
+    support = {t: xds_from_table("::".join((ms, t)), group_cols="__row__")
+               for t in ["FIELD", "POLARIZATION", "SPECTRAL_WINDOW"]}
+    # These columns have fixed shapes
+    support.update({t: xds_from_table("::".join((ms, t)))
+                    for t in ["ANTENNA", "DATA_DESCRIPTION"]})
+
+    # Reify all values upfront
+    return dask.compute(support)[0]
+
+
 def main():
     with contextlib.ExitStack() as stack:
         # Limit numpy/blas etc threads to 1, as we obtain
@@ -278,21 +301,20 @@ def _main(args):
                            index_cols=index_cols,
                            chunks={"row": args.row_chunks}))
 
-    # Get datasets for DATA_DESCRIPTION and POLARIZATION,
-    # partitioned by row
-    data_desc_tab = "::".join((args.ms, "DATA_DESCRIPTION"))
-    ddid_ds = list(xds_from_table(data_desc_tab, group_cols="__row__"))
-    pol_tab = "::".join((args.ms, "POLARIZATION"))
-    pol_ds = list(xds_from_table(pol_tab, group_cols="__row__"))
-    ant_tab = "::".join((args.ms, "ANTENNA"))
-    ads = list(xds_from_table(ant_tab))
-    spw_tab = "::".join((args.ms, "SPECTRAL_WINDOW"))
-    spw_ds = list(xds_from_table(spw_tab, group_cols="__row__"))
-    antspos = ads[0].POSITION.values
-    antsnames = ads[0].NAME.values
-    fld_tab = "::".join((args.ms, "FIELD"))
-    field_ds = list(xds_from_table(fld_tab))
-    fieldnames = field_ds[0].NAME.values
+    # Get support tables
+    st = support_tables(args.ms)
+    ddid_ds = st["DATA_DESCRIPTION"]
+    field_ds = st["FIELD"]
+    pol_ds = st["POLARIZATION"]
+    spw_ds = st["SPECTRAL_WINDOW"]
+    ant_ds = st["ANTENNA"]
+
+    assert len(ant_ds) == 1
+    assert len(ddid_ds) == 1
+
+    antspos = ant_ds[0].POSITION.data
+    antsnames = ant_ds[0].NAME.data
+    fieldnames = [fds.NAME.data[0] for fds in field_ds]
 
     avail_scans = [ds.SCAN_NUMBER for ds in xds]
     args.scan_numbers = list(set(avail_scans).intersection(
@@ -351,8 +373,8 @@ def _main(args):
                  .format(field_dict[ds.FIELD_ID], ds.SCAN_NUMBER))
 
         ddid = ddid_ds[ds.attrs['DATA_DESC_ID']]
-        spw_info = spw_ds[ddid.SPECTRAL_WINDOW_ID.values]
-        pol_info = pol_ds[ddid.POLARIZATION_ID.values]
+        spw_info = spw_ds[ddid.SPECTRAL_WINDOW_ID.data[0]]
+        pol_info = pol_ds[ddid.POLARIZATION_ID.data[0]]
 
         nrow, nchan, ncorr = getattr(ds, data_column).data.shape
 
@@ -367,8 +389,8 @@ def _main(args):
 
         antenna1 = ds.ANTENNA1.data
         antenna2 = ds.ANTENNA2.data
-        chan_freq = spw_info.CHAN_FREQ.values
-        chan_width = spw_info.CHAN_WIDTH.values
+        chan_freq = spw_info.CHAN_FREQ.data[0]
+        chan_width = spw_info.CHAN_WIDTH.data[0]
 
         # Generate unflagged defaults if we should ignore existing flags
         # otherwise take flags from the dataset
@@ -385,7 +407,7 @@ def _main(args):
         # we convert visibilities to polarised intensity
         # and any flagged correlation will flag the entire visibility
         if args.flagging_strategy == "polarisation":
-            corr_type = pol_info.CORR_TYPE.data.compute().tolist()
+            corr_type = pol_info.CORR_TYPE.data[0].tolist()
             stokes_map = stokes_corr_map(corr_type)
             stokes_pol = tuple(v for k, v in stokes_map.items() if k != "I")
             vis = polarised_intensity(vis, stokes_pol)
@@ -397,7 +419,7 @@ def _main(args):
                              "This is not advisable and the flagger "
                              "may mistake fringes of "
                              "off-axis sources for broadband RFI.")
-            corr_type = pol_info.CORR_TYPE.data.compute().tolist()
+            corr_type = pol_info.CORR_TYPE.data[0].tolist()
             stokes_map = stokes_corr_map(corr_type)
             stokes_pol = tuple(v for k, v in stokes_map.items())
             vis = polarised_intensity(vis, stokes_pol)
