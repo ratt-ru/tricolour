@@ -505,7 +505,7 @@ def _main(args):
             else:
                 # Non-interactive, emit a bar every 5 minutes so
                 # as not to spam the log
-                stack.enter_context(ProgressBar(minimum=5*60, dt=5*60))
+                stack.enter_context(ProgressBar(minimum=5*60, dt=1))
 
             _, original_stats, final_stats = dask.compute(write_computes,
                                                           original_stats,
