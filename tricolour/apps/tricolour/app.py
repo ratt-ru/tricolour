@@ -500,7 +500,12 @@ def _main(args):
                 profilers.append(stack.enter_context(ResourceProfiler()))
 
             if sys.stdout.isatty():
+                # Interactive terminal, default ProgressBar
                 stack.enter_context(ProgressBar())
+            else:
+                # Non-interactive, emit a bar every 5 minutes so
+                # as not to spam the log
+                stack.enter_context(ProgressBar(minimum=5*60, dt=5*60))
 
             _, original_stats, final_stats = dask.compute(write_computes,
                                                           original_stats,
