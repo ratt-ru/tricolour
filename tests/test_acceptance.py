@@ -56,7 +56,8 @@ def _download_file_from_google_drive(id, destination):
     _save_response_content(response, destination)
 
 
-@pytest.fixture(params=[250], scope="module")
+# Set timeout to 6 minutes
+@pytest.fixture(params=[360], scope="module")
 def flagged_ms(request, tmp_path_factory):
     """
     fixture yielding an MS flagged by tricolour
