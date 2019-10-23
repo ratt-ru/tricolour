@@ -25,8 +25,7 @@ from dask.diagnostics import (ProgressBar, Profiler,
                               ResourceProfiler,
                               CacheProfiler, visualize)
 import numpy as np
-import xarray as xr
-from xarrayms import xds_from_ms, xds_from_table, xds_to_table
+from daskms import xds_from_ms, xds_from_table, xds_to_table
 from threadpoolctl import threadpool_limits
 
 from tricolour.apps.tricolour.strat_executor import StrategyExecutor
@@ -221,6 +220,29 @@ def create_parser():
     return p
 
 
+def support_tables(ms):
+    """
+    Parameters
+    ----------
+    ms : str
+        base measurement set
+    Returns
+    -------
+    table_map : dict of Dataset
+        {name: dataset}
+    """
+
+    # Get datasets for sub-tables partitioned by row when variably shaped
+    support = {t: xds_from_table("::".join((ms, t)), group_cols="__row__")
+               for t in ["FIELD", "POLARIZATION", "SPECTRAL_WINDOW"]}
+    # These columns have fixed shapes
+    support.update({t: xds_from_table("::".join((ms, t)))
+                    for t in ["ANTENNA", "DATA_DESCRIPTION"]})
+
+    # Reify all values upfront
+    return dask.compute(support)[0]
+
+
 def main():
     with contextlib.ExitStack() as stack:
         # Limit numpy/blas etc threads to 1, as we obtain
@@ -264,39 +286,35 @@ def _main(args):
     index_cols = ['TIME']
 
     # Reopen the datasets using the aggregated row ordering
-    table_kwargs = {'ack': False}
     columns = [data_column,
                "FLAG",
                "TIME",
                "ANTENNA1",
                "ANTENNA2"]
+
     if args.subtract_model_column is not None:
         columns.append(args.subtract_model_column)
+
     xds = list(xds_from_ms(args.ms,
                            columns=tuple(columns),
                            group_cols=group_cols,
                            index_cols=index_cols,
-                           chunks={"row": args.row_chunks},
-                           table_kwargs=table_kwargs))
+                           chunks={"row": args.row_chunks}))
 
-    # Get datasets for DATA_DESCRIPTION and POLARIZATION,
-    # partitioned by row
-    data_desc_tab = "::".join((args.ms, "DATA_DESCRIPTION"))
-    ddid_ds = list(xds_from_table(data_desc_tab, group_cols="__row__",
-                                  table_kwargs=table_kwargs))
-    pol_tab = "::".join((args.ms, "POLARIZATION"))
-    pol_ds = list(xds_from_table(pol_tab, group_cols="__row__",
-                                 table_kwargs=table_kwargs))
-    ant_tab = "::".join((args.ms, "ANTENNA"))
-    ads = list(xds_from_table(ant_tab))
-    spw_tab = "::".join((args.ms, "SPECTRAL_WINDOW"))
-    spw_ds = list(xds_from_table(spw_tab, group_cols="__row__",
-                                 table_kwargs=table_kwargs))
-    antspos = ads[0].POSITION.values
-    antsnames = ads[0].NAME.values
-    fld_tab = "::".join((args.ms, "FIELD"))
-    field_ds = list(xds_from_table(fld_tab, table_kwargs=table_kwargs))
-    fieldnames = field_ds[0].NAME.values
+    # Get support tables
+    st = support_tables(args.ms)
+    ddid_ds = st["DATA_DESCRIPTION"]
+    field_ds = st["FIELD"]
+    pol_ds = st["POLARIZATION"]
+    spw_ds = st["SPECTRAL_WINDOW"]
+    ant_ds = st["ANTENNA"]
+
+    assert len(ant_ds) == 1
+    assert len(ddid_ds) == 1
+
+    antspos = ant_ds[0].POSITION.data
+    antsnames = ant_ds[0].NAME.data
+    fieldnames = [fds.NAME.data[0] for fds in field_ds]
 
     avail_scans = [ds.SCAN_NUMBER for ds in xds]
     args.scan_numbers = list(set(avail_scans).intersection(
@@ -346,8 +364,8 @@ def _main(args):
         if ds.FIELD_ID not in field_dict:
             continue
 
-        if args.scan_numbers is not None and \
-                ds.SCAN_NUMBER not in args.scan_numbers:
+        if (args.scan_numbers is not None and
+                ds.SCAN_NUMBER not in args.scan_numbers):
             continue
 
         log.info("Adding field '{0:s}' scan {1:d} to "
@@ -355,8 +373,8 @@ def _main(args):
                  .format(field_dict[ds.FIELD_ID], ds.SCAN_NUMBER))
 
         ddid = ddid_ds[ds.attrs['DATA_DESC_ID']]
-        spw_info = spw_ds[ddid.SPECTRAL_WINDOW_ID.values]
-        pol_info = pol_ds[ddid.POLARIZATION_ID.values]
+        spw_info = spw_ds[ddid.SPECTRAL_WINDOW_ID.data[0]]
+        pol_info = pol_ds[ddid.POLARIZATION_ID.data[0]]
 
         nrow, nchan, ncorr = getattr(ds, data_column).data.shape
 
@@ -371,18 +389,17 @@ def _main(args):
 
         antenna1 = ds.ANTENNA1.data
         antenna2 = ds.ANTENNA2.data
-        chan_freq = spw_info.CHAN_FREQ.values
-        chan_width = spw_info.CHAN_WIDTH.values
+        chan_freq = spw_info.CHAN_FREQ.data[0]
+        chan_width = spw_info.CHAN_WIDTH.data[0]
 
         # Generate unflagged defaults if we should ignore existing flags
         # otherwise take flags from the dataset
         if args.ignore_flags is True:
             flags = da.full_like(vis, False, dtype=np.bool)
-            log.warn("CRITICAL: Completely ignoring measurement set "
-                     "flags as per "
-                     "'-if' request. "
-                     "Strategy WILL NOT or with original flags, even if "
-                     "specified!")
+            log.critical("Completely ignoring measurement set "
+                         "flags as per '-if' request. "
+                         "Strategy WILL NOT or with original flags, even if "
+                         "specified!")
         else:
             flags = ds.FLAG.data
 
@@ -390,31 +407,30 @@ def _main(args):
         # we convert visibilities to polarised intensity
         # and any flagged correlation will flag the entire visibility
         if args.flagging_strategy == "polarisation":
-            corr_type = pol_info.CORR_TYPE.data.compute().tolist()
+            corr_type = pol_info.CORR_TYPE.data[0].tolist()
             stokes_map = stokes_corr_map(corr_type)
             stokes_pol = tuple(v for k, v in stokes_map.items() if k != "I")
             vis = polarised_intensity(vis, stokes_pol)
             flags = da.any(flags, axis=2, keepdims=True)
         elif args.flagging_strategy == "total_power":
             if args.subtract_model_column is None:
-                log.warn("CRITICAL: You requested to flag total quadrature "
-                         "power, but not on residuals. "
-                         "This is not advisable and the flagger may mistake "
-                         "fringes of "
-                         "off-axis sources for broadband RFI.")
-            corr_type = pol_info.CORR_TYPE.data.compute().tolist()
+                log.critical("You requested to flag total quadrature "
+                             "power, but not on residuals. "
+                             "This is not advisable and the flagger "
+                             "may mistake fringes of "
+                             "off-axis sources for broadband RFI.")
+            corr_type = pol_info.CORR_TYPE.data[0].tolist()
             stokes_map = stokes_corr_map(corr_type)
             stokes_pol = tuple(v for k, v in stokes_map.items())
             vis = polarised_intensity(vis, stokes_pol)
             flags = da.any(flags, axis=2, keepdims=True)
         elif args.flagging_strategy == "standard":
             if args.subtract_model_column is None:
-                log.warn("CRITICAL: You requested to flag per correlation, "
-                         "but "
-                         "not on residuals. "
-                         "This is not advisable and the flagger may mistake "
-                         "fringes of "
-                         "off-axis sources for broadband RFI.")
+                log.critical("You requested to flag per correlation, "
+                             "but not on residuals. "
+                             "This is not advisable and the flagger "
+                             "may mistake fringes of off-axis sources "
+                             "for broadband RFI.")
         else:
             raise ValueError("Invalid flagging strategy '%s'" %
                              args.flagging_strategy)
@@ -449,21 +465,26 @@ def _main(args):
                                         field_dict[ds.FIELD_ID],
                                         ds.attrs['DATA_DESC_ID']))
 
-        # finally unpack back for writing
+        # Unpack window data for writing back to the MS
         unpacked_flags = unpack_data(antenna1, antenna2, time_inv,
                                      ubl, flag_windows)
-        equalized_flags = (da.sum(unpacked_flags, axis=2) > 0)
-        corr_flags = da.repeat(equalized_flags.flatten(
-        ), repeats=ncorr).reshape((nrow, nchan, ncorr))
+
+        # Flag entire visibility if any correlations are flagged
+        equalized_flags = da.sum(unpacked_flags, axis=2, keepdims=True) > 0
+        corr_flags = da.broadcast_to(equalized_flags, (nrow, nchan, ncorr))
+
+        if corr_flags.chunks != ds.FLAG.data.chunks:
+            raise ValueError("Output flag chunking does not "
+                             "match input flag chunking")
 
         # Create new dataset containing new flags
-        xarray_flags = xr.DataArray(corr_flags, dims=ds.FLAG.dims)
-        new_ds = ds.assign(FLAG=xarray_flags)
+        new_ds = ds.assign(FLAG=(("row", "chan", "corr"), corr_flags))
 
         # Write back to original dataset
         writes = xds_to_table(new_ds, args.ms, "FLAG")
         # original should also have .compute called because we need stats
         write_computes.append(writes)
+
     if len(write_computes) > 0:
         # Combine stats from all datasets
         original_stats = combine_window_stats(original_stats)
@@ -479,7 +500,12 @@ def _main(args):
                 profilers.append(stack.enter_context(ResourceProfiler()))
 
             if sys.stdout.isatty():
+                # Interactive terminal, default ProgressBar
                 stack.enter_context(ProgressBar())
+            else:
+                # Non-interactive, emit a bar every 5 minutes so
+                # as not to spam the log
+                stack.enter_context(ProgressBar(minimum=1, dt=5*60))
 
             _, original_stats, final_stats = dask.compute(write_computes,
                                                           original_stats,
