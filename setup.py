@@ -48,6 +48,6 @@ setup(
     packages=find_packages(),
     python_requires=">=3.5",
     url='https://github.com/ska-sa/tricolour',
-    version='0.1.3',
+    version='0.1.4',
     zip_safe=False,
 )
