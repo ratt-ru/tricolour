@@ -5,6 +5,11 @@ History
 ------------------
 * Obfuscate releases to comply with IP policy
 
+0.1.4 (2019-07-23)
+------------------
+
+* Upgrade to dask-ms (:pr:`59`)
+
 0.1.3 (2019-07-22)
 ------------------
 
