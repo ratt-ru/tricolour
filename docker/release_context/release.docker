@@ -1,6 +1,20 @@
 FROM kernsuite/base:5
 
 # Install base requirements
+RUN docker-apt-install python3-pip \
+                       build-essential \
+                       cmake \
+                       python-numpy \
+                       python-setuptools \
+                       libboost-python-dev \
+                       libboost-all-dev \
+                       libcfitsio-dev \
+                       wcslib-dev \
+                       git
+
+RUN mkdir -p /optsoft/src
+WORKDIR /optsoft/src
+
 RUN docker-apt-install python3-pip
 RUN pip3 install --upgrade pip setuptools
 

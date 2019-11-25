@@ -17,7 +17,7 @@ virtualenv -p python3 tmpvenv && \
 . tmpvenv/bin/activate && \
 pip install ./rel[obfuscation] && \
 pip uninstall -y tricolour && \
-pyinstaller rel/tricolour/apps/tricolour/tricolourexe.py && \
+pyinstaller --add-data "./tmpvenv/lib/python3.6/site-packages/dask/dask.yaml:./dask" rel/tricolour/apps/tricolour/tricolourexe.py && \
 mkdir dist/tricolourexe/tricolour && \
 cp -r rel/tricolour/conf dist/tricolourexe/tricolour/conf && \
 cp -r rel/tricolour/data dist/tricolourexe/tricolour/data && \

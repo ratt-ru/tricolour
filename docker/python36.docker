@@ -4,12 +4,13 @@ FROM kernsuite/base:5
 RUN docker-apt-install python3-pip \
                        build-essential \
                        cmake \
-                       casacore-dev \
                        python-numpy \
                        python-setuptools \
                        libboost-python-dev \
+                       libboost-all-dev \
                        libcfitsio-dev \
-                       wcslib-dev
+                       wcslib-dev \
+                       git
 
 RUN pip3 install --upgrade pip setuptools
 ADD . /code
