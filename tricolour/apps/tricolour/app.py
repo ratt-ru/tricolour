@@ -349,7 +349,7 @@ def _main(args):
                                  ",".join(flatten_field_names),
                                  ",".join(fieldnames)))
 
-        field_dict = dict([(np.where(fieldnames == fn)[0][0], fn)
+        field_dict = dict([(fieldnames.index(fn), fn)
                            for fn in flatten_field_names])
     else:
         field_dict = dict([(findx, fn) for findx, fn in enumerate(fieldnames)])
