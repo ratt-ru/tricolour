@@ -1,13 +1,6 @@
 =======
 History
 =======
-0.1.6 (2020-01-02)
-------------------
-* image rebuild to latest casacore fixes
-
-0.1.5 (2019-07-25)
-------------------
-* Obfuscate releases to comply with IP policy
 
 0.1.4 (2019-07-23)
 ------------------
