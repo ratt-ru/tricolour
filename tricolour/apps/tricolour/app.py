@@ -349,10 +349,9 @@ def _main(args):
                                  ",".join(flatten_field_names),
                                  ",".join(fieldnames)))
 
-        field_dict = dict([(fieldnames.index(fn), fn)
-                           for fn in flatten_field_names])
+        field_dict = {fieldnames.index(fn): fn for fn in flatten_field_names}
     else:
-        field_dict = dict([(findx, fn) for findx, fn in enumerate(fieldnames)])
+        field_dict = {i: fn for i, fn in enumerate(fieldnames)}
 
     # List which hold our dask compute graphs for each dataset
     write_computes = []
