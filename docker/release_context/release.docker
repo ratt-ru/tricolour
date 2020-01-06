@@ -12,12 +12,20 @@ RUN docker-apt-install python3-pip \
                        wcslib-dev \
                        git
 
+RUN mkdir -p /optsoft/src
+WORKDIR /optsoft/src
+
+RUN docker-apt-install python3-pip
 RUN pip3 install --upgrade pip setuptools
-ADD . /code
-WORKDIR /code
 
-# Install base + testing packages
-RUN pip3 install .[testing]
+# Install base
+ADD dist /code/dist
+ENV PYTHONPATH /code/dist/tricolour:$PYTHONPATH
+RUN chmod a+rx /code/dist/tricolourexe/tricolourexe
+RUN ln -s /code/dist/tricolourexe/tricolourexe /usr/bin/tricolour
 
-# Run tests and flake at the same time
-RUN py.test --flake8 -s -vvv .
+# check that it runs
+RUN tricolour --help
+
+ENTRYPOINT tricolour
+CMD ['--help']
