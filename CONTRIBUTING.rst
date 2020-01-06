@@ -118,11 +118,21 @@ Deploying
 ---------
 
 A reminder for the maintainers on how to deploy.
-Make sure all your changes are committed (including an entry in HISTORY.rst).
-Then run::
 
-$ bumpversion patch # possible: major / minor / patch
-$ git push
-$ git push --tags
+A reminder for the maintainers on how to deploy.
 
-Travis will then deploy to PyPI if tests pass.
+1. Update HISTORY.rst with the intended release number Z.Y.X and commit to git.
+
+2. Bump the version number with bump2version. This creates a new git commit,
+   as well as an annotated tag Z.Y.X for the release.
+   If your current version is Z.Y.W and the new version is Z.Y.X call::
+
+       $ python -m pip install bump2version
+       $ bump2version --current-version Z.Y.W --new-version Z.Y.X patch
+
+3. Push the release commit and new tag up::
+
+       $ git push --follow-tags
+
+4. Travis should automatically deploy the tagged release to PyPI
+   if the automated tests pass.
