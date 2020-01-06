@@ -59,8 +59,8 @@ except ImportError:
 def create_logger():
     """ Create a console logger """
     log = logging.getLogger("tricolour")
-    cfmt = logging.Formatter(
-        ('%(name)s - %(asctime)s %(levelname)s - %(message)s'))
+    cfmt = logging.Formatter(u'%(name)s - %(asctime)s '
+                             '%(levelname)s - %(message)s')
     log.setLevel(logging.DEBUG)
     filehandler = logging.FileHandler("tricolour.log")
     filehandler.setFormatter(cfmt)
