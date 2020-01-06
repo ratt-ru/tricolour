@@ -1,4 +1,0 @@
-install the [obfuscation] dependencies of tricolour locally
-!!THEN: WITHIN THIS DIRECTORY!!
-run ./tag_release.sh [dockertagname]
-This will result in a new image with said tagname
