@@ -1,12 +1,9 @@
+# -*- coding: utf-8 -*-
 """
 Automated qualification test for the tricolour flagger
 Expects environment variable TRICOLOUR_TEST_MS set to
 MeerKAT acceptance_test_data.tar.gz prior to running
 """
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import os
 from os.path import join as pjoin

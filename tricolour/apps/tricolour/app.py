@@ -2,10 +2,6 @@
 
 """ Main tricolour application """
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import re
 import argparse
 import contextlib
@@ -63,8 +59,8 @@ except ImportError:
 def create_logger():
     """ Create a console logger """
     log = logging.getLogger("tricolour")
-    cfmt = logging.Formatter(
-        ('%(name)s - %(asctime)s %(levelname)s - %(message)s'))
+    cfmt = logging.Formatter(u'%(name)s - %(asctime)s '
+                             '%(levelname)s - %(message)s')
     log.setLevel(logging.DEBUG)
     filehandler = logging.FileHandler("tricolour.log")
     filehandler.setFormatter(cfmt)
@@ -349,10 +345,9 @@ def _main(args):
                                  ",".join(flatten_field_names),
                                  ",".join(fieldnames)))
 
-        field_dict = dict([(np.where(fieldnames == fn)[0][0], fn)
-                           for fn in flatten_field_names])
+        field_dict = {fieldnames.index(fn): fn for fn in flatten_field_names}
     else:
-        field_dict = dict([(findx, fn) for findx, fn in enumerate(fieldnames)])
+        field_dict = {i: fn for i, fn in enumerate(fieldnames)}
 
     # List which hold our dask compute graphs for each dataset
     write_computes = []
