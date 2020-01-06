@@ -7,5 +7,5 @@ RUN pip3 install --upgrade pip setuptools
 ADD . /code
 WORKDIR /code
 
-RUN pip3 install .
+RUN pip3 install .[testing]
 RUN py.test --flake8 -s -vvv /code/tricolour
