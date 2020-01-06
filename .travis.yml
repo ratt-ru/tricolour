@@ -27,3 +27,5 @@ deploy:
     branch: master
     repo: ska-sa/tricolour
     python: 3.6
+
+    
