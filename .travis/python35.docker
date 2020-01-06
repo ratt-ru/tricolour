@@ -6,3 +6,6 @@ RUN DEBIAN_FRONTEND=noninteractive apt install -y python3-pip git python3-casaco
 RUN pip3 install --upgrade pip setuptools
 ADD . /code
 WORKDIR /code
+
+RUN pip3 install .
+RUN py.test --flake8 -s -vvv /code/tricolour
