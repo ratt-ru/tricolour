@@ -1,12 +1,9 @@
+# -*- coding: utf-8 -*-
 """
 Automated qualification test for the tricolour flagger
 Expects environment variable TRICOLOUR_TEST_MS set to
 MeerKAT acceptance_test_data.tar.gz prior to running
 """
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import os
 from os.path import join as pjoin
@@ -56,7 +53,8 @@ def _download_file_from_google_drive(id, destination):
     _save_response_content(response, destination)
 
 
-@pytest.fixture(params=[250], scope="module")
+# Set timeout to 6 minutes
+@pytest.fixture(params=[360], scope="module")
 def flagged_ms(request, tmp_path_factory):
     """
     fixture yielding an MS flagged by tricolour
@@ -80,7 +78,7 @@ def flagged_ms(request, tmp_path_factory):
     test_directory = os.path.dirname(__file__)
 
     args = ['tricolour',
-            '-fs', 'polarisation',
+            '-fs', 'total_power',
             '-c', os.path.join(test_directory, 'custom.yaml'),
             ms_filename]
 
@@ -208,13 +206,13 @@ def test_flag_count(flagged_ms, tol):
     flag_sel = flag[fid == fnames.index("3C286")]
     count_flagged_3c286 = np.nansum(flag_sel, axis=(0, 1, 2))
     flagged_ratio = count_flagged_3c286 / flag_sel.size
-    print("Percent flagged for 3C286: %.3f%%" % (100.*flagged_ratio))
+    print("Percent flagged for 3C286: %.3f%%" % (100. * flagged_ratio))
     assert flagged_ratio < tol
 
     flag_sel = flag[fid == fnames.index("PKS1934-63")]
     count_flagged_1934 = np.nansum(flag_sel, axis=(0, 1, 2))
     flagged_ratio = count_flagged_1934 / flag_sel.size
-    print("Percent flagged for PKS1934-63: %.3f%%" % (100.*flagged_ratio))
+    print("Percent flagged for PKS1934-63: %.3f%%" % (100. * flagged_ratio))
     assert flagged_ratio < tol
 
 
@@ -232,12 +230,12 @@ def test_bandwidth_flagged(flagged_ms, tol):
     count_flagged_3c286 = np.nansum(data_sel, axis=0) > 0
     flagged_ratio = count_flagged_3c286.sum() / data_sel.shape[1]
     print("Percent bandwidth flagged for 3C286: %.3f%%"
-          % (100.*flagged_ratio))
+          % (100. * flagged_ratio))
     assert flagged_ratio < tol
 
     data_sel = data[fid == fnames.index("PKS1934-63"), :, 0]
     count_flagged_1934 = np.nansum(data_sel, axis=0) > 0
     flagged_ratio = count_flagged_1934.sum() / data_sel.shape[1]
     print("Percent bandwidth flagged for PKS1934-63: %.3f%%"
-          % (100.*flagged_ratio))
+          % (100. * flagged_ratio))
     assert flagged_ratio < tol

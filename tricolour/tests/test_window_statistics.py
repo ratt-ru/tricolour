@@ -1,10 +1,5 @@
 """Tests for :mod:`tricolour.flagging`."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
-
 import dask.array as da
 import numpy as np
 import pytest
@@ -33,7 +28,7 @@ def unique_baselines(antenna_names):
 
 @pytest.fixture
 def channels():
-    return np.linspace(.856e9, 2*.856e9, nchan)
+    return np.linspace(.856e9, 2 * .856e9, nchan)
 
 
 @pytest.fixture

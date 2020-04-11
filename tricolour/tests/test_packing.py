@@ -1,8 +1,5 @@
+# -*- coding: utf-8 -*-
 """Tests for :mod:`tricolour.packing`."""
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import dask.array as da
 import numpy as np
@@ -48,7 +45,7 @@ def test_vis_and_flag_packing(tmpdir, backend):
     nrow = time.size
 
     vis = (rs.standard_normal((nrow, nchan, ncorr)) +
-           rs.standard_normal((nrow, nchan, ncorr))*1j)
+           rs.standard_normal((nrow, nchan, ncorr)) * 1j)
 
     flag = rs.randint(0, 2, (nrow, nchan, ncorr))
 

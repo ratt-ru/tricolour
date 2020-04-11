@@ -2,14 +2,10 @@
 
 """Top-level package for Tricolour."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 from donfig import Config
 
+__version__ = '0.1.7'
 __author__ = """Simon Perkins"""
 __email__ = 'sperkins@ska.ac.za'
-__version__ = '0.2.0'
 
 config = Config("tricolour")

@@ -1,9 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 from functools import wraps
 
 from dask.highlevelgraph import HighLevelGraph
@@ -11,15 +7,15 @@ import dask.array as da
 import dask.blockwise as db
 
 from tricolour.flagging import (
-                    flag_nans_and_zeros as np_flag_nans_and_zeros,
-                    sum_threshold_flagger as np_sum_threshold_flagger,
-                    uvcontsub_flagger as np_uvcontsub_flagger,
-                    apply_static_mask as np_apply_static_mask,
-                    flag_autos as np_flag_autos)
+    flag_nans_and_zeros as np_flag_nans_and_zeros,
+    sum_threshold_flagger as np_sum_threshold_flagger,
+    uvcontsub_flagger as np_uvcontsub_flagger,
+    apply_static_mask as np_apply_static_mask,
+    flag_autos as np_flag_autos)
 
 from tricolour.stokes import (
-                    polarised_intensity as np_polarised_intensity,
-                    unpolarised_intensity as np_unpolarised_intensity)
+    polarised_intensity as np_polarised_intensity,
+    unpolarised_intensity as np_unpolarised_intensity)
 
 from tricolour.packing import _WINDOW_SCHEMA
 

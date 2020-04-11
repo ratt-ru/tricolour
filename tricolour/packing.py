@@ -1,6 +1,4 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+# -*- coding: utf-8 -*-
 
 from os.path import join as pjoin
 import random
@@ -96,7 +94,7 @@ def _create_window_dask(name, ntime, nchan, nbl, ncorr, token,
 
 
 def create_vis_windows(ntime, nchan, nbl, ncorr, token,
-                       dtype, default=np.nan + np.nan*1j,
+                       dtype, default=np.nan + np.nan * 1j,
                        backend="numpy", path=None):
     """
     Returns

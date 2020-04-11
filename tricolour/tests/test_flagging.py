@@ -1,8 +1,5 @@
+# -*- coding: utf-8 -*-
 """Tests for :mod:`tricolour.flagging`."""
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import numpy as np
 import scipy.interpolate
@@ -157,6 +154,7 @@ def test_time_median():
 class TestMedianAbs(object):
     """Tests for :func:`katsdpsigproc.rfi.flagging._median_abs` and
     :func:`katsdpsigproc.rfi.flagging._median_abs_axis0`."""
+
     def setup(self):
         self.data = np.array([[-2.0, -6.0, 4.5], [1.5, 3.3, 0.5]], np.float32)
         self.flags = np.array([[0, 0, 0], [0, 1, 0]], np.uint8)
@@ -185,6 +183,7 @@ class TestLinearlyInterpolateNans(object):
     """
     Tests for :func:`katsdpsigproc.rfi.flagging._linearly_interpolate_nans`.
     """
+
     def setup(self):
         self.y = np.array([np.nan, np.nan, 4.0, np.nan, np.nan,
                            10.0, np.nan, -2.0, np.nan, np.nan])
@@ -523,7 +522,8 @@ class TestSumThresholdFlagger(object):
 
     def _make_data(self, flagger, rs, shape=(1, 234, 345)):
         background = self._make_background(shape, rs).astype(np.float32)
-        data = background + (rs.standard_normal(shape)*0.1).astype(np.float32)
+        data = background + (rs.standard_normal(shape)
+                             * 0.1).astype(np.float32)
         rfi = np.zeros(shape, np.float32)
         # Some completely bad channels and bad times
         rfi[:, 12, :] = 1
