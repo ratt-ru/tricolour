@@ -15,7 +15,7 @@ requirements = [
     'numba >= 0.43.0',
     'scipy >= 1.2.0',
     'threadpoolctl >= 1.0.0',
-    'dask-ms >= 0.2.3',
+    'dask-ms >= 0.2.5',
     'zarr >= 2.3.1'
 ]
 
