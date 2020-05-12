@@ -2,6 +2,10 @@
 History
 =======
 
+0.1.8 (YYYY-MM-DD)
+------------------
+* Work around broken pytest-flake8 (:pr:`69`)
+
 0.1.7 (2020-01-06)
 ------------------
 
