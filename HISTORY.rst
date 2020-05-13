@@ -5,7 +5,7 @@ History
 0.1.8 (YYYY-MM-DD)
 ------------------
 * Upgrade to dask-ms 0.2.5 (:pr:`69`)
-* Work around broken pytest-flake8 (:pr:`69`)
+* Upgrade to pytest-flake8 1.0.6 (:pr:`69`)
 
 0.1.7 (2020-01-06)
 ------------------
