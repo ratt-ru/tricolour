@@ -19,11 +19,7 @@ requirements = [
     'zarr >= 2.3.1'
 ]
 
-# TODO(sjperkins)
-# Modify flake8 < 3.8.0 once
-# https://github.com/tholo/pytest-flake8/issues/66 is fixed
-extras_require = {'testing': ['pytest', 'pytest-flake8',
-                              'requests', 'flake8 < 3.8.0']}
+extras_require = {'testing': ['pytest', 'pytest-flake8 >= 1.0.6', 'requests']}
 
 setup(
     author="Simon Perkins",
