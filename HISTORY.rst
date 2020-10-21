@@ -2,6 +2,13 @@
 History
 =======
 
+
+X.Y.Z (YYYY-MM-DD)
+------------------
+
+* Removed .travis and .travis.yml (:pr:`71`)
+* Github CI Actions (:pr:`71`)
+
 0.1.7 (2020-01-06)
 ------------------
 
