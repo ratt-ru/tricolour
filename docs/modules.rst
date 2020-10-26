@@ -1,4 +1,4 @@
-tricolour
+API
 =========
 
 .. toctree::
