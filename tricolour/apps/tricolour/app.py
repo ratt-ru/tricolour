@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """ Main tricolour application """
-
+import warnings
 import re
 import argparse
 import contextlib
@@ -22,6 +22,7 @@ from dask.diagnostics import (ProgressBar, Profiler,
                               CacheProfiler, visualize)
 import numpy as np
 from daskms import xds_from_ms, xds_from_table, xds_to_table
+from daskms.expressions import data_column_expr
 from threadpoolctl import threadpool_limits
 
 from tricolour.apps.tricolour.strat_executor import StrategyExecutor
@@ -269,7 +270,14 @@ def _main(args):
         post_mortem_handler.disable_pdb_on_error()
 
     log.info("Flagging on the {0:s} column".format(args.data_column))
-    data_column = args.data_column
+    if "/" in args.data_column:
+        data_string = args.data_column.split("/")
+        data_column = data_string[0]
+        string_columns = data_string[1]
+    else:
+        data_column = args.data_column
+        string_columns = None
+
     masked_channels = [load_mask(fn, dilate=args.dilate_masks)
                        for fn in collect_masks()]
     GD = args.config
@@ -288,7 +296,18 @@ def _main(args):
                "ANTENNA1",
                "ANTENNA2"]
 
+    # Get the columns to read
+    if string_columns is not None and "(" in string_columns:
+        match = re.search(r'\(([A-Za-z0-9+-_]+)\)', string_columns)
+        multi_columns = re.split(r'\+|-', match.group(1))
+        multi_columns = list(filter(None, multi_columns))
+        columns.extend(multi_columns)
+    else:
+        if string_columns is not None:
+            columns.append(string_columns)
+
     if args.subtract_model_column is not None:
+        warnings.warn("Use -dc arg")
         columns.append(args.subtract_model_column)
 
     xds = list(xds_from_ms(args.ms,
@@ -296,6 +315,9 @@ def _main(args):
                            group_cols=group_cols,
                            index_cols=index_cols,
                            chunks={"row": args.row_chunks}))
+
+    string = "EXPR = " + args.data_column
+    vis = data_column_expr(string, xds)
 
     # Get support tables
     st = support_tables(args.ms)
