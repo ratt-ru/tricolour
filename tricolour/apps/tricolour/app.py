@@ -184,7 +184,10 @@ def create_parser():
                    help="Number of channels to dilate as int "
                         "or string with units")
     p.add_argument("-dc", "--data-column", type=str, default="DATA",
-                   help="Name of visibility data column to flag")
+                   help="Name of visibility data column to flag."
+                   "Now supports multi model columns expressions"
+                   "e.g 'DATA / (DIR1_DATA + DIR2_DATA + DIR3_DATA)'"
+                   "In future will replace subtract-model-column")
     p.add_argument("-fn", "--field-names", type=str, action='append',
                    default=[],
                    help="Name(s) of fields to flag. Defaults to flagging all")
@@ -212,8 +215,8 @@ def create_parser():
     p.add_argument("-smc", "--subtract-model-column", default=None, type=str,
                    help="Subtracts specified column from data column "
                         "specified. "
-                        "Flagging will proceed on residual "
-                        "data.")
+                        "Flagging will proceed on residual data."
+                        "Depreciating argurment. See --data-column")
     return p
 
 
@@ -269,14 +272,10 @@ def _main(args):
                  "Interactive Python Debugger, as per user request")
         post_mortem_handler.disable_pdb_on_error()
 
-    log.info("Flagging on the {0:s} column".format(args.data_column))
-    if "/" in args.data_column:
-        data_string = args.data_column.split("/")
-        data_column = data_string[0]
-        string_columns = data_string[1]
-    else:
-        data_column = args.data_column
-        string_columns = None
+    # extract the name of the visibility column
+    # to support subtract_model_column
+    data_column = re.split(r'\+|-|/|\*|\(|\)', args.data_column)[0]
+    log.info("Flagging on the {0:s} column".format(data_column))
 
     masked_channels = [load_mask(fn, dilate=args.dilate_masks)
                        for fn in collect_masks()]
@@ -289,29 +288,7 @@ def _main(args):
     # Index datasets by these columns
     index_cols = ['TIME']
 
-    # Reopen the datasets using the aggregated row ordering
-    columns = [data_column,
-               "FLAG",
-               "TIME",
-               "ANTENNA1",
-               "ANTENNA2"]
-
-    # Get the columns to read
-    if string_columns is not None and "(" in string_columns:
-        match = re.search(r'\(([A-Za-z0-9+-_]+)\)', string_columns)
-        multi_columns = re.split(r'\+|-', match.group(1))
-        multi_columns = list(filter(None, multi_columns))
-        columns.extend(multi_columns)
-    else:
-        if string_columns is not None:
-            columns.append(string_columns)
-
-    if args.subtract_model_column is not None:
-        warnings.warn("Use -dc arg")
-        columns.append(args.subtract_model_column)
-
     xds = list(xds_from_ms(args.ms,
-                           columns=tuple(columns),
                            group_cols=group_cols,
                            index_cols=index_cols,
                            chunks={"row": args.row_chunks}))
@@ -398,6 +375,8 @@ def _main(args):
         # Visibilities from the dataset
         vis = getattr(ds, data_column).data
         if args.subtract_model_column is not None:
+            warnings.warn("-smc arg is depreciating."
+                          "See -dc arg for expressions")
             log.info("Forming residual data between '{0:s}' and "
                      "'{1:s}' for flagging.".format(
                         data_column, args.subtract_model_column))

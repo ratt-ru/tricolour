@@ -6,6 +6,7 @@ History
 X.Y.Z (YYYY-MM-DD)
 ------------------
 
+* Add multi model column expression (:pr:`76`)
 * Removed .travis and .travis.yml (:pr:`71`) and (:pr:`73`)
 * Github CI Actions (:pr:`71`)
 
