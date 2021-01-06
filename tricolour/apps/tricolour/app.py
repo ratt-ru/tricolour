@@ -186,8 +186,7 @@ def create_parser():
     p.add_argument("-dc", "--data-column", type=str, default="DATA",
                    help="Name of visibility data column to flag."
                    "Now supports multi model columns expressions"
-                   "e.g 'DATA / (DIR1_DATA + DIR2_DATA + DIR3_DATA)'"
-                   "In future will replace subtract-model-column")
+                   "e.g 'EXPR = DATA / (DIR1_DATA + DIR2_DATA + DIR3_DATA)'")
     p.add_argument("-fn", "--field-names", type=str, action='append',
                    default=[],
                    help="Name(s) of fields to flag. Defaults to flagging all")
@@ -216,7 +215,7 @@ def create_parser():
                    help="Subtracts specified column from data column "
                         "specified. "
                         "Flagging will proceed on residual data."
-                        "Depreciating argurment. See --data-column")
+                        "Deprecated argurment. Use --data-column instead")
     return p
 
 
@@ -274,8 +273,13 @@ def _main(args):
 
     # extract the name of the visibility column
     # to support subtract_model_column
-    data_column = re.split(r'\+|-|/|\*|\(|\)', args.data_column)[0]
-    log.info("Flagging on the {0:s} column".format(data_column))
+    # lhs - left hand side
+    data_column, *lhs = args.data_column.split("=")
+    log.info("Flagging on the {0:s} {1:s}".format(data_column,
+             "column" if not lhs else "expression"))
+
+    if lhs:
+        data_column = re.split(r'\+|-|/|\*|\(|\)', lhs[0])[0]
 
     masked_channels = [load_mask(fn, dilate=args.dilate_masks)
                        for fn in collect_masks()]
@@ -293,8 +297,7 @@ def _main(args):
                            index_cols=index_cols,
                            chunks={"row": args.row_chunks}))
 
-    string = "EXPR = " + args.data_column
-    vis = data_column_expr(string, xds)
+    vis = data_column_expr(args.data_column, xds)
 
     # Get support tables
     st = support_tables(args.ms)
@@ -375,8 +378,8 @@ def _main(args):
         # Visibilities from the dataset
         vis = getattr(ds, data_column).data
         if args.subtract_model_column is not None:
-            warnings.warn("-smc arg is depreciating."
-                          "See -dc arg for expressions")
+            warnings.warn("-subtract-model-column argument is deprecated."
+                          "Use --data-column instead.")
             log.info("Forming residual data between '{0:s}' and "
                      "'{1:s}' for flagging.".format(
                         data_column, args.subtract_model_column))
