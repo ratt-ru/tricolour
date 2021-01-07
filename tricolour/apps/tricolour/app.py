@@ -278,9 +278,6 @@ def _main(args):
     log.info("Flagging on the {0:s} {1:s}".format(data_column,
              "column" if not lhs else "expression"))
 
-    if lhs:
-        data_column = re.split(r'\+|-|/|\*|\(|\)', lhs[0])[0]
-
     masked_channels = [load_mask(fn, dilate=args.dilate_masks)
                        for fn in collect_masks()]
     GD = args.config
@@ -296,8 +293,8 @@ def _main(args):
                            group_cols=group_cols,
                            index_cols=index_cols,
                            chunks={"row": args.row_chunks}))
-
-    vis = data_column_expr(args.data_column, xds)
+    if lhs:
+        xds = data_column_expr(args.data_column, xds)
 
     # Get support tables
     st = support_tables(args.ms)
