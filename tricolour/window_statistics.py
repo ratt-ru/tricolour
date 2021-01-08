@@ -112,7 +112,6 @@ def window_stats(flag_window, ubls, chan_freqs,
         Dask array containing a single :class:`WindowStatistics` object.
         `prev_stats` is merged into this result, if present.
     """
-
     # Construct as array of per-baseline stats objects
     stats = da.blockwise(_window_stats, ("bl",),
                          flag_window, _WINDOW_SCHEMA,
@@ -123,7 +122,7 @@ def window_stats(flag_window, ubls, chan_freqs,
                          field_name, None,
                          ddid, None,
                          nchanbins, None,
-                         dtype=np.object)
+                         meta=np.empty((0,), dtype=np.object))
 
     # Create an empty stats object if the user hasn't supplied one
     if prev_stats is None:
@@ -131,13 +130,13 @@ def window_stats(flag_window, ubls, chan_freqs,
             return WindowStatistics(nchanbins)
 
         prev_stats = da.blockwise(_window_stat_creator, (),
-                                  dtype=np.object)
+                                  meta=np.empty((), dtype=np.object))
 
     # Combine per-baseline stats into a single stats object
     return da.blockwise(_combine_baseline_window_stats, (),
                         stats, ("bl",),
                         prev_stats, (),
-                        dtype=np.object)
+                        meta=np.empty((), dtype=np.object))
 
 
 def _combine_window_stats(*args):
