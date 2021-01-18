@@ -114,6 +114,7 @@ def flagged_ms(request, tmp_path_factory):
     # Remove MS
     shutil.rmtree(ms_filename)
 
+
 @pytest.mark.parametrize("tol", [1e3])
 def test_mean_chisq(flagged_ms, tol):
     """ Tests for improvement in mean chisq per correlation """
@@ -245,6 +246,7 @@ def test_bandwidth_flagged(flagged_ms, tol):
           % (100. * flagged_ratio))
     assert flagged_ratio < tol
 
+
 @pytest.fixture(params=[360], scope="module")
 def multi_model_ms(request, tmp_path_factory):
     """
@@ -274,7 +276,7 @@ def multi_model_ms(request, tmp_path_factory):
     for i, ds in enumerate(xds):
         dims = ds.DATA.dims
         xds[i] = ds.assign(MODEL_DATA=(dims, ds.DATA.data / 2))
-    
+
     # Write 'MODEL_DATA column - delayed operation
     writes = xds_to_table(xds, ms_filename, "MODEL_DATA")
     dask.compute(writes)
@@ -311,6 +313,7 @@ def multi_model_ms(request, tmp_path_factory):
     # Remove MS
     shutil.rmtree(ms_filename)
 
+
 def test_multi_model(multi_model_ms):
     """
     Test Multi-model 'DATA' column
@@ -321,7 +324,7 @@ def test_multi_model(multi_model_ms):
     for i, ds in enumerate(xds):
         dims = ds.DATA.dims
         xds[i] = ds.assign(MODEL_DATA=(dims, ds.DATA.data / 2))
-    
+
     # Write 'MODEL_DATA column - delayed operation
     writes = xds_to_table(xds, multi_model_ms, "MODEL_DATA")
     dask.compute(writes)
@@ -338,5 +341,5 @@ def test_multi_model(multi_model_ms):
     assert_array_equal(model_data, data / 2)
 
     for i, ds in enumerate(xds):
-        assert_array_equal(ds.DATA.data - ds.MODEL_DATA.data, 
+        assert_array_equal(ds.DATA.data - ds.MODEL_DATA.data,
                            ds.FLAG_DATA.data)
