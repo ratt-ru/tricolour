@@ -275,6 +275,7 @@ def _main(args):
     # to support subtract_model_column
     # lhs - left hand side
     data_column, *lhs = args.data_column.split("=")
+    data_column = data_column.strip()
     log.info("Flagging on the {0:s} {1:s}".format(data_column,
              "column" if not lhs else "expression"))
 

@@ -17,6 +17,12 @@ import numpy as np
 import requests
 import pytest
 
+import dask
+from daskms import xds_from_ms, xds_to_table
+from daskms.expressions import data_column_expr
+from numpy.testing import assert_array_equal
+
+
 _GOOGLE_FILE_ID = "1yxDIXUo3Xun9WXxA0x_hvX9Fmxo9Igpr"
 _MS_FILENAME = '1519747221.subset.ms'
 
@@ -107,7 +113,6 @@ def flagged_ms(request, tmp_path_factory):
 
     # Remove MS
     shutil.rmtree(ms_filename)
-
 
 @pytest.mark.parametrize("tol", [1e3])
 def test_mean_chisq(flagged_ms, tol):
@@ -239,3 +244,99 @@ def test_bandwidth_flagged(flagged_ms, tol):
     print("Percent bandwidth flagged for PKS1934-63: %.3f%%"
           % (100. * flagged_ratio))
     assert flagged_ratio < tol
+
+@pytest.fixture(params=[360], scope="module")
+def multi_model_ms(request, tmp_path_factory):
+    """
+    Multi-model 'DATA' column
+    """
+    try:
+        tarred_ms_filename = os.environ["TRICOLOUR_TEST_MS"]
+    except KeyError:
+        tar_dir = tmp_path_factory.mktemp("tar-download")
+        tarred_ms_filename = os.path.join(tar_dir, "test_data.tar.gz")
+
+        _download_file_from_google_drive(_GOOGLE_FILE_ID, tarred_ms_filename)
+
+    tmp_path = str(tmp_path_factory.mktemp('data'))
+
+    # Open and extract tarred ms
+    tarred_ms = tarfile.open(tarred_ms_filename)
+    tarred_ms.extractall(tmp_path)
+
+    # Set up our paths
+    ms_filename = pjoin(tmp_path, _MS_FILENAME)
+    test_directory = os.path.dirname(__file__)
+
+    # Open ms
+    xds = xds_from_ms(ms_filename)
+    # Create 'MODEL_DATA' column
+    for i, ds in enumerate(xds):
+        dims = ds.DATA.dims
+        xds[i] = ds.assign(MODEL_DATA=(dims, ds.DATA.data / 2))
+    
+    # Write 'MODEL_DATA column - delayed operation
+    writes = xds_to_table(xds, ms_filename, "MODEL_DATA")
+    dask.compute(writes)
+
+    # pass the expression to Tricolour
+    args = ['tricolour',
+            '-fs', 'total_power',
+            '-c', os.path.join(test_directory, 'custom.yaml'),
+            '-dc', 'FLAG_DATA = DATA - MODEL_DATA',
+            ms_filename]
+
+    p = subprocess.Popen(args, env=os.environ.copy())
+    delay = 1.0
+    timeout = int(request.param / delay)
+
+    while p.poll() is None and timeout > 0:
+        time.sleep(delay)
+        timeout -= delay
+
+    # timeout reached, kill process if it is still rolling
+    ret = p.poll()
+
+    if ret is None:
+        p.kill()
+        ret = 99
+
+    if ret == 99:
+        raise RuntimeError("Test timeout reached. Killed flagger")
+    elif ret != 0:
+        raise RuntimeError("Tricolour exited with non-zero return code")
+
+    yield ms_filename
+
+    # Remove MS
+    shutil.rmtree(ms_filename)
+
+def test_multi_model(multi_model_ms):
+    """
+    Test Multi-model 'DATA' column
+    """
+    # Open ms
+    xds = xds_from_ms(multi_model_ms)
+    # Create 'MODEL_DATA' column
+    for i, ds in enumerate(xds):
+        dims = ds.DATA.dims
+        xds[i] = ds.assign(MODEL_DATA=(dims, ds.DATA.data / 2))
+    
+    # Write 'MODEL_DATA column - delayed operation
+    writes = xds_to_table(xds, multi_model_ms, "MODEL_DATA")
+    dask.compute(writes)
+
+    # Redundant but test data_column_expr
+    # expression FLAG_DATA = DATA - MODEL_DATA
+    expr = "FLAG_DATA = DATA - MODEL_DATA"
+    xds = data_column_expr(expr, xds)
+
+    with tbl(multi_model_ms) as t:
+        data = t.getcol("DATA")
+        model_data = t.getcol("MODEL_DATA")
+
+    assert_array_equal(model_data, data / 2)
+
+    for i, ds in enumerate(xds):
+        assert_array_equal(ds.DATA.data - ds.MODEL_DATA.data, 
+                           ds.FLAG_DATA.data)
