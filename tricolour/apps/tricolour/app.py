@@ -232,7 +232,7 @@ def support_tables(ms):
     support = {t: xds_from_table("::".join((ms, t)), group_cols="__row__")
                for t in ["FIELD", "POLARIZATION", "SPECTRAL_WINDOW"]}
     # These columns have fixed shapes
-    support.update({t: xds_from_table("::".join((ms, t)))
+    support.update({t: xds_from_table("::".join((ms, t)))[0]
                     for t in ["ANTENNA", "DATA_DESCRIPTION"]})
 
     # Reify all values upfront
@@ -305,11 +305,11 @@ def _main(args):
     spw_ds = st["SPECTRAL_WINDOW"]
     ant_ds = st["ANTENNA"]
 
-    assert len(ant_ds) == 1
-    assert len(ddid_ds) == 1
+    # assert len(ant_ds) == 1
+    # assert len(ddid_ds) == 1
 
-    antspos = ant_ds[0].POSITION.data
-    antsnames = ant_ds[0].NAME.data
+    antspos = ant_ds.POSITION.data
+    antsnames = ant_ds.NAME.data
     fieldnames = [fds.NAME.data[0] for fds in field_ds]
 
     avail_scans = [ds.SCAN_NUMBER for ds in xds]
@@ -367,9 +367,9 @@ def _main(args):
                  "compute graph for processing"
                  .format(field_dict[ds.FIELD_ID], ds.SCAN_NUMBER))
 
-        ddid = ddid_ds[ds.attrs['DATA_DESC_ID']]
-        spw_info = spw_ds[ddid.SPECTRAL_WINDOW_ID.data[0]]
-        pol_info = pol_ds[ddid.POLARIZATION_ID.data[0]]
+        # ddid = ddid_ds[ds.attrs['DATA_DESC_ID']]
+        spw_info = spw_ds[ddid_ds.SPECTRAL_WINDOW_ID.data[ds.DATA_DESC_ID]]
+        pol_info = pol_ds[ddid_ds.POLARIZATION_ID.data[ds.DATA_DESC_ID]]
 
         nrow, nchan, ncorr = getattr(ds, data_column).data.shape
 
