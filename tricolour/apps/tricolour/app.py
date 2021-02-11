@@ -289,17 +289,17 @@ def _main(args):
                            chunks={"row": args.row_chunks}))
 
     try:
-        data_columns = data_column_expr(args.data_column, xds)
-    except DataColumnParseError:
+        data_columns = [getattr(ds, args.data_column).data for ds in xds]
+    except AttributeError:
         try:
-            data_columns = [getattr(ds, args.data_column).data for ds in xds]
-        except AttributeError:
+            data_columns = data_column_expr(args.data_column, xds)
+        except DataColumnParseError:
             raise ValueError(f"{args.data_column} is neither an "
                              f"expression or a valid column")
 
-        log.info(f"Flagging column '{args.data_column}")
+        log.info(f"Flagging expression '{args.data_column}'")
     else:
-        log.info(f"Flagging expression '{args.data_column}")
+        log.info(f"Flagging column '{args.data_column}'")
 
     # Get support tables
     st = support_tables(args.ms)
