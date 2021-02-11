@@ -271,7 +271,6 @@ def _main(args):
                  "Interactive Python Debugger, as per user request")
         post_mortem_handler.disable_pdb_on_error()
 
-
     masked_channels = [load_mask(fn, dilate=args.dilate_masks)
                        for fn in collect_masks()]
     GD = args.config

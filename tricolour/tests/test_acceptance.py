@@ -78,6 +78,7 @@ def ms_filename(ms_tarfile, tmp_path_factory):
 
     yield str(Path(tmp_path / _MS_FILENAME))
 
+
 # Set timeout to 6 minutes
 @pytest.fixture(params=[360], scope="function")
 def flagged_ms(request, ms_filename):
