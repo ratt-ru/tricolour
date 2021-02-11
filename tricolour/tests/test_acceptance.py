@@ -69,7 +69,7 @@ def ms_tarfile(tmp_path_factory):
     yield tarred_ms_filename
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def ms_filename(ms_tarfile, tmp_path_factory):
     tmp_path = tmp_path_factory.mktemp("acceptance-data-")
 
@@ -79,7 +79,7 @@ def ms_filename(ms_tarfile, tmp_path_factory):
     yield str(Path(tmp_path / _MS_FILENAME))
 
 # Set timeout to 6 minutes
-@pytest.fixture(params=[360], scope="module")
+@pytest.fixture(params=[360], scope="function")
 def flagged_ms(request, ms_filename):
     """
     fixture yielding an MS flagged by tricolour
@@ -112,10 +112,11 @@ def flagged_ms(request, ms_filename):
     elif ret != 0:
         raise RuntimeError("Tricolour exited with non-zero return code")
 
-    yield ms_filename
-
-    # Remove MS
-    shutil.rmtree(ms_filename)
+    try:
+        yield ms_filename
+    finally:
+        # Remove MS
+        shutil.rmtree(ms_filename)
 
 
 @pytest.mark.parametrize("tol", [1e3])
@@ -250,7 +251,7 @@ def test_bandwidth_flagged(flagged_ms, tol):
     assert flagged_ratio < tol
 
 
-@pytest.fixture(params=[360], scope="module")
+@pytest.fixture(params=[360], scope="function")
 def multi_model_ms(request, ms_filename):
     """
     Multi-model 'DATA' column
@@ -295,10 +296,10 @@ def multi_model_ms(request, ms_filename):
     elif ret != 0:
         raise RuntimeError("Tricolour exited with non-zero return code")
 
-    yield ms_filename
-
-    # Remove MS
-    shutil.rmtree(ms_filename)
+    try:
+        yield ms_filename
+    finally:
+        shutil.rmtree(ms_filename)
 
 
 def test_multi_model(multi_model_ms):
