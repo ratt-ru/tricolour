@@ -9,13 +9,16 @@ with open('README.rst') as readme_file:
     readme = readme_file.read()
 
 requirements = [
+    'dask-ms'
+    '@git+https://github.com/ska-sa/dask-ms.git'
+    '@master',
     'dask[array] >= 2.2.0',
     'donfig >= 0.4.0',
     'numpy >= 1.14.0',
     'numba >= 0.43.0',
     'scipy >= 1.2.0',
     'threadpoolctl >= 1.0.0',
-    'dask-ms >= 0.2.3',
+    # 'dask-ms >= 0.2.3',
     'zarr >= 2.3.1'
 ]
 

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """ Main tricolour application """
-
+import warnings
 import re
 import argparse
 import contextlib
@@ -22,6 +22,7 @@ from dask.diagnostics import (ProgressBar, Profiler,
                               CacheProfiler, visualize)
 import numpy as np
 from daskms import xds_from_ms, xds_from_table, xds_to_table
+from daskms.expressions import data_column_expr, DataColumnParseError
 from threadpoolctl import threadpool_limits
 
 from tricolour.apps.tricolour.strat_executor import StrategyExecutor
@@ -183,7 +184,9 @@ def create_parser():
                    help="Number of channels to dilate as int "
                         "or string with units")
     p.add_argument("-dc", "--data-column", type=str, default="DATA",
-                   help="Name of visibility data column to flag")
+                   help="Name of visibility data column to flag "
+                   "or an expression composed of DATA columns: "
+                   "e.g \"DATA / (DIR1_DATA + DIR2_DATA + DIR3_DATA)\"")
     p.add_argument("-fn", "--field-names", type=str, action='append',
                    default=[],
                    help="Name(s) of fields to flag. Defaults to flagging all")
@@ -211,8 +214,8 @@ def create_parser():
     p.add_argument("-smc", "--subtract-model-column", default=None, type=str,
                    help="Subtracts specified column from data column "
                         "specified. "
-                        "Flagging will proceed on residual "
-                        "data.")
+                        "Flagging will proceed on residual data."
+                        "Deprecated argurment. Use --data-column instead")
     return p
 
 
@@ -268,8 +271,6 @@ def _main(args):
                  "Interactive Python Debugger, as per user request")
         post_mortem_handler.disable_pdb_on_error()
 
-    log.info("Flagging on the {0:s} column".format(args.data_column))
-    data_column = args.data_column
     masked_channels = [load_mask(fn, dilate=args.dilate_masks)
                        for fn in collect_masks()]
     GD = args.config
@@ -281,21 +282,23 @@ def _main(args):
     # Index datasets by these columns
     index_cols = ['TIME']
 
-    # Reopen the datasets using the aggregated row ordering
-    columns = [data_column,
-               "FLAG",
-               "TIME",
-               "ANTENNA1",
-               "ANTENNA2"]
-
-    if args.subtract_model_column is not None:
-        columns.append(args.subtract_model_column)
-
     xds = list(xds_from_ms(args.ms,
-                           columns=tuple(columns),
                            group_cols=group_cols,
                            index_cols=index_cols,
                            chunks={"row": args.row_chunks}))
+
+    try:
+        data_columns = [getattr(ds, args.data_column).data for ds in xds]
+    except AttributeError:
+        try:
+            data_columns = data_column_expr(args.data_column, xds)
+        except DataColumnParseError:
+            raise ValueError(f"{args.data_column} is neither an "
+                             f"expression or a valid column")
+
+        log.info(f"Flagging expression '{args.data_column}'")
+    else:
+        log.info(f"Flagging column '{args.data_column}'")
 
     # Get support tables
     st = support_tables(args.ms)
@@ -352,7 +355,7 @@ def _main(args):
     final_stats = []
 
     # Iterate through each dataset
-    for ds in xds:
+    for ds, vis in zip(xds, data_columns):
         if ds.FIELD_ID not in field_dict:
             continue
 
@@ -367,14 +370,15 @@ def _main(args):
         spw_info = spw_ds[ddid_ds.SPECTRAL_WINDOW_ID.data[ds.DATA_DESC_ID]]
         pol_info = pol_ds[ddid_ds.POLARIZATION_ID.data[ds.DATA_DESC_ID]]
 
-        nrow, nchan, ncorr = getattr(ds, data_column).data.shape
+        nrow, nchan, ncorr = vis.shape
 
         # Visibilities from the dataset
-        vis = getattr(ds, data_column).data
         if args.subtract_model_column is not None:
+            warnings.warn("-subtract-model-column argument is deprecated."
+                          "Use --data-column instead.")
             log.info("Forming residual data between '{0:s}' and "
                      "'{1:s}' for flagging.".format(
-                        data_column, args.subtract_model_column))
+                        args.data_column, args.subtract_model_column))
             vismod = getattr(ds, args.subtract_model_column).data
             vis = vis - vismod
 
