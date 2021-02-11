@@ -288,6 +288,8 @@ def _main(args):
                            index_cols=index_cols,
                            chunks={"row": args.row_chunks}))
 
+    a = None
+
     try:
         data_columns = [getattr(ds, args.data_column).data for ds in xds]
     except AttributeError:
