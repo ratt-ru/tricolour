@@ -22,7 +22,7 @@ from dask.diagnostics import (ProgressBar, Profiler,
                               CacheProfiler, visualize)
 import numpy as np
 from daskms import xds_from_ms, xds_from_table, xds_to_table
-from daskms.expressions import data_column_expr
+from daskms.expressions import data_column_expr, DataColumnParseError
 from threadpoolctl import threadpool_limits
 
 from tricolour.apps.tricolour.strat_executor import StrategyExecutor
@@ -271,13 +271,6 @@ def _main(args):
                  "Interactive Python Debugger, as per user request")
         post_mortem_handler.disable_pdb_on_error()
 
-    # extract the name of the visibility column
-    # to support subtract_model_column
-    # lhs - left hand side
-    data_column, *lhs = args.data_column.split("=")
-    data_column = data_column.strip()
-    log.info("Flagging on the {0:s} {1:s}".format(data_column,
-             "column" if not lhs else "expression"))
 
     masked_channels = [load_mask(fn, dilate=args.dilate_masks)
                        for fn in collect_masks()]
@@ -294,8 +287,19 @@ def _main(args):
                            group_cols=group_cols,
                            index_cols=index_cols,
                            chunks={"row": args.row_chunks}))
-    if lhs:
-        xds = data_column_expr(args.data_column, xds)
+
+    try:
+        data_columns = data_column_expr(args.data_column, xds)
+    except DataColumnParseError:
+        try:
+            data_columns = [getattr(ds, args.data_column).data for ds in xds]
+        except AttributeError:
+            raise ValueError(f"{args.data_column} is neither an "
+                             f"expression or a valid column")
+
+        log.info(f"Flagging column '{args.data_column}")
+    else:
+        log.info(f"Flagging expression '{args.data_column}")
 
     # Get support tables
     st = support_tables(args.ms)
@@ -355,7 +359,7 @@ def _main(args):
     final_stats = []
 
     # Iterate through each dataset
-    for ds in xds:
+    for ds, vis in zip(xds, data_columns):
         if ds.FIELD_ID not in field_dict:
             continue
 
@@ -371,16 +375,15 @@ def _main(args):
         spw_info = spw_ds[ddid.SPECTRAL_WINDOW_ID.data[0]]
         pol_info = pol_ds[ddid.POLARIZATION_ID.data[0]]
 
-        nrow, nchan, ncorr = getattr(ds, data_column).data.shape
+        nrow, nchan, ncorr = vis.shape
 
         # Visibilities from the dataset
-        vis = getattr(ds, data_column).data
         if args.subtract_model_column is not None:
             warnings.warn("-subtract-model-column argument is deprecated."
                           "Use --data-column instead.")
             log.info("Forming residual data between '{0:s}' and "
                      "'{1:s}' for flagging.".format(
-                        data_column, args.subtract_model_column))
+                        args.data_column, args.subtract_model_column))
             vismod = getattr(ds, args.subtract_model_column).data
             vis = vis - vismod
 
