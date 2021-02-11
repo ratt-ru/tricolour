@@ -184,9 +184,9 @@ def create_parser():
                    help="Number of channels to dilate as int "
                         "or string with units")
     p.add_argument("-dc", "--data-column", type=str, default="DATA",
-                   help="Name of visibility data column to flag."
-                   "Now supports multi model columns expressions"
-                   "e.g 'EXPR = DATA / (DIR1_DATA + DIR2_DATA + DIR3_DATA)'")
+                   help="Name of visibility data column to flag "
+                   "or an expression composed of DATA columns: "
+                   "e.g \"DATA / (DIR1_DATA + DIR2_DATA + DIR3_DATA)\"")
     p.add_argument("-fn", "--field-names", type=str, action='append',
                    default=[],
                    help="Name(s) of fields to flag. Defaults to flagging all")
