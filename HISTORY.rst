@@ -6,6 +6,9 @@ History
 X.Y.Z (YYYY-MM-DD)
 ------------------
 
+* Pin dask-ms and dask versions (:pr:`82`)
+* Fix DATA_DESC_ID indexing (:pr:`79`)
+* Fix infinite recursion when computing dask metadata (:pr:`79`)
 * Removed .travis and .travis.yml (:pr:`71`) and (:pr:`73`)
 * Github CI Actions (:pr:`71`)
 
