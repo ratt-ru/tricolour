@@ -3,7 +3,7 @@ History
 =======
 
 
-X.Y.Z (YYYY-MM-DD)
+0.1.8 (2021-02-24)
 ------------------
 
 * Pin dask-ms and dask versions (:pr:`82`)
