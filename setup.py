@@ -9,13 +9,13 @@ with open('README.rst') as readme_file:
     readme = readme_file.read()
 
 requirements = [
-    'dask[array] >= 2.2.0',
+    'dask[array] == 2021.2.0',
     'donfig >= 0.4.0',
     'numpy >= 1.14.0',
     'numba >= 0.43.0',
     'scipy >= 1.2.0',
     'threadpoolctl >= 1.0.0',
-    'dask-ms >= 0.2.3',
+    'dask-ms == 0.2.6',
     'zarr >= 2.3.1'
 ]
 
