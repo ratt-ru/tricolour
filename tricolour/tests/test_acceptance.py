@@ -32,23 +32,18 @@ def flagged_ms(request, tmp_path_factory):
     """
     fixture yielding an MS flagged by tricolour
     """
+    tmp_path = str(tmp_path_factory.mktemp('data'))
+    test_directory = os.path.dirname(__file__)
     try:
-        tarred_ms_filename = os.environ["TRICOLOUR_TEST_MS"]
+        ms_filename = os.environ["TRICOLOUR_TEST_MS"]
     except KeyError:
         tar_dir = tmp_path_factory.mktemp("tar-download")
         tarred_ms_filename = os.path.join(tar_dir, "test_data.tar.gz")
-
         _download_file_from_google_drive(_GOOGLE_FILE_ID, tarred_ms_filename)
-
-    tmp_path = str(tmp_path_factory.mktemp('data'))
-
-    # Open and extract tarred ms
-    tarred_ms = tarfile.open(tarred_ms_filename)
-    tarred_ms.extractall(tmp_path)
-
-    # Set up our paths
-    ms_filename = pjoin(tmp_path, _MS_FILENAME)
-    test_directory = os.path.dirname(__file__)
+        # Open and extract tarred ms
+        tarred_ms = tarfile.open(tarred_ms_filename)
+        tarred_ms.extractall(tmp_path)
+        ms_filename = pjoin(tmp_path, _MS_FILENAME)
 
     args = ['tricolour',
             '-fs', 'total_power',
