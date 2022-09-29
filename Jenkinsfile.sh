@@ -1,5 +1,6 @@
 set -e
 set -u
+set -x
 WORKSPACE_ROOT="$WORKSPACE/$BUILD_NUMBER"
 echo "Setting up build in $WORKSPACE_ROOT"
 TEST_OUTPUT_DIR_REL=testcase_output
@@ -13,7 +14,7 @@ docker build -f ${WORKSPACE_ROOT}/projects/tricolour/docker/python36.docker -t t
 
 #run tests
 tar xvf $TEST_DATA_DIR/acceptance_test_data.tar.gz -C $TEST_OUTPUT_DIR
-TEST_MS_REL = 1519747221.subset.ms
+TEST_MS_REL=1519747221.subset.ms
 
 docker run \
     --rm \
