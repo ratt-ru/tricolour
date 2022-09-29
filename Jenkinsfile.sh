@@ -23,6 +23,6 @@ docker run \
     --workdir /code \
     --entrypoint /bin/sh \
     tricolour.1804.py36:${BUILD_NUMBER} \
-    -c "python -m pytest pytest --flake8 -s -vvv ."
+    -c "python -m pytest --flake8 -s -vvv ."
 
 
