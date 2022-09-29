@@ -14,43 +14,16 @@ import time
 
 from pyrap.tables import table as tbl
 import numpy as np
-import requests
+import gdown
 import pytest
 
 _GOOGLE_FILE_ID = "1yxDIXUo3Xun9WXxA0x_hvX9Fmxo9Igpr"
 _MS_FILENAME = '1519747221.subset.ms'
 
 
-def _get_confirm_token(response):
-    for key, value in response.cookies.items():
-        if key.startswith('download_warning'):
-            return value
-
-    return None
-
-
-def _save_response_content(response, destination):
-    CHUNK_SIZE = 32768
-
-    with open(destination, "wb") as f:
-        for chunk in response.iter_content(CHUNK_SIZE):
-            if chunk:  # filter out keep-alive new chunks
-                f.write(chunk)
-
-
 def _download_file_from_google_drive(id, destination):
-    URL = "https://docs.google.com/uc?export=download"
-
-    session = requests.Session()
-
-    response = session.get(URL, params={'id': id}, stream=True)
-    token = _get_confirm_token(response)
-
-    if token:
-        params = {'id': id, 'confirm': token}
-        response = session.get(URL, params=params, stream=True)
-
-    _save_response_content(response, destination)
+    URL = f"https://drive.google.com/uc?id={_GOOGLE_FILE_ID}"
+    gdown.download(URL, destination, quiet=False)
 
 
 # Set timeout to 6 minutes
@@ -59,23 +32,18 @@ def flagged_ms(request, tmp_path_factory):
     """
     fixture yielding an MS flagged by tricolour
     """
+    tmp_path = str(tmp_path_factory.mktemp('data'))
+    test_directory = os.path.dirname(__file__)
     try:
-        tarred_ms_filename = os.environ["TRICOLOUR_TEST_MS"]
+        ms_filename = os.environ["TRICOLOUR_TEST_MS"]
     except KeyError:
         tar_dir = tmp_path_factory.mktemp("tar-download")
         tarred_ms_filename = os.path.join(tar_dir, "test_data.tar.gz")
-
         _download_file_from_google_drive(_GOOGLE_FILE_ID, tarred_ms_filename)
-
-    tmp_path = str(tmp_path_factory.mktemp('data'))
-
-    # Open and extract tarred ms
-    tarred_ms = tarfile.open(tarred_ms_filename)
-    tarred_ms.extractall(tmp_path)
-
-    # Set up our paths
-    ms_filename = pjoin(tmp_path, _MS_FILENAME)
-    test_directory = os.path.dirname(__file__)
+        # Open and extract tarred ms
+        tarred_ms = tarfile.open(tarred_ms_filename)
+        tarred_ms.extractall(tmp_path)
+        ms_filename = pjoin(tmp_path, _MS_FILENAME)
 
     args = ['tricolour',
             '-fs', 'total_power',
