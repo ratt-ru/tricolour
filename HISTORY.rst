@@ -2,6 +2,12 @@
 History
 =======
 
+0.1.8.1 (2022-09-29)
+--------------------
+* Fix failing test case (need to switch to gdrive)
+* Migrate off Google Drive downloads for CI server
+* Pin numpy to remove deprecation errors (and possible numerical issues introduced in 1.20+)
+* Pin pytest flake to < 5.0.0 to work around tholo/pytest-flake8#87
 
 0.1.8 (2021-02-24)
 ------------------
