@@ -14,43 +14,16 @@ import time
 
 from pyrap.tables import table as tbl
 import numpy as np
-import requests
+import gdown
 import pytest
 
 _GOOGLE_FILE_ID = "1yxDIXUo3Xun9WXxA0x_hvX9Fmxo9Igpr"
 _MS_FILENAME = '1519747221.subset.ms'
 
 
-def _get_confirm_token(response):
-    for key, value in response.cookies.items():
-        if key.startswith('download_warning'):
-            return value
-
-    return None
-
-
-def _save_response_content(response, destination):
-    CHUNK_SIZE = 32768
-
-    with open(destination, "wb") as f:
-        for chunk in response.iter_content(CHUNK_SIZE):
-            if chunk:  # filter out keep-alive new chunks
-                f.write(chunk)
-
-
 def _download_file_from_google_drive(id, destination):
-    URL = "https://docs.google.com/uc?export=download"
-
-    session = requests.Session()
-
-    response = session.get(URL, params={'id': id}, stream=True)
-    token = _get_confirm_token(response)
-
-    if token:
-        params = {'id': id, 'confirm': token}
-        response = session.get(URL, params=params, stream=True)
-
-    _save_response_content(response, destination)
+    URL = "https://drive.google.com/uc?id={}".format(_GOOGLE_FILE_ID)
+    gdown.download(URL, destination, quiet=False)
 
 
 # Set timeout to 6 minutes

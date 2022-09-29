@@ -17,6 +17,3 @@ WORKDIR /code
 
 # Install base + testing packages
 RUN pip3 install .[testing]
-
-# Run tests and flake at the same time
-RUN py.test --flake8 -s -vvv .
