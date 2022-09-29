@@ -44,8 +44,8 @@ setup(
     keywords='tricolour',
     name='tricolour',
     packages=find_packages(),
-    python_requires=">=3.5",
+    python_requires=">=3.6",
     url='https://github.com/ska-sa/tricolour',
-    version='0.1.8.1',
+    version='0.1.8',
     zip_safe=False,
 )

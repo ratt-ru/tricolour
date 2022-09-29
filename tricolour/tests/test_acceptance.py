@@ -22,7 +22,7 @@ _MS_FILENAME = '1519747221.subset.ms'
 
 
 def _download_file_from_google_drive(id, destination):
-    URL = "https://drive.google.com/uc?id={}".format(_GOOGLE_FILE_ID)
+    URL = f"https://drive.google.com/uc?id={_GOOGLE_FILE_ID}"
     gdown.download(URL, destination, quiet=False)
 
 

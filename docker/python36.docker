@@ -1,4 +1,4 @@
-FROM kernsuite/base:5
+FROM kernsuite/base:6
 
 # Install base requirements
 RUN docker-apt-install python3-pip \

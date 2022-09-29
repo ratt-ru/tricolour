@@ -2,7 +2,7 @@
 History
 =======
 
-0.1.8.1 (2022-09-29)
+0.1.9 (2022-09-29)
 --------------------
 * Fix failing test case (need to switch to gdrive)
 * Migrate off Google Drive downloads for CI server
