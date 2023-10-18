@@ -21,7 +21,9 @@ from dask.diagnostics import (ProgressBar, Profiler,
                               ResourceProfiler,
                               CacheProfiler, visualize)
 import numpy as np
-from daskms import xds_from_ms, xds_from_table, xds_to_table
+from daskms import (xds_from_storage_ms,
+                    xds_from_storage_table,
+                    xds_to_storage_table)
 from threadpoolctl import threadpool_limits
 
 from tricolour.apps.tricolour.strat_executor import StrategyExecutor
@@ -229,10 +231,10 @@ def support_tables(ms):
     """
 
     # Get datasets for sub-tables partitioned by row when variably shaped
-    support = {t: xds_from_table("::".join((ms, t)), group_cols="__row__")
+    support = {t: xds_from_storage_table("::".join((ms, t)), group_cols="__row__")
                for t in ["FIELD", "POLARIZATION", "SPECTRAL_WINDOW"]}
     # These columns have fixed shapes
-    support.update({t: xds_from_table("::".join((ms, t)))[0]
+    support.update({t: xds_from_storage_table("::".join((ms, t)))[0]
                     for t in ["ANTENNA", "DATA_DESCRIPTION"]})
 
     # Reify all values upfront
@@ -291,7 +293,7 @@ def _main(args):
     if args.subtract_model_column is not None:
         columns.append(args.subtract_model_column)
 
-    xds = list(xds_from_ms(args.ms,
+    xds = list(xds_from_storage_ms(args.ms,
                            columns=tuple(columns),
                            group_cols=group_cols,
                            index_cols=index_cols,
@@ -347,6 +349,7 @@ def _main(args):
         field_dict = {i: fn for i, fn in enumerate(fieldnames)}
 
     # List which hold our dask compute graphs for each dataset
+    writable_xds = []
     write_computes = []
     original_stats = []
     final_stats = []
@@ -386,7 +389,7 @@ def _main(args):
         # Generate unflagged defaults if we should ignore existing flags
         # otherwise take flags from the dataset
         if args.ignore_flags is True:
-            flags = da.full_like(vis, False, dtype=np.bool)
+            flags = da.full_like(vis, False, dtype=np.bool_)
             log.critical("Completely ignoring measurement set "
                          "flags as per '-if' request. "
                          "Strategy WILL NOT or with original flags, even if "
@@ -471,10 +474,13 @@ def _main(args):
         # Create new dataset containing new flags
         new_ds = ds.assign(FLAG=(("row", "chan", "corr"), corr_flags))
 
-        # Write back to original dataset
-        writes = xds_to_table(new_ds, args.ms, "FLAG")
-        # original should also have .compute called because we need stats
-        write_computes.append(writes)
+        # Append to list of datasets we intend to write to disk.
+        writable_xds.append(new_ds)
+
+    # Write back to original dataset
+    write_computes = xds_to_storage_table(
+        writable_xds, args.ms, columns=("FLAG",), rechunk=True
+    )
 
     if len(write_computes) > 0:
         # Combine stats from all datasets
