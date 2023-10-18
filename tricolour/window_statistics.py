@@ -123,7 +123,7 @@ def window_stats(flag_window, ubls, chan_freqs,
                          field_name, None,
                          ddid, None,
                          nchanbins, None,
-                         meta=np.empty((0,), dtype=np.object))
+                         meta=np.empty((0,), dtype=object))
 
     # Create an empty stats object if the user hasn't supplied one
     if prev_stats is None:
@@ -131,13 +131,13 @@ def window_stats(flag_window, ubls, chan_freqs,
             return WindowStatistics(nchanbins)
 
         prev_stats = da.blockwise(_window_stat_creator, (),
-                                  meta=np.empty((), dtype=np.object))
+                                  meta=np.empty((), dtype=object))
 
     # Combine per-baseline stats into a single stats object
     return da.blockwise(_combine_baseline_window_stats, (),
                         stats, ("bl",),
                         prev_stats, (),
-                        meta=np.empty((), dtype=np.object))
+                        meta=np.empty((), dtype=object))
 
 
 def _combine_window_stats(*args):
@@ -167,7 +167,7 @@ def combine_window_stats(window_stats):
     args = (v for ws in window_stats for v in (ws, ()))
 
     return da.blockwise(_combine_window_stats, (),
-                        *args, dtype=np.object)
+                        *args, dtype=object)
 
 
 class WindowStatistics(object):

@@ -131,7 +131,7 @@ def test_apply_static_mask(wsrt_ants, unique_baselines,
                                   accumulation_mode="or")
 
     # Check that first mask's flags are applied
-    chan_sel = np.zeros(chan_freqs.shape[0], dtype=np.bool)
+    chan_sel = np.zeros(chan_freqs.shape[0], dtype=np.bool_)
     chan_sel[[2, 10]] = True
 
     assert np.all(new_flags[:, :, :, chan_sel] == 1)
@@ -144,7 +144,7 @@ def test_apply_static_mask(wsrt_ants, unique_baselines,
                                   accumulation_mode="or")
 
     # Check that both mask's flags have been applied
-    chan_sel = np.zeros(chan_freqs.shape[0], dtype=np.bool)
+    chan_sel = np.zeros(chan_freqs.shape[0], dtype=np.bool_)
     chan_sel[[2, 10, 4, 11, 5]] = True
 
     assert np.all(new_flags[:, :, :, chan_sel] == 1)
@@ -157,7 +157,7 @@ def test_apply_static_mask(wsrt_ants, unique_baselines,
                                   accumulation_mode="override")
 
     # Check that only last mask's flags applied
-    chan_sel = np.zeros(chan_freqs.shape[0], dtype=np.bool)
+    chan_sel = np.zeros(chan_freqs.shape[0], dtype=np.bool_)
     chan_sel[[4, 11, 5]] = True
 
     assert np.all(new_flags[:, :, :, chan_sel] == 1)
@@ -176,7 +176,7 @@ def test_apply_static_mask(wsrt_ants, unique_baselines,
                                   uvrange=uvrange)
 
     # Check that both mask's flags have been applied
-    chan_sel = np.zeros(chan_freqs.shape[0], dtype=np.bool)
+    chan_sel = np.zeros(chan_freqs.shape[0], dtype=np.bool_)
     chan_sel[[2, 10, 4, 11, 5]] = True
 
     # Select baselines based on the uvrange
