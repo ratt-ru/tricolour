@@ -17,3 +17,5 @@ WORKDIR /code
 
 # Install base + testing packages
 RUN pip3 install .[testing]
+
+RUN py.test -s -vvv --flake8 tricolour/
