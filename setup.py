@@ -9,14 +9,14 @@ with open('README.rst') as readme_file:
     readme = readme_file.read()
 
 requirements = [
-    'dask[array] == 2021.2.0',
-    'donfig >= 0.4.0',
-    'numpy >= 1.14.0, <= 1.19.5',  # breakage in newer numpy + numerical errors
-    'numba >= 0.43.0',
-    'scipy >= 1.2.0',
-    'threadpoolctl >= 1.0.0',
-    'dask-ms == 0.2.6',
-    'zarr >= 2.3.1'
+    'dask[array] >= 2021.2.0, <=2024.3.1',
+    'donfig >= 0.4.0, <0.8.2',
+    'numpy >= 1.14.0, <= 1.22.0',  # breakage in newer numpy + numerical errors
+    'numba >= 0.43.0, <= 0.59.1',
+    'scipy >= 1.2.0, <=1.12.0',
+    'threadpoolctl >= 1.0.0, <=3.4.0',
+    'dask-ms >= 0.2.6, <=0.2.20',
+    'zarr >= 2.3.1, <=2.17.1'
 ]
 
 extras_require = {'testing': ['pytest',

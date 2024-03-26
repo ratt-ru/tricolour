@@ -386,7 +386,7 @@ def _main(args):
         # Generate unflagged defaults if we should ignore existing flags
         # otherwise take flags from the dataset
         if args.ignore_flags is True:
-            flags = da.full_like(vis, False, dtype=np.bool)
+            flags = da.full_like(vis, False, dtype=bool)
             log.critical("Completely ignoring measurement set "
                          "flags as per '-if' request. "
                          "Strategy WILL NOT or with original flags, even if "
