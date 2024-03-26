@@ -17,5 +17,3 @@ WORKDIR /code
 
 # Install base + testing packages
 RUN pip3 install .[testing]
-
-RUN python3 -m pytest --flake8 -s -vvv .

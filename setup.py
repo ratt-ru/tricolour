@@ -11,7 +11,7 @@ with open('README.rst') as readme_file:
 requirements = [
     'dask[array] >= 2021.2.0, <=2024.3.1',
     'donfig >= 0.4.0, <0.8.2',
-    'numpy >= 1.14.0, <= 1.22.0',  # breakage in newer numpy + numerical errors
+    'numpy >= 1.14.0, <= 1.22.0',
     'numba >= 0.43.0, <= 0.59.1',
     'scipy >= 1.2.0, <=1.12.0',
     'threadpoolctl >= 1.0.0, <=3.4.0',
@@ -21,7 +21,7 @@ requirements = [
 
 extras_require = {'testing': ['pytest',
                               'pytest-flake8',
-                              'flake8 >= 4.0.0, <5.0.0',
+                              "flake8 >= 4.0.0, <5.0.0",
                               'requests', 'gdown']}
 
 setup(
