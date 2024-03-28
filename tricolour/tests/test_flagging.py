@@ -5,11 +5,11 @@ import numpy as np
 import scipy.interpolate
 from scipy.ndimage import gaussian_filter1d, gaussian_filter
 import pytest
-
 from tricolour import flagging
+import unittest
 
 
-class TestAsbool(object):
+class TestAsbool(unittest.TestCase):
     def _test(self, dtype, expect_view):
         a = np.array([0, 1, 1, 0, 1, 0, 0, 1], dtype)
         expected = a.astype(np.bool_)
@@ -33,8 +33,8 @@ class TestAsbool(object):
         self._test(np.bool_, True)
 
 
-class TestAverageFreq(object):
-    def setup(self):
+class TestAverageFreq(unittest.TestCase):
+    def setUp(self):
         self.small_data = np.arange(30, dtype=np.float32).reshape(1, 5, 6)
         self.small_data = self.small_data.repeat(2, axis=0)
         self.small_flags = np.zeros(self.small_data.shape, np.bool_)
@@ -151,11 +151,11 @@ def test_time_median():
     np.testing.assert_array_equal(expected_flags, out_flags)
 
 
-class TestMedianAbs(object):
+class TestMedianAbs(unittest.TestCase):
     """Tests for :func:`katsdpsigproc.rfi.flagging._median_abs` and
     :func:`katsdpsigproc.rfi.flagging._median_abs_axis0`."""
 
-    def setup(self):
+    def setUp(self):
         self.data = np.array([[-2.0, -6.0, 4.5], [1.5, 3.3, 0.5]], np.float32)
         self.flags = np.array([[0, 0, 0], [0, 1, 0]], np.uint8)
 
@@ -179,12 +179,12 @@ class TestMedianAbs(object):
         np.testing.assert_array_equal(expected, out)
 
 
-class TestLinearlyInterpolateNans(object):
+class TestLinearlyInterpolateNans(unittest.TestCase):
     """
     Tests for :func:`katsdpsigproc.rfi.flagging._linearly_interpolate_nans`.
     """
 
-    def setup(self):
+    def setUp(self):
         self.y = np.array([np.nan, np.nan, 4.0, np.nan, np.nan,
                            10.0, np.nan, -2.0, np.nan, np.nan])
         self.expected = np.array([4.0, 4.0, 4.0, 6.0, 8.0,
@@ -224,7 +224,7 @@ class TestLinearlyInterpolateNans(object):
         np.testing.assert_allclose(expected, y)
 
 
-class TestBoxGaussianFilter(object):
+class TestBoxGaussianFilter(unittest.TestCase):
     def test_one_pass(self):
         """Test that _box_gaussian_filter1d places the box correctly"""
         a = np.array([50.0, 10.0, 60.0, -70.0, 30.0, 20.0, -15.0], np.float32)
@@ -289,8 +289,8 @@ class TestBoxGaussianFilter(object):
         np.testing.assert_allclose(fdata[:, 80:120], fcore, rtol=1e-5)
 
 
-class TestMaskedGaussianFilter(object):
-    def setup(self):
+class TestMaskedGaussianFilter(unittest.TestCase):
+    def setUp(self):
         self.rs = np.random.RandomState(seed=1)
         shape = (77, 53)
         self.data = self.rs.uniform(size=shape).astype(np.float32)
@@ -332,7 +332,7 @@ class TestMaskedGaussianFilter(object):
         assert 0 < np.sum(np.isnan(expected))
 
 
-class TestGetBackground2D(object):
+class TestGetBackground2D(unittest.TestCase):
     """Tests for :func:`katsdpsigproc.rfi.flagging._get_background2d`.
 
     This is a difficult function to test, because it's not really practical to
@@ -340,7 +340,7 @@ class TestGetBackground2D(object):
     where large regions are flagged.
     """
 
-    def setup(self):
+    def setUp(self):
         self.shape = (95, 86)
         self.data = np.ones(self.shape, np.float32) * 7.5
         self.flags = np.zeros(self.shape, np.uint8)
@@ -421,8 +421,8 @@ class TestGetBackground2D(object):
         np.testing.assert_allclose(expected, background, rtol=1e-2)
 
 
-class TestSumThreshold(object):
-    def setup(self):
+class TestSumThreshold(unittest.TestCase):
+    def setUp(self):
         self.small_data = np.arange(30, dtype=np.float32).reshape(5, 6)
         self.small_flags = np.zeros(self.small_data.shape, np.bool_)
         self.small_flags[3, :] = 1
@@ -501,10 +501,10 @@ class TestSumThreshold(object):
                                       out_flags[70, :4])
 
 
-class TestSumThresholdFlagger(object):
+class TestSumThresholdFlagger(unittest.TestCase):
     """Tests for :class:`katsdpsigproc.rfi.flagging.SumThresholdFlagger`."""
 
-    def setup(self):
+    def setUp(self):
         self.flagger = flagging.SumThresholdFlagger()
 
     def _make_background(self, shape, rs):
