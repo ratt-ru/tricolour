@@ -37,6 +37,7 @@ from tricolour.util import (casa_style_int_list)
 from tricolour.window_statistics import (window_stats,
                                          combine_window_stats,
                                          summarise_stats)
+from datetime import datetime
 
 ##############################################################
 # Initialize Post Mortem debugger
@@ -61,18 +62,30 @@ def create_logger():
     log = logging.getLogger("tricolour")
     cfmt = logging.Formatter(u'%(name)s - %(asctime)s '
                              '%(levelname)s - %(message)s')
-    log.setLevel(logging.DEBUG)
-    filehandler = logging.FileHandler("tricolour.log")
-    filehandler.setFormatter(cfmt)
-    log.addHandler(filehandler)
     log.setLevel(logging.INFO)
-
     console = logging.StreamHandler()
     console.setLevel(logging.INFO)
     console.setFormatter(cfmt)
-
     log.addHandler(console)
 
+    # add an optional file handler
+    logger_path = os.environ.get("TRICOLOUR_LOGPATH", os.getcwd())
+    nowT = int(np.ceil(datetime.timestamp(datetime.now())))
+    logfile = os.path.join(logger_path,
+                           f"tricolour.{nowT}.log")
+    try:
+        with open(logfile, "w") as f:
+            f.write("")
+        filehandler = logging.FileHandler(logfile)
+        filehandler.setFormatter(cfmt)
+        log.addHandler(filehandler)
+        if logger_path != os.getcwd():
+            log.info(f"A copy of this log is available at {logfile}")
+    except PermissionError:
+        log.warning(f"Failed to initialize logfile for this run. "
+                    f"Check your permissions and available space on "
+                    f"'{logger_path}'. Proceeding without writing "
+                    f"a logfile.")
     return log
 
 
