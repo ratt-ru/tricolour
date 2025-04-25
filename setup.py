@@ -21,7 +21,7 @@ requirements = [
 ]
 
 extras_require = {'testing': ['pytest',
-                              'pytest-flake8',
+                              'pytest-flake8 <= 1.1.1',
                               'flake8 >= 4.0.0, <5.0.0',
                               'requests', 'gdown']}
 
