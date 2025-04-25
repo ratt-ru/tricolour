@@ -16,6 +16,7 @@ requirements = [
     'scipy >= 1.2.0',
     'threadpoolctl >= 1.0.0',
     'dask-ms == 0.2.6',
+    'python-casacore<=3.5.2',
     'zarr >= 2.3.1'
 ]
 
@@ -49,6 +50,6 @@ setup(
     packages=find_packages(),
     python_requires=">=3.6",
     url='https://github.com/ska-sa/tricolour',
-    version='0.1.8.1',
+    version='0.1.8.2',
     zip_safe=False,
 )
