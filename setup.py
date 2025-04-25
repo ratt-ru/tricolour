@@ -20,7 +20,7 @@ requirements = [
     'zarr >= 2.3.1'
 ]
 
-extras_require = {'testing': ['pytest',
+extras_require = {'testing': ['pytest <= 7.0.1',
                               'pytest-flake8 <= 1.1.1',
                               'flake8 >= 4.0.0, <5.0.0',
                               'requests', 'gdown']}
