@@ -1,5 +1,6 @@
-Welcome to Tricolour's documentation!
-======================================
+=====================================
+Welcome to tricolour's documentation!
+=====================================
 
 .. toctree::
    :maxdepth: 2
@@ -9,12 +10,14 @@ Welcome to Tricolour's documentation!
    installation
    usage
    modules
+   examples
    contributing
    authors
    history
 
 Indices and tables
 ==================
+
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
