@@ -16,11 +16,12 @@ requirements = [
     'scipy >= 1.2.0, <=1.12.0',
     'threadpoolctl >= 1.0.0, <=3.4.0',
     'dask-ms >= 0.2.6, <=0.2.20',
+    'python-casacore<=3.5.2',
     'zarr >= 2.3.1, <=2.17.1'
 ]
 
-extras_require = {'testing': ['pytest',
-                              'pytest-flake8',
+extras_require = {'testing': ['pytest <= 7.0.1',
+                              'pytest-flake8 <= 1.1.1',
                               "flake8 >= 4.0.0, <5.0.0",
                               'requests', 'gdown']}
 
@@ -49,6 +50,6 @@ setup(
     packages=find_packages(),
     python_requires=">=3.6",
     url='https://github.com/ska-sa/tricolour',
-    version='0.1.8.1',
+    version='0.1.8.2',
     zip_safe=False,
 )
