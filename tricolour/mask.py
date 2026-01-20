@@ -4,7 +4,6 @@ import logging
 import os
 import re
 
-from pkg_resources import resource_filename
 import numpy as np
 
 from scipy.ndimage import binary_dilation
@@ -14,8 +13,13 @@ from tricolour import config
 log = logging.getLogger(__name__)
 
 # Look in default configuration paths, as well as the data directory
-_DEFAULT_PATHS = config.paths + [resource_filename('tricolour', 'data')]
-
+try:
+    from pkg_resources import resource_filename
+    _DEFAULT_PATHS = config.paths + [resource_filename('tricolour', 'data')]
+except ModuleNotFoundError:
+    import importlib
+    from os.path import join as pjoin
+    _DEFAULT_PATHS = pjoin(importlib.resources.files('tricolour'), 'data')
 
 def dilate_mask(mask_chans, mask_flags, dilate):
     """

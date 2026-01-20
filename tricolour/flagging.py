@@ -17,7 +17,7 @@ import numba
 
 from tricolour.util import casa_style_range
 
-warnings.simplefilter('ignore', np.RankWarning)
+warnings.simplefilter('ignore', np.exceptions.RankWarning)
 
 MAD_NORMAL = 1.4826
 """Ratio between `median absolute deviation`_ and
