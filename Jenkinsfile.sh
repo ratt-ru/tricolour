@@ -10,7 +10,6 @@ TEST_DATA_DIR="$WORKSPACE/../../../test-data"
 
 
 # build
-docker build -f ${WORKSPACE_ROOT}/projects/tricolour/docker/python38.docker -t tricolour.2004.py38:${BUILD_NUMBER} ${WORKSPACE_ROOT}/projects/tricolour/
 docker build -f ${WORKSPACE_ROOT}/projects/tricolour/docker/python310.docker -t tricolour.2204.py310:${BUILD_NUMBER} ${WORKSPACE_ROOT}/projects/tricolour/
 
 #run tests
