@@ -30,7 +30,7 @@ jobs:
         run: poetry install -E testing
 
       - name: Run base test
-        run: python -m pytest -s -vvv --flake8 tricolour/
+        run: py.test -s -vvv --flake8 tricolour/
 
 
   deploy:
