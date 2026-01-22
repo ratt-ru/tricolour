@@ -1166,7 +1166,7 @@ def sum_threshold_flagger(vis, flags, outlier_nsigma=4.5,
     freq_chunks = freq_chunks
     average_freq = _as_min_dtype(average_freq)
 
-    averaged_channels = (nchan + average_freq - 1) // average_freq
+    averaged_channels = (int(nchan) + int(average_freq) - 1) // int(average_freq)
 
     # Set up frequency chunks
     freq_chunk_ends = np.linspace(

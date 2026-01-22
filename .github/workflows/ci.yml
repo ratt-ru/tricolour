@@ -26,11 +26,14 @@ jobs:
       - name: Install poetry
         run: python -m pip install poetry
 
-      - name: Install Testing
-        run: poetry install -E testing
+      - name: Install Tricolour
+        run: poetry install
+
+      - name: Install testing extras
+        run: poetry install --all-extras
 
       - name: Run base test
-        run: py.test -s -vvv --flake8 tricolour/
+        run: python -m pytest -s -vvv --flake8 tricolour/
 
 
   deploy:
