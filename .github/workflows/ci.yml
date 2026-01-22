@@ -23,8 +23,11 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v2
 
+      - name: Install poetry
+        run: python -m pip install poetry
+
       - name: Install Testing
-        run: python -m pip install .[testing]
+        run: poetry install -E testing
 
       - name: Run base test
         run: python -m pytest -s -vvv --flake8 tricolour/
