@@ -1303,8 +1303,8 @@ class SumThresholdFlagger(object):
         """
         ncorrprod, ntime, nchan = in_data.shape
 
-        averaged_channels = ((nchan + self.average_freq - 1) //
-                             self.average_freq)
+        averaged_channels = ((int(nchan) + int(self.average_freq) - 1) //
+                             int(self.average_freq))
 
         # Set up frequency chunks
         freq_chunk_ends = np.linspace(
