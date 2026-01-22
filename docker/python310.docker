@@ -1,0 +1,26 @@
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND noninteractive
+ENV DEBIAN_PRIORITY critical
+
+# Install base requirements
+RUN apt update && apt install -y python3-pip \
+                              build-essential \
+                              cmake \
+                              casacore-dev \
+                              python3-numpy \
+                              python3-setuptools \
+                              libboost-python-dev \
+                              libcfitsio-dev \
+                              wcslib-dev \
+                              python3.10-venv
+
+WORKDIR /opt
+RUN python3 -m venv venvtc
+RUN . /opt/venvtc/bin/activate && pip install --upgrade pip setuptools
+ADD . /code
+WORKDIR /code
+
+# Install base + testing packages
+RUN . /opt/venvtc/bin/activate && pip install poetry
+RUN . /opt/venvtc/bin/activate && poetry install --all-extras

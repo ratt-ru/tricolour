@@ -17,7 +17,7 @@ import numba
 
 from tricolour.util import casa_style_range
 
-warnings.simplefilter('ignore', np.RankWarning)
+warnings.simplefilter('ignore', np.exceptions.RankWarning)
 
 MAD_NORMAL = 1.4826
 """Ratio between `median absolute deviation`_ and
@@ -26,7 +26,7 @@ standard deviation of a Gaussian distribution.
 """  # noqa
 
 
-@numba.njit(nogil=True, cache=True)
+@numba.jit(nopython=True, nogil=True, cache=True)
 def flag_nans_and_zeros(vis_windows, flag_windows):
     """
     Flag nan and zero visibilities.
@@ -190,8 +190,20 @@ def _as_min_dtype(value):
     return np.array(value, dtype)
 
 
-@numba.generated_jit(nopython=True, nogil=True, cache=True)
+@numba.jit(nopython=True, nogil=True, cache=True)
 def _asbool(data):
+    return _asbool_impl(data)
+
+
+def _asbool_impl(data):
+    if data.dtype.itemsize == 1:
+        return data.view(np.bool_)
+    else:
+        return data.astype(np.bool_)
+
+
+@numba.extending.overload(_asbool_impl, nopython=True, nogil=True, cache=True)
+def _asbool_impl_jit(data):
     """Create a boolean array with the same values as `data`.
 
     The `data` contain only 0's and 1's. If possible, a view is returned,
@@ -1154,7 +1166,7 @@ def sum_threshold_flagger(vis, flags, outlier_nsigma=4.5,
     freq_chunks = freq_chunks
     average_freq = _as_min_dtype(average_freq)
 
-    averaged_channels = (nchan + average_freq - 1) // average_freq
+    averaged_channels = (int(nchan) + int(average_freq) - 1) // int(average_freq)
 
     # Set up frequency chunks
     freq_chunk_ends = np.linspace(
@@ -1291,8 +1303,8 @@ class SumThresholdFlagger(object):
         """
         ncorrprod, ntime, nchan = in_data.shape
 
-        averaged_channels = ((nchan + self.average_freq - 1) //
-                             self.average_freq)
+        averaged_channels = ((int(nchan) + int(self.average_freq) - 1) //
+                             int(self.average_freq))
 
         # Set up frequency chunks
         freq_chunk_ends = np.linspace(
