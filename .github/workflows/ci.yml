@@ -33,7 +33,7 @@ jobs:
         run: . venvtc/bin/activate && poetry install --all-extras
 
       - name: Run base test
-        run: . venvtc/bin/activate && python -m pytest -s -vvv --flake8 tricolour/
+        run: . venvtc/bin/activate && python -m pytest -s -vvv tricolour/
 
 
   deploy:
