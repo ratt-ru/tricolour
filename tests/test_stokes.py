@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from tricolour.core.stokes import STOKES_TYPES, polarised_intensity, stokes_corr_map, unpolarised_intensity
+from tricolour.core.kernels.stokes import STOKES_TYPES, polarised_intensity, stokes_corr_map, unpolarised_intensity
 
 
 @pytest.mark.parametrize(
