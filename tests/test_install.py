@@ -1,10 +1,10 @@
 def test_import():
-    import tricolour
+  import tricolour
 
-    assert hasattr(tricolour, "__version__")
+  assert hasattr(tricolour, "__version__")
 
 
 def test_version_is_string():
-    from tricolour import __version__
+  from tricolour import __version__
 
-    assert isinstance(__version__, str)
+  assert isinstance(__version__, str)

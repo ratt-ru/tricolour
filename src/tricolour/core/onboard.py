@@ -1,7 +1,7 @@
 def onboard():
-    """Print setup instructions for CI/CD, PyPI publishing, and GitHub configuration."""
-    print(
-        """
+  """Print setup instructions for CI/CD, PyPI publishing, and GitHub configuration."""
+  print(
+    """
 ================================================================================
   tricolour — Setup Instructions
 ================================================================================
@@ -149,4 +149,4 @@ will be auto-generated from your CLI definitions via pre-commit hooks.
 
 For more details, see: https://github.com/landmanbester/hip-cargo#readme
 """
-    )
+  )
