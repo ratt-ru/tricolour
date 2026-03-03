@@ -5,7 +5,7 @@ import numpy as np
 import scipy.interpolate
 from scipy.ndimage import gaussian_filter1d, gaussian_filter
 import pytest
-from tricolour import flagging
+from tricolour.core.kernels import flagging
 import unittest
 
 

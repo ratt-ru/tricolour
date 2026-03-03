@@ -15,7 +15,7 @@ except ImportError:
 import numpy as np
 import numba
 
-from tricolour.util import casa_style_range
+from tricolour.core.util import casa_style_range
 
 warnings.simplefilter('ignore', np.exceptions.RankWarning)
 
