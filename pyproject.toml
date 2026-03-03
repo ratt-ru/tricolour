@@ -30,6 +30,11 @@ Repository = "https://github.com/ratt-ru/tricolour"
 [project.scripts]
 tricolour = "tricolour.cli:app"
 
+[project.optional-dependencies]
+msv2 = [
+    "xarray-ms >= 0.4.0a1, < 0.5.0",
+]
+
 [build-system]
 # NOTE: This uv_build constraint is intentionally aligned with hip-cargo's own pyproject.toml.
 # If you bump uv_build in hip-cargo, update this template constraint to match.
