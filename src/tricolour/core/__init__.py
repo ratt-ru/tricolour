@@ -1,0 +1,1 @@
+"""Core implementations for tricolour."""

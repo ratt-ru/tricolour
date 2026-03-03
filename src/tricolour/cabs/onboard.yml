@@ -1,0 +1,9 @@
+cabs:
+  onboard:
+    flavour: python
+    command: tricolour.core.onboard.onboard
+    name: onboard
+    info:
+      Print setup instructions for CI/CD, PyPI publishing, and GitHub configuration.
+    inputs: {}
+    outputs: {}
