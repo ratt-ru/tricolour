@@ -34,6 +34,9 @@ tricolour = "tricolour.cli:app"
 msv2 = [
     "xarray-ms >= 0.4.0a1, < 0.5.0",
 ]
+meerkat = [
+    "xarray-kat>=0.0.1",
+]
 
 [build-system]
 # NOTE: This uv_build constraint is intentionally aligned with hip-cargo's own pyproject.toml.
