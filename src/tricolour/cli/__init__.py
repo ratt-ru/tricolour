@@ -33,7 +33,9 @@ def callback(
   config: Annotated[
     str,
     typer.Option(
-      "--config", "-c", help="YAML config file containing parameters for the flagger in the 'sum_threshold' key"
+      "--config",
+      "-c",
+      help=("YAML config file containing parameters for the flagger in the 'sum_threshold' key"),
     ),
   ] = DEFAULT_CONFIG,
   ignore_flags: Annotated[
