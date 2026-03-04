@@ -37,6 +37,9 @@ msv2 = [
 meerkat = [
     "xarray-kat>=0.0.1",
 ]
+zarr = [
+    "zarr>=3.1.5",
+]
 
 [build-system]
 # NOTE: This uv_build constraint is intentionally aligned with hip-cargo's own pyproject.toml.
