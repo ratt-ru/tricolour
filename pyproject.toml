@@ -41,6 +41,9 @@ meerkat = [
 zarr = [
     "zarr>=3.1.5",
 ]
+ray = [
+    "ray>=2.54.0",
+]
 
 [build-system]
 # NOTE: This uv_build constraint is intentionally aligned with hip-cargo's own pyproject.toml.
