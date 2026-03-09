@@ -1,6 +1,7 @@
 """CLI for tricolour."""
 
 import os
+from argparse import Namespace
 from enum import Enum
 from importlib.resources import files as resource_files
 from os.path import join as pjoin
@@ -29,6 +30,7 @@ class WindowBackend(str, Enum):
 
 @app.callback()
 def callback(
+  ctx: typer.Context,
   ms: str,
   config: Annotated[
     str,
@@ -140,7 +142,7 @@ def callback(
   """A Radio Astronomy Flagging Software Suite"""
   from tricolour.core.application.driver import driver
 
-  driver(ms)
+  driver(Namespace(**ctx.params))
 
 
 # Register subcommands below. Imports go here (bottom) to avoid circular imports.

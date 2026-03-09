@@ -1,4 +1,5 @@
 import importlib
+from argparse import Namespace
 from dataclasses import dataclass
 from typing import Dict
 
@@ -43,7 +44,7 @@ def infer_and_import_backend(uri: str) -> MSv4Backend:
   return uri_backend
 
 
-def driver(source: str):
-  source_backend = infer_and_import_backend(source)
+def driver(cfg: Namespace):
+  source_backend = infer_and_import_backend(cfg.ms)
 
-  print(f"Complete me: Flag {source} of backend type {source_backend}")
+  print(f"Complete me: Flag {cfg.ms} of backend type {source_backend}")
