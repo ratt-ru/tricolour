@@ -138,7 +138,9 @@ def callback(
   ] = None,
 ) -> None:
   """A Radio Astronomy Flagging Software Suite"""
-  print(f"Flagging {ms}")
+  from tricolour.core.application.driver import driver
+
+  driver(ms)
 
 
 # Register subcommands below. Imports go here (bottom) to avoid circular imports.
