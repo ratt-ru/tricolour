@@ -151,3 +151,6 @@ from tricolour.cli.onboard import onboard  # noqa: E402
 app.command(name="onboard")(onboard)
 
 __all__ = ["app"]
+
+if __name__ == "__main__":
+  app()
