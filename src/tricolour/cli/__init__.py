@@ -14,7 +14,7 @@ app = typer.Typer(
 )
 
 
-DEFAULT_CONFIG = pjoin(resource_files("tricolour"), "conf", "default.yaml")
+DEFAULT_CONFIG = pjoin(resource_files("tricolour"), "conf", "default_config.yaml")
 
 
 class FlaggingStrategy(str, Enum):
@@ -59,18 +59,18 @@ def callback(
       ),
     ),
   ] = FlaggingStrategy.standard,
-  row_chunks: Annotated[
+  time_chunks: Annotated[
     int,
     typer.Option(
-      "--row-chunks",
-      "-rc",
+      "--time-chunks",
+      "-tc",
       help=(
-        "Hint indicating the number of Measurement Set rows to read in a single chunk. "
+        "Hint indicating the number of Measurement Set timestamps to read in a single chunk. "
         "Smaller and larger numbers will tend to respectively decrease or increase both "
         "memory usage and computational efficiency."
       ),
     ),
-  ] = 10000,
+  ] = 100,
   baseline_chunks: Annotated[
     int,
     typer.Option("--baseline-chunks", "-bc", help="Number of baselines in a window chunk"),
@@ -93,7 +93,7 @@ def callback(
   data_column: Annotated[
     str,
     typer.Option("--data-column", "-dc", help="Name of visibility data column to flag"),
-  ] = "DATA",
+  ] = "VISIBILITY",
   field_names: Annotated[
     Optional[List[str]],
     typer.Option("--field-names", "-fn", help="Name(s) of fields to flag. Defaults to flagging all."),
