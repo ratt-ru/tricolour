@@ -81,8 +81,6 @@ def flag_autos(flags, ubl):
       Flags corresponding to `data`
   """
 
-  ubl = ubl[0]
-
   if flags.shape[0] != ubl.shape[0]:
     raise ValueError("flag and ubl shape mismatch %s != %s" % (flags.shape[2], ubl.shape[0]))
 

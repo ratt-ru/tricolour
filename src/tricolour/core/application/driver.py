@@ -15,6 +15,8 @@ import tricolour.core.application.post_mortem_handler as post_mortem_handler
 from tricolour.core.application.banner import banner
 import time
 from tricolour import config
+from tricolour.core.kernels.mask import collect_masks, load_mask
+
 def create_logger():
     """ Create a console logger """
     log = logging.getLogger("tricolour")
@@ -96,7 +98,8 @@ def load_partitions(cfg):
     DEFAULT_PARTITION_COLUMNS = []
   dt = xarray.open_datatree(
     cfg.ms,
-    partition_schema=["FIELD_ID", "SCAN_NUMBER"] + DEFAULT_PARTITION_COLUMNS
+    partition_schema=["FIELD_ID", "SCAN_NUMBER"] + DEFAULT_PARTITION_COLUMNS,
+    auto_corrs=True
   )
   partitions = list(map(lambda partition: dt[partition], dt.children))
   if cfg.field_names:
@@ -193,9 +196,9 @@ def log_configuration(args):
 def driver(cfg: Namespace):
 
   if cfg.nworkers == 1:
-    ray.init(num_cpus=1, local_mode=True)
+    context = ray.init(num_cpus=1, local_mode=True)
   else:
-    ray.init(num_cpus=cfg.nworkers)
+    context = ray.init(num_cpus=cfg.nworkers)
   if not cfg.disable_post_mortem:
     post_mortem_handler.enable_pdb_on_error()
   else:
@@ -206,6 +209,9 @@ def driver(cfg: Namespace):
   config_file = load_config(cfg.config)
   log_configuration(cfg)
 
+  masks = {}
+  for mask in collect_masks():
+     masks[mask] = load_mask(mask, dilate=cfg.dilate_masks)
   log.info(f"Partitioning database {cfg.ms}")
   partitions = chunk_partitions(load_partitions(cfg),
                                 cfg.baseline_chunks,
@@ -214,16 +220,20 @@ def driver(cfg: Namespace):
   wq = WorkQueue.remote()
   for pi in partitions:
     wq.enqueue_partition.remote(pi)
-  fw = FlaggingWorker.remote(
-     dilate_masks = cfg.dilate_masks,
-     data_column = cfg.data_column,
-     subtract_model_column = cfg.subtract_model_column,
-     flagging_strategy = cfg.flagging_strategy,
-     flagging_config = config_file
-  )
+  fw = []
   log.info(f"Starting flagging operations")
   tic = time.time()
-  ray.get(fw.run.remote(wq))
+  print(context.dashboard_url)
+  for icpu in range(cfg.nworkers):
+    fw.append(FlaggingWorker.remote(
+      wq,
+      masks = masks,
+      data_column = cfg.data_column,
+      subtract_model_column = cfg.subtract_model_column,
+      flagging_strategy = cfg.flagging_strategy,
+      flagging_config = config_file["strategies"]
+    ).run.remote(wq))
+  ray.get(fw)
   toc = time.time()
   elapsed = toc - tic
   log.info("Data flagged successfully in "

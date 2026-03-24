@@ -24,7 +24,8 @@ dependencies = [
     "xarray",
     "ray",
     "ruyaml",
-    "donfig"
+    "donfig",
+    "scipy"
 ]
 
 [project.urls]
