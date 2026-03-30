@@ -9,7 +9,10 @@ from tricolour.core.kernels.flagging import (
    flag_nans_and_zeros,
    apply_static_mask
 )
-
+from tricolour.core.kernels.stokes import (
+    stokes_corr_map,
+    polarised_intensity,
+)
 @ray.remote
 class WorkQueue:
   def __init__(self):
@@ -23,11 +26,11 @@ class WorkQueue:
   def dequeue(self, data_column):
     if self._queue:
       partition = self._queue.pop(0)
-      _vis_windows = getattr(partition, data_column).load()
-      _vis_windows = _vis_windows.transpose("baseline_id","polarization","time","frequency").data
-      _flag_windows = partition.FLAG.load()
-      _flag_windows = _flag_windows.transpose("baseline_id","polarization","time","frequency").data
-      return _vis_windows, _flag_windows, partition
+      vis_windows = getattr(partition, data_column).load()
+      vis_windows = vis_windows.transpose("baseline_id","polarization","time","frequency").data
+      flag_windows = partition.FLAG.load()
+      flag_windows = flag_windows.transpose("baseline_id","polarization","time","frequency").data
+      return vis_windows, flag_windows, partition
     else:
       return None, None, None
 
@@ -60,9 +63,25 @@ class FlaggingWorker:
       self._chan_freq = self._partition.frequency.data
       self._chan_width = self._partition.frequency.channel_width['data'] * np.ones_like(self._chan_freq)
       self._data_loaded = True
+      self._correlation_types = self._partition.polarization.data
 
   def exec_strategy(self):
     if self._data_loaded:
+      from tricolour.core.kernels.stokes import STOKES_TYPES
+      if self._flagging_strategy == "polarisation":
+        stokes_map = stokes_corr_map([STOKES_TYPES[c] for c in self._correlation_types])
+        stokes_pol = tuple(v for k, v in stokes_map.items() if k != "I")
+        self._vis_windows = polarised_intensity(self._vis_windows, stokes_pol)
+        self._flag_windows = np.any(self._flag_windows, axis=1, keepdims=True)        
+      elif self._flagging_strategy == "total_power":
+        stokes_map = stokes_corr_map([STOKES_TYPES[c] for c in self._correlation_types])
+        stokes_pol = tuple(v for k, v in stokes_map.items())
+        self._vis_windows = polarised_intensity(self._vis_windows, stokes_pol)
+        self._flag_windows = np.any(self._flag_windows, axis=1, keepdims=True)
+      elif self._flagging_strategy == "standard":
+         pass
+      else:
+         raise ValueError("Expected one of 'polarisation', 'total_power' or 'standard' as strategy")
       original = self._flag_windows.copy()
       for strategy in self._config:
         try:
