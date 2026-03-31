@@ -130,6 +130,21 @@ class FlaggingWorker:
 
         else:
             raise ValueError("Task '%s' does not name a valid task", task)
+  
+  def writeback(self):
+    if self._flag_windows is not None and self._partition:
+      # b, c, t, f -> t, b, f, c
+      flT = np.transpose(self._flag_windows, axes=(2, 0, 3, 1))
+      if self._flagging_strategy == "polarisation" or self._flagging_strategy == "total_power":
+        flTbcast = np.zeros_like(self._partition.FLAG.data)
+        for ci in range(self._partition.FLAG.data.shape[3]):
+           flTbcast[:,:,:,ci] = flT[:,:,:,0]
+      else:
+        flTbcast = flT
+      self._partition.FLAG.data = flTbcast
+      ds = self._partition.dataset.drop_vars(list(filter(lambda k: k != "FLAG", 
+                                                         self._partition.dataset.data_vars.keys())))
+      ds.to_msv2(compute=True)
 
   def run(self, workqueue):
     self.work_item_ref = workqueue.dequeue.remote(self._data_column)
@@ -142,6 +157,6 @@ class FlaggingWorker:
       # process current chunk of data
       self.set_metadata()
       self.exec_strategy()
-      
+      self.writeback()
 
       
