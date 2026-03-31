@@ -1,0 +1,69 @@
+name: Update Cab Definitions
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  update-cabs:
+    name: Update cab image tags to latest
+    runs-on: ubuntu-latest
+    # Prevents loops if the App or the bot pushes
+    if: github.actor != 'github-actions[bot]' && !contains(github.event.head_commit.message, '[skip ci]')
+
+    steps:
+      - name: Generate Token
+        id: generate_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Check out code
+        uses: actions/checkout@v6
+        with:
+          token: ${{ steps.generate_token.outputs.token }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Cache uv dependencies
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Install package
+        run: uv pip install -e .
+
+      - name: Regenerate cab definitions with latest tag
+        run: uv run python scripts/generate_cabs.py
+
+      - name: Check for changes
+        id: check_changes
+        run: |
+          if git diff --quiet src/tricolour/cabs/*.yml; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit and push updated cabs
+        if: steps.check_changes.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/tricolour/cabs/*.yml
+          git commit -m "chore: update cab image tags to latest [skip ci]"
+          git push

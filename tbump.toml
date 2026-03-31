@@ -1,0 +1,33 @@
+[version]
+current = "0.0.0"
+
+# Version format: semantic versioning
+regex = '''
+  (?P<major>\d+)
+  \.
+  (?P<minor>\d+)
+  \.
+  (?P<patch>\d+)
+  '''
+
+[git]
+message_template = "Bump version to {new_version}"
+tag_template = "v{new_version}"
+
+# Hooks to update generated files with new version before committing
+[[before_push]]
+name = "Write release version sentinel for pre-commit hooks"
+cmd = "python -c \"from pathlib import Path; Path('.tbump_version').write_text('{new_version}')\""
+
+[[before_push]]
+name = "Regenerate cab definitions with new version"
+cmd = "python scripts/generate_cabs.py --version {new_version}"
+
+# Files to update with the new version
+[[file]]
+src = "pyproject.toml"
+search = 'version = "{current_version}"'
+
+[[file]]
+src = "src/tricolour/__init__.py"
+search = '__version__ = "{current_version}"'

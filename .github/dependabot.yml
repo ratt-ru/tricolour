@@ -1,0 +1,43 @@
+version: 2
+updates:
+  # Monitor Python dependencies
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "sjperkins"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+    groups:
+      development-dependencies:
+        dependency-type: "development"
+        patterns:
+          - "pytest*"
+          - "ruff*"
+          - "coverage*"
+      production-dependencies:
+        dependency-type: "production"
+        patterns:
+          - "*"
+
+  # Monitor GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 3
+    reviewers:
+      - "sjperkins"
+    commit-message:
+      prefix: "ci"
+    groups:
+      github-actions:
+        patterns:
+          - "*"

@@ -1,0 +1,39 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api" 
+
+[project]
+name = "tricolour"
+version = "0.2.0"
+description = "Science Data Processing flagging code, wrapped in dask"
+authors = [{name = "Simon Perkins"}]
+license = "GPLv2"
+readme = "README.rst"
+packages = [{include = "tricolour"}]
+
+[tool.poetry.scripts]
+tricolour = "tricolour.apps.tricolour.app:main"
+
+[tool.poetry.dependencies]
+python = "^3.10,<3.13"
+dask-ms = "^0.2.23"
+numba = "^0.60.0"
+donfig = "^0.8.1.post1"
+threadpoolctl = "^3.5.0"
+zarr = "^2.18.3"
+scipy = ">1.9.0"
+numpy = ">2.0"
+
+[tool.poetry.extras]
+testing = [
+    "pytest",
+    "flake8",
+    "requests",
+    "gdown"
+]
+
+[tool.poetry.group.testing.dependencies]
+pytest = "^8.3.4"
+flake8 = "^7.1.1"
+requests = "^2.32.3"
+gdown = "^5.2.0"
