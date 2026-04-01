@@ -13,6 +13,13 @@ from tricolour.core.kernels.stokes import (
     stokes_corr_map,
     polarised_intensity,
 )
+from tricolour.core.kernels.flag_statistics import (
+   WindowStatistics,
+   window_stats,
+   combine_window_stats
+)
+
+STATISTICS_CHAN_BINS = 10
 
 @ray.remote
 class WorkQueue:
@@ -54,6 +61,24 @@ class FlaggingWorker:
     self._flag = None
     self._partition = None
     self._region = None
+    self._statistics = dict()
+    self._original_statistics = dict()
+
+  def report_statistics(self):
+     obs = []
+     for fi in self._statistics:
+        for ddid in self._statistics[fi]:
+           for si in self._statistics[fi][ddid]:
+              obs.append(self._statistics[fi][ddid][si])
+     return combine_window_stats(obs)
+  
+  def report_original_statistics(self):
+     obs = []
+     for fi in self._original_statistics:
+        for ddid in self._original_statistics[fi]:
+           for si in self._original_statistics[fi][ddid]:
+              obs.append(self._original_statistics[fi][ddid][si])
+     return combine_window_stats(obs)
 
   def set_metadata(self):
     if self._partition:
@@ -66,9 +91,37 @@ class FlaggingWorker:
       self._chan_width = self._partition.frequency.channel_width['data'] * np.ones_like(self._chan_freq)
       self._data_loaded = True
       self._correlation_types = self._partition.polarization.data
+      self._antenna_names = list(self._partition["antenna_xds"].antenna_name.data)
+      self._scan_numbers = list(np.unique(self._partition.scan_name.data))
+      self._field_names = list(np.unique(self._partition.field_name))
+      self._ddid_name = self._partition.frequency.spectral_window_name
+      for stats in [self._original_statistics, self._statistics]:
+        for fi in self._field_names:
+          stats.setdefault(fi, dict())
+          stats[fi].setdefault(self._ddid_name, dict())
+          for si in self._scan_numbers:
+              stats[fi][self._ddid_name].setdefault(si, WindowStatistics(STATISTICS_CHAN_BINS))
 
   def exec_strategy(self):
+    def __update_stats(dico_stats):
+        for fi in self._field_names:
+          ds = self._partition.sel(field_name=fi)
+          for si in self._scan_numbers:
+            flag_window = ds.FLAG.where(ds.scan_name==si)
+            stats = window_stats(flag_window.data,
+                                  ubls=self._ubl,
+                                  chan_freqs=self._chan_freq,
+                                  antenna_names=self._antenna_names,
+                                  scan_no=si,
+                                  field_name=fi,
+                                  ddid=self._ddid_name,
+                                  nchanbins=STATISTICS_CHAN_BINS)
+            dico_stats[fi][self._ddid_name][si].update(stats)
+
     if self._data_loaded:
+      # update original flag statistics per field, scan and spwid
+      __update_stats(self._original_statistics)
+
       from tricolour.core.kernels.stokes import STOKES_TYPES
       if self._flagging_strategy == "polarisation":
         stokes_map = stokes_corr_map([STOKES_TYPES[c] for c in self._correlation_types])
@@ -132,10 +185,8 @@ class FlaggingWorker:
 
         else:
             raise ValueError("Task '%s' does not name a valid task", task)
-  
-  def writeback(self):
-    if self._flag_windows is not None and self._partition:
-      # b, c, t, f -> t, b, f, c
+      
+      # transpose back: b, c, t, f -> t, b, f, c
       flT = np.transpose(self._flag_windows, axes=(2, 0, 3, 1))
       if self._flagging_strategy == "polarisation" or self._flagging_strategy == "total_power":
         flTbcast = np.zeros_like(self._partition.FLAG.data)
@@ -144,6 +195,13 @@ class FlaggingWorker:
       else:
         flTbcast = flT
       self._partition.FLAG.data = flTbcast
+
+      # update flagging stats per field, scan and spwid
+      __update_stats(self._statistics)
+
+  
+  def writeback(self):
+    if self._flag_windows is not None and self._partition:
       ds = self._partition.dataset.drop_vars(filter(lambda k: k != "FLAG", 
                                                     self._partition.dataset.data_vars.keys()))
       

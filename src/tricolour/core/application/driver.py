@@ -16,6 +16,10 @@ from tricolour.core.application.banner import banner
 import time
 from tricolour import config
 from tricolour.core.kernels.mask import collect_masks, load_mask
+from tricolour.core.kernels.flag_statistics import (
+    combine_window_stats,
+    WindowStatistics
+)
 
 def create_logger():
     """ Create a console logger """
@@ -226,10 +230,9 @@ def driver(cfg: Namespace):
   wq = WorkQueue.remote()
   for pi, ri in zip(partitions, regions):
     wq.enqueue_partition.remote(pi, ri)
-  fw = []
   log.info(f"Starting flagging operations")
   tic = time.time()
-  print(context.dashboard_url)
+  fw = []
   for icpu in range(cfg.nworkers):
     fw.append(FlaggingWorker.remote(
       wq,
@@ -238,9 +241,16 @@ def driver(cfg: Namespace):
       subtract_model_column = cfg.subtract_model_column,
       flagging_strategy = cfg.flagging_strategy,
       flagging_config = config_file["strategies"]
-    ).run.remote(wq))
-  ray.get(fw)
+    ))
+  ray.get([fwi.run.remote(wq) for fwi in fw])
+  final_stats = combine_window_stats(ray.get([fwi.report_statistics.remote() for fwi in fw]))
+  original_stats = combine_window_stats(ray.get([fwi.report_original_statistics.remote() for fwi in fw]))
   toc = time.time()
+
+  # finally print flagging statistics
+  for line in WindowStatistics.summarise_stats(final_stats, original_stats):
+    log.info(line)
+
   elapsed = toc - tic
   log.info("Data flagged successfully in "
             "{0:02.0f}h{1:02.0f}m{2:02.0f}s"
