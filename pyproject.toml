@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [project]
 name = "tricolour"
-version = "0.2.0"
+version = "0.2.1"
 description = "Science Data Processing flagging code, wrapped in dask"
 authors = [{name = "Simon Perkins"}]
 license = "GPLv2"

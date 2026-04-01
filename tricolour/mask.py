@@ -19,7 +19,7 @@ try:
 except ModuleNotFoundError:
     import importlib
     from os.path import join as pjoin
-    _DEFAULT_PATHS = pjoin(importlib.resources.files('tricolour'), 'data')
+    _DEFAULT_PATHS = config.paths + [pjoin(importlib.resources.files('tricolour'), 'data')]
 
 def dilate_mask(mask_chans, mask_flags, dilate):
     """
