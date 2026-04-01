@@ -119,6 +119,7 @@ def load_partitions(cfg):
 def chunk_partitions(partitions, num_bl, num_time):
   # chunks by time group
   chunked_partitions = []
+  regions = []
   for pi in partitions:
     nrows = pi.time.size * pi.baseline_id.size
     nchunk_t = pi.time.size // num_time + (pi.time.size % num_time > 0)
@@ -130,11 +131,15 @@ def chunk_partitions(partitions, num_bl, num_time):
       for ichb in range(nchunk_bl):
         blb = ichb * num_bl
         bub = min((ichb + 1) * num_bl, pi.baseline_id.size)
-        chunked_partitions.append(pi.isel(time = slice(tlb, tub),
-                                          baseline_id = slice(blb, bub)))
+        region = dict(
+           time = slice(tlb, tub),
+           baseline_id = slice(blb, bub)
+        )
+        chunked_partitions.append(pi.isel(**region))
+        regions.append(region)
         vels_sel += (tub - tlb) * (bub - blb)
     assert vels_sel == nrows
-  return chunked_partitions
+  return chunked_partitions, regions
 
 def load_config(config_file):
     """
@@ -213,13 +218,14 @@ def driver(cfg: Namespace):
   for mask in collect_masks():
      masks[mask] = load_mask(mask, dilate=cfg.dilate_masks)
   log.info(f"Partitioning database {cfg.ms}")
-  partitions = chunk_partitions(load_partitions(cfg),
-                                cfg.baseline_chunks,
-                                cfg.time_chunks)
+  partitions, regions = chunk_partitions(load_partitions(cfg),
+                                         cfg.baseline_chunks,
+                                         cfg.time_chunks)
+  
   log.info(f"Enquing partitions for processing...")
   wq = WorkQueue.remote()
-  for pi in partitions:
-    wq.enqueue_partition.remote(pi)
+  for pi, ri in zip(partitions, regions):
+    wq.enqueue_partition.remote(pi, ri)
   fw = []
   log.info(f"Starting flagging operations")
   tic = time.time()

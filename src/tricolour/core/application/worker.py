@@ -13,26 +13,27 @@ from tricolour.core.kernels.stokes import (
     stokes_corr_map,
     polarised_intensity,
 )
+
 @ray.remote
 class WorkQueue:
   def __init__(self):
     self._queue = []
   
-  def enqueue_partition(self, partition):
+  def enqueue_partition(self, partition, region):
     if not isinstance(partition, xarray.DataTree):
       raise TypeError("Expected an xarray.DataTree type")
-    self._queue.append(partition)
+    self._queue.append((partition, region))
 
   def dequeue(self, data_column):
     if self._queue:
-      partition = self._queue.pop(0)
+      partition, region = self._queue.pop(0)
       vis_windows = getattr(partition, data_column).load()
       vis_windows = vis_windows.transpose("baseline_id","polarization","time","frequency").data
       flag_windows = partition.FLAG.load()
       flag_windows = flag_windows.transpose("baseline_id","polarization","time","frequency").data
-      return vis_windows, flag_windows, partition
+      return vis_windows, flag_windows, partition, region
     else:
-      return None, None, None
+      return None, None, None, None
 
 @ray.remote
 class FlaggingWorker:
@@ -52,6 +53,7 @@ class FlaggingWorker:
     self._data = None
     self._flag = None
     self._partition = None
+    self._region = None
 
   def set_metadata(self):
     if self._partition:
@@ -142,14 +144,15 @@ class FlaggingWorker:
       else:
         flTbcast = flT
       self._partition.FLAG.data = flTbcast
-      ds = self._partition.dataset.drop_vars(list(filter(lambda k: k != "FLAG", 
-                                                         self._partition.dataset.data_vars.keys())))
-      ds.to_msv2(compute=True)
+      ds = self._partition.dataset.drop_vars(filter(lambda k: k != "FLAG", 
+                                                    self._partition.dataset.data_vars.keys()))
+      
+      ds.to_msv2(compute=True, region=self._region)
 
   def run(self, workqueue):
     self.work_item_ref = workqueue.dequeue.remote(self._data_column)
     while True:
-      self._vis_windows, self._flag_windows, self._partition = ray.get(self.work_item_ref)
+      self._vis_windows, self._flag_windows, self._partition, self._region = ray.get(self.work_item_ref)
       if self._partition is None:
             break
       self.work_item_ref = workqueue.dequeue.remote(self._data_column)
