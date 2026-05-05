@@ -31,16 +31,21 @@ class WorkQueue:
       raise TypeError("Expected an xarray.DataTree type")
     self._queue.append((partition, region))
 
-  def dequeue(self, data_column):
+  def dequeue(self, data_column, model_column=None):
     if self._queue:
       partition, region = self._queue.pop(0)
       vis_windows = getattr(partition, data_column).load()
       vis_windows = vis_windows.transpose("baseline_id","polarization","time","frequency").data
       flag_windows = partition.FLAG.load()
       flag_windows = flag_windows.transpose("baseline_id","polarization","time","frequency").data
-      return vis_windows, flag_windows, partition, region
+      if model_column is not None:
+         model_windows = getattr(partition, model_column).load()
+         model_windows = model_windows.transpose("baseline_id","polarization","time","frequency").data
+      else:
+         model_windows = None
+      return vis_windows, flag_windows, model_windows, partition, region
     else:
-      return None, None, None, None
+      return None, None, None, None, None
 
 @ray.remote
 class FlaggingWorker:
@@ -57,8 +62,9 @@ class FlaggingWorker:
     self._subtract_model_column = subtract_model_column
     self._flagging_strategy = flagging_strategy
     self._config = flagging_config
-    self._data = None
-    self._flag = None
+    self._data_windows = None
+    self._model_windows = None
+    self._flag_windows = None
     self._partition = None
     self._region = None
     self._statistics = dict()
@@ -123,6 +129,8 @@ class FlaggingWorker:
       __update_stats(self._original_statistics)
 
       from tricolour.core.kernels.stokes import STOKES_TYPES
+      if self._model_windows is not None:
+        self._vis_windows = self._vis_windows - self._model_windows
       if self._flagging_strategy == "polarisation":
         stokes_map = stokes_corr_map([STOKES_TYPES[c] for c in self._correlation_types])
         stokes_pol = tuple(v for k, v in stokes_map.items() if k != "I")
@@ -208,12 +216,13 @@ class FlaggingWorker:
       ds.to_msv2(compute=True, region=self._region)
 
   def run(self, workqueue):
-    self.work_item_ref = workqueue.dequeue.remote(self._data_column)
+    self.work_item_ref = workqueue.dequeue.remote(self._data_column, model_column=self._subtract_model_column)
     while True:
-      self._vis_windows, self._flag_windows, self._partition, self._region = ray.get(self.work_item_ref)
+      self._vis_windows, self._flag_windows, self._model_windows, self._partition, self._region = \
+        ray.get(self.work_item_ref)
       if self._partition is None:
             break
-      self.work_item_ref = workqueue.dequeue.remote(self._data_column)
+      self.work_item_ref = workqueue.dequeue.remote(self._data_column, model_column=self._subtract_model_column)
 
       # process current chunk of data
       self.set_metadata()
