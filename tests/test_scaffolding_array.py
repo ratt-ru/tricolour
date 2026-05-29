@@ -44,6 +44,32 @@ def test_scaffolding_array():
   assert array.shape == shape
 
 
+def test_scaffolding_array_getitem():
+  array = ScaffoldingArray(np.empty((10, 20, 30), dtype=np.float32), chunks=(5, 4, 30))
+  assert array.chunks == ((5, 5), (4, 4, 4, 4, 4), (30,))
+
+  # Contiguous slice preserves chunk boundaries (overlap of [2, 5) with two size-5 chunks).
+  sliced = array[2:5, :, :]
+  assert sliced.shape == (3, 20, 30)
+  assert sliced.chunks == ((3,), (4, 4, 4, 4, 4), (30,))
+  assert sliced.dtype == np.float32
+
+  # Partial leading chunk + full trailing chunk.
+  assert array[3:10].chunks[0] == (2, 5)
+  # Clean cross-boundary slice keeps the boundary.
+  assert array[0:5].chunks[0] == (5,)
+
+  # Integer index drops the dimension.
+  dropped = array[0]
+  assert dropped.shape == (20, 30)
+  assert dropped.ndim == 2
+
+  # Fancy indexing collapses the dimension to a single chunk.
+  fancy = array[:, np.array([1, 3, 5]), :]
+  assert fancy.shape == (10, 3, 30)
+  assert fancy.chunks == ((5, 5), (3,), (30,))
+
+
 @pytest.mark.filterwarnings("ignore::zarr.errors.ZarrUserWarning", reason="Consolidated Metadata Warning")
 def test_write_scaffolding_dataset(tmp_path, scaffolding_datset):
   ds = scaffolding_datset

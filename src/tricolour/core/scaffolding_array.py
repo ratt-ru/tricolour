@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from numpy.lib.stride_tricks import as_strided
+from xarray.core.indexing import ExplicitIndexer, expanded_indexer
 from xarray.core.types import T_Chunks, T_DuckArray, T_NormalizedChunks
 from xarray.namedarray._typing import _Chunks
 from xarray.namedarray.parallelcompat import ChunkManagerEntrypoint
@@ -84,9 +85,72 @@ class ScaffoldingArray:
     self.chunks = normalize_chunks(array.shape if chunks is None else chunks, array.shape)
     self.dtype = array.dtype
 
-  def __getitem__(self, key):
-    """Indexing is unsupported -- a scaffold holds no data."""
-    raise NotImplementedError("Accessing ScaffoldingArray data")
+  @classmethod
+  def _empty(cls, chunks: T_NormalizedChunks, dtype: npt.DTypeLike) -> ScaffoldingArray:
+    """Build a scaffold of the given chunking/dtype without allocating data.
+
+    A zero-strided view over a one-element dummy buffer presents the correct
+    shape and dtype while backing storage stays a single element.
+    """
+    shape = tuple(sum(c) for c in chunks)
+    dummy = np.empty(1, dtype=dtype)
+    view = as_strided(dummy, shape=shape, strides=(0,) * len(shape))
+    return cls(view, chunks=chunks)
+
+  @staticmethod
+  def _index_dim(idx, chunk_sizes: tuple[int, ...]) -> tuple[int, ...] | None:
+    """Resolve one dimension's new chunk tuple under an indexer.
+
+    Returns ``None`` to signal the dimension is dropped (integer index).
+    Contiguous (step-1) slices preserve chunk boundaries by intersecting
+    the selected range with each original chunk span; strided slices and
+    fancy/boolean indexing collapse the dimension to a single chunk.
+    """
+    size = sum(chunk_sizes)
+    if isinstance(idx, (int, np.integer)):
+      return None  # integer index drops the dimension
+    if idx is None:
+      return (1,)  # np.newaxis inserts a size-1 dimension
+    if isinstance(idx, slice):
+      start, stop, step = idx.indices(size)
+      if step == 1:
+        out, off = [], 0
+        for c in chunk_sizes:
+          lo, hi = max(off, start), min(off + c, stop)
+          if hi > lo:
+            out.append(hi - lo)
+          off += c
+        return tuple(out)
+      return (len(range(start, stop, step)),)  # strided -> single chunk
+    arr = np.asarray(idx)
+    if arr.ndim == 1:
+      return (int(arr.sum()),) if arr.dtype == bool else (arr.shape[0],)
+    raise NotImplementedError("Vectorized indexing on ScaffoldingArrays")
+
+  def __getitem__(self, key) -> ScaffoldingArray:
+    """Return a scaffold reshaped/rechunked as if ``key`` were applied.
+
+    Pure metadata arithmetic: no data is read. xarray may pass a raw key or
+    an :class:`~xarray.core.indexing.ExplicitIndexer`; the latter is
+    unwrapped via its ``.tuple``. ``np.newaxis`` entries insert a size-1
+    dimension without consuming a source dimension.
+    """
+    if isinstance(key, ExplicitIndexer):
+      key = key.tuple
+    key = expanded_indexer(key, self.ndim)
+
+    new_chunks = []
+    dim = 0
+    for idx in key:
+      if idx is None:
+        new_chunks.append((1,))  # newaxis: insert dim, don't consume a source dim
+        continue
+      resolved = self._index_dim(idx, self.chunks[dim])
+      dim += 1
+      if resolved is not None:
+        new_chunks.append(resolved)
+
+    return self._empty(tuple(new_chunks), self.dtype)
 
   def __array_namespace__(self, *, api_version: str | None = None):
     """Mark this object as an array-API duck array for xarray.
@@ -108,15 +172,8 @@ class ScaffoldingArray:
     return tuple(sum(c) for c in self.chunks)
 
   def rechunk(self, chunks):
-    """Return a new scaffold with the same shape/dtype but new chunking.
-
-    A zero-strided view over a one-element dummy buffer is used to present
-    the correct shape and dtype to the new scaffold without allocating any
-    real backing storage.
-    """
-    dummy = np.empty(1, dtype=self.dtype)
-    view = as_strided(dummy, shape=self.shape, strides=(0,) * len(self.chunks))
-    return ScaffoldingArray(view, chunks=chunks)
+    """Return a new scaffold with the same shape/dtype but new chunking."""
+    return self._empty(normalize_chunks(chunks, self.shape), self.dtype)
 
 
 class ScaffoldingChunkManager(ChunkManagerEntrypoint):
