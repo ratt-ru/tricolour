@@ -145,10 +145,9 @@ class ScaffoldingArray:
       if idx is None:
         new_chunks.append((1,))  # newaxis: insert dim, don't consume a source dim
         continue
-      resolved = self._index_dim(idx, self.chunks[dim])
-      dim += 1
-      if resolved is not None:
+      if (resolved := self._index_dim(idx, self.chunks[dim])) is not None:
         new_chunks.append(resolved)
+      dim += 1
 
     return self._empty(tuple(new_chunks), self.dtype)
 

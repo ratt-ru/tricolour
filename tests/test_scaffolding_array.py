@@ -70,6 +70,43 @@ def test_scaffolding_array_getitem():
   assert fancy.chunks == ((5, 5), (3,), (30,))
 
 
+def test_scaffolding_array_getitem_newaxis():
+  array = ScaffoldingArray(np.empty((10, 20, 30), dtype=np.float32), chunks=(5, 4, 30))
+  assert array.chunks == ((5, 5), (4, 4, 4, 4, 4), (30,))
+
+  # A newaxis inserts a size-1 dimension and must NOT consume a source
+  # dimension: the source dims that follow it have to keep mapping to their
+  # own chunks (chunks[0], chunks[1], ...), not be shifted by the key
+  # position. Note xarray's ``expanded_indexer`` caps the key length at
+  # ``ndim`` counting the ``None`` slot, so a leading newaxis leaves the last
+  # source dim unindexed (it is dropped) -- the pre-existing behaviour we are
+  # locking in here.
+
+  # Leading newaxis: source dims 0 and 1 keep their chunks.
+  leading = array[np.newaxis]
+  assert leading.shape == (1, 10, 20)
+  assert leading.chunks == ((1,), (5, 5), (4, 4, 4, 4, 4))
+
+  # Newaxis in the middle: source dim 0 before it, source dim 1 after it.
+  middle = array[:, np.newaxis]
+  assert middle.shape == (10, 1, 20)
+  assert middle.chunks == ((5, 5), (1,), (4, 4, 4, 4, 4))
+
+  # Newaxis followed by a real slice: the slice must resolve against the
+  # *source* dimension (chunks[0] -> (5, 5)), not chunks[1]. The buggy
+  # enumerate-based version resolved 2:5 against chunks[1] instead, yielding
+  # shape (1, 3, 30) with chunks ((1,), (2, 1), (30,)).
+  mixed = array[np.newaxis, 2:5]
+  assert mixed.shape == (1, 3, 20)
+  assert mixed.chunks == ((1,), (3,), (4, 4, 4, 4, 4))
+
+  # Newaxis before an integer (dim-dropping) index: the int must drop source
+  # dim 0, and the trailing slice resolve against source dim 1 (chunks[1]).
+  combo = array[np.newaxis, 0]
+  assert combo.shape == (1, 20)
+  assert combo.chunks == ((1,), (4, 4, 4, 4, 4))
+
+
 @pytest.mark.filterwarnings("ignore::zarr.errors.ZarrUserWarning", reason="Consolidated Metadata Warning")
 def test_write_scaffolding_dataset(tmp_path, scaffolding_datset):
   ds = scaffolding_datset
