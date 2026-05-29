@@ -2,11 +2,11 @@ import numpy as np
 import pytest
 import xarray
 
-from tricolour.core.scaffolding_array import ScaffoldingArray
+from tricolour.core.scaffold_array import ScaffoldArray
 
 
 @pytest.fixture
-def scaffolding_datset():
+def scaffold_datset():
   na = 7
   nbl = na * (na - 1) // 2
 
@@ -34,18 +34,18 @@ def scaffolding_datset():
   )
 
 
-def test_scaffolding_array():
+def test_scaffold_array():
   shape = (10, 20, 30)
   data = np.empty(shape)
-  array = ScaffoldingArray(data)
+  array = ScaffoldArray(data)
   assert array.chunks == tuple((d,) for d in shape)
   assert array.ndim == len(shape)
   assert array.dtype == data.dtype
   assert array.shape == shape
 
 
-def test_scaffolding_array_getitem():
-  array = ScaffoldingArray(np.empty((10, 20, 30), dtype=np.float32), chunks=(5, 4, 30))
+def test_scaffold_array_getitem():
+  array = ScaffoldArray(np.empty((10, 20, 30), dtype=np.float32), chunks=(5, 4, 30))
   assert array.chunks == ((5, 5), (4, 4, 4, 4, 4), (30,))
 
   # Contiguous slice preserves chunk boundaries (overlap of [2, 5) with two size-5 chunks).
@@ -70,8 +70,8 @@ def test_scaffolding_array_getitem():
   assert fancy.chunks == ((5, 5), (3,), (30,))
 
 
-def test_scaffolding_array_getitem_newaxis():
-  array = ScaffoldingArray(np.empty((10, 20, 30), dtype=np.float32), chunks=(5, 4, 30))
+def test_scaffold_array_getitem_newaxis():
+  array = ScaffoldArray(np.empty((10, 20, 30), dtype=np.float32), chunks=(5, 4, 30))
   assert array.chunks == ((5, 5), (4, 4, 4, 4, 4), (30,))
 
   # A newaxis inserts a size-1 dimension and must NOT consume a source
@@ -108,12 +108,12 @@ def test_scaffolding_array_getitem_newaxis():
 
 
 @pytest.mark.filterwarnings("ignore::zarr.errors.ZarrUserWarning", reason="Consolidated Metadata Warning")
-def test_write_scaffolding_dataset(tmp_path, scaffolding_datset):
-  ds = scaffolding_datset
+def test_write_scaffold_dataset(tmp_path, scaffold_datset):
+  ds = scaffold_datset
   time_chunks = 5
   chan_chunks = 4
   chunked_ds = ds.chunk(
-    chunks={"time": time_chunks, "frequency": chan_chunks}, chunked_array_type="tricolour:scaffolding"
+    chunks={"time": time_chunks, "frequency": chan_chunks}, chunked_array_type="tricolour:scaffold"
   )
   out_store = tmp_path / "out.zarr"
 

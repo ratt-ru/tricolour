@@ -16,7 +16,7 @@ if TYPE_CHECKING:
   import numpy.typing as npt
 
 
-class ScaffoldingArray:
+class ScaffoldArray:
   """A "duck array" that carries shape, dtype and chunk metadata but no data.
 
   Its sole purpose is to stand in for a real array while writing the
@@ -86,7 +86,7 @@ class ScaffoldingArray:
     self.dtype = array.dtype
 
   @classmethod
-  def _empty(cls, chunks: T_NormalizedChunks, dtype: npt.DTypeLike) -> ScaffoldingArray:
+  def _empty(cls, chunks: T_NormalizedChunks, dtype: npt.DTypeLike) -> ScaffoldArray:
     """Build a scaffold of the given chunking/dtype without allocating data.
 
     A zero-strided view over a one-element dummy buffer presents the correct
@@ -125,9 +125,9 @@ class ScaffoldingArray:
     arr = np.asarray(idx)
     if arr.ndim == 1:
       return (int(arr.sum()),) if arr.dtype == bool else (arr.shape[0],)
-    raise NotImplementedError("Vectorized indexing on ScaffoldingArrays")
+    raise NotImplementedError("Vectorized indexing on ScaffoldArrays")
 
-  def __getitem__(self, key) -> ScaffoldingArray:
+  def __getitem__(self, key) -> ScaffoldArray:
     """Return a scaffold reshaped/rechunked as if ``key`` were applied.
 
     Pure metadata arithmetic: no data is read. xarray may pass a raw key or
@@ -158,7 +158,7 @@ class ScaffoldingArray:
     so its mere presence is enough; actually invoking it (i.e. trying to
     run array operations) is unsupported and raises.
     """
-    raise NotImplementedError("Calling array API methods on ScaffoldingArrays")
+    raise NotImplementedError("Calling array API methods on ScaffoldArrays")
 
   @property
   def ndim(self) -> int:
@@ -175,11 +175,11 @@ class ScaffoldingArray:
     return self._empty(normalize_chunks(chunks, self.shape), self.dtype)
 
 
-class ScaffoldingChunkManager(ChunkManagerEntrypoint):
-  """xarray chunk manager backend for :class:`ScaffoldingArray`.
+class ScaffoldChunkManager(ChunkManagerEntrypoint):
+  """xarray chunk manager backend for :class:`ScaffoldArray`.
 
   Implements the :class:`~xarray.namedarray.parallelcompat.ChunkManagerEntrypoint`
-  interface so xarray can treat :class:`ScaffoldingArray` as a chunked array
+  interface so xarray can treat :class:`ScaffoldArray` as a chunked array
   type. Registered under the ``"tricolour:scaffolding"`` entry point in the
   ``xarray.chunkmanagers`` group, and selected via the ``chunked_array_type``
   argument to :meth:`xarray.Dataset.chunk`.
@@ -190,13 +190,13 @@ class ScaffoldingChunkManager(ChunkManagerEntrypoint):
   """
 
   def __init__(self):
-    self.array_cls = ScaffoldingArray
+    self.array_cls = ScaffoldArray
 
   def is_chunked_array(self, data) -> bool:
-    """Return whether ``data`` is a :class:`ScaffoldingArray`."""
-    return isinstance(data, ScaffoldingArray)
+    """Return whether ``data`` is a :class:`ScaffoldArray`."""
+    return isinstance(data, ScaffoldArray)
 
-  def chunks(self, data: ScaffoldingArray) -> T_NormalizedChunks:
+  def chunks(self, data: ScaffoldArray) -> T_NormalizedChunks:
     """Return the normalised chunking of a scaffold."""
     return data.chunks
 
@@ -213,17 +213,17 @@ class ScaffoldingChunkManager(ChunkManagerEntrypoint):
 
     return normalize_chunks(chunks, shape)
 
-  def from_array(self, data: T_DuckArray | npt.ArrayLike, chunks: _Chunks, **kw) -> ScaffoldingArray:
-    """Wrap ``data`` in a :class:`ScaffoldingArray` with the given chunking."""
-    return ScaffoldingArray(data, chunks)
+  def from_array(self, data: T_DuckArray | npt.ArrayLike, chunks: _Chunks, **kw) -> ScaffoldArray:
+    """Wrap ``data`` in a :class:`ScaffoldArray` with the given chunking."""
+    return ScaffoldArray(data, chunks)
 
-  def rechunk(self, data: ScaffoldingArray, chunks, **kwargs) -> ScaffoldingArray:
-    """Return a re-chunked scaffold (see :meth:`ScaffoldingArray.rechunk`)."""
+  def rechunk(self, data: ScaffoldArray, chunks, **kwargs) -> ScaffoldArray:
+    """Return a re-chunked scaffold (see :meth:`ScaffoldArray.rechunk`)."""
     return data.rechunk(chunks, **kwargs)
 
-  def compute(self, *data: ScaffoldingArray, **kwargs) -> tuple[np.ndarray, ...]:
+  def compute(self, *data: ScaffoldArray, **kwargs) -> tuple[np.ndarray, ...]:
     """Unsupported: a scaffold has no data to compute."""
-    raise NotImplementedError("Computing ScaffoldingArrays")
+    raise NotImplementedError("Computing ScaffoldArrays")
 
   def store(self, sources, targets, **kwargs):
     # Scaffolding only lays out the zarr structure (shape/chunks/dtype);
@@ -246,4 +246,4 @@ class ScaffoldingChunkManager(ChunkManagerEntrypoint):
     **kwargs,
   ):
     """Unsupported: scaffolds carry no data to apply functions over."""
-    raise NotImplementedError("GUFuncs on ScaffoldingArrays")
+    raise NotImplementedError("GUFuncs on ScaffoldArrays")

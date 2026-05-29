@@ -37,7 +37,7 @@ Repository = "https://github.com/ratt-ru/tricolour"
 tricolour = "tricolour.cli:app"
 
 [project.entry-points."xarray.chunkmanagers"]
-"tricolour:scaffolding" = "tricolour.core.scaffolding_array:ScaffoldingChunkManager"
+"tricolour:scaffold" = "tricolour.core.scaffold_array:ScaffoldChunkManager"
 
 [project.optional-dependencies]
 msv2 = [
