@@ -112,9 +112,7 @@ def test_write_scaffold_dataset(tmp_path, scaffold_datset):
   ds = scaffold_datset
   time_chunks = 5
   chan_chunks = 4
-  chunked_ds = ds.chunk(
-    chunks={"time": time_chunks, "frequency": chan_chunks}, chunked_array_type="tricolour:scaffold"
-  )
+  chunked_ds = ds.chunk(chunks={"time": time_chunks, "frequency": chan_chunks}, chunked_array_type="tricolour:scaffold")
   out_store = tmp_path / "out.zarr"
 
   # Scaffold the store: lays out structure/metadata (and coords),
@@ -122,6 +120,18 @@ def test_write_scaffold_dataset(tmp_path, scaffold_datset):
   chunked_ds.to_zarr(out_store)
   written = xarray.open_dataset(out_store, engine="zarr")
   assert not ds.identical(written)
+
+  # Coordinates stay in-memory (not scaffolded) through ``chunk``, so
+  # ``to_zarr`` writes their real data during the metadata write. They must
+  # come back identical even though no data-variable chunks were written yet.
+  assert set(written.coords) == set(ds.coords)
+  for name in ds.coords:
+    xarray.testing.assert_identical(written[name], ds[name])
+
+  # The scaffolded data variables, by contrast, carry no data yet: their
+  # values must differ from the source (they sit at the zarr fill value).
+  for name in ds.data_vars:
+    assert not np.allclose(np.nan_to_num(written[name].values), np.nan_to_num(ds[name].values))
 
   # Fill the scaffold by writing regions of the original (unchunked)
   # dataset block-by-block, matching the scaffold chunking.
