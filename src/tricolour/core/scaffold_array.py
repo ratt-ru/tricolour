@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from numpy.lib.stride_tricks import as_strided
-from xarray.core.indexing import ExplicitIndexer, expanded_indexer
 from xarray.core.types import T_Chunks, T_DuckArray, T_NormalizedChunks
 from xarray.namedarray._typing import _Chunks
 from xarray.namedarray.parallelcompat import ChunkManagerEntrypoint
@@ -97,59 +96,14 @@ class ScaffoldArray:
     view = as_strided(dummy, shape=shape, strides=(0,) * len(shape))
     return cls(view, chunks=chunks)
 
-  @staticmethod
-  def _index_dim(idx, chunk_sizes: tuple[int, ...]) -> tuple[int, ...] | None:
-    """Resolve one dimension's new chunk tuple under an indexer.
-
-    Returns ``None`` to signal the dimension is dropped (integer index).
-    Contiguous (step-1) slices preserve chunk boundaries by intersecting
-    the selected range with each original chunk span; strided slices and
-    fancy/boolean indexing collapse the dimension to a single chunk.
-    """
-    size = sum(chunk_sizes)
-    if isinstance(idx, (int, np.integer)):
-      return None  # integer index drops the dimension
-    if idx is None:
-      return (1,)  # np.newaxis inserts a size-1 dimension
-    if isinstance(idx, slice):
-      start, stop, step = idx.indices(size)
-      if step == 1:
-        out, off = [], 0
-        for c in chunk_sizes:
-          lo, hi = max(off, start), min(off + c, stop)
-          if hi > lo:
-            out.append(hi - lo)
-          off += c
-        return tuple(out)
-      return (len(range(start, stop, step)),)  # strided -> single chunk
-    arr = np.asarray(idx)
-    if arr.ndim == 1:
-      return (int(arr.sum()),) if arr.dtype == bool else (arr.shape[0],)
-    raise NotImplementedError("Vectorized indexing on ScaffoldArrays")
-
   def __getitem__(self, key) -> ScaffoldArray:
-    """Return a scaffold reshaped/rechunked as if ``key`` were applied.
+    """This method shouldn't be called for ScaffoldArray's use case.
 
-    Pure metadata arithmetic: no data is read. xarray may pass a raw key or
-    an :class:`~xarray.core.indexing.ExplicitIndexer`; the latter is
-    unwrapped via its ``.tuple``. ``np.newaxis`` entries insert a size-1
-    dimension without consuming a source dimension.
+    Raises
+    ------
+      NotImplementedError
     """
-    if isinstance(key, ExplicitIndexer):
-      key = key.tuple
-    key = expanded_indexer(key, self.ndim)
-
-    new_chunks = []
-    dim = 0
-    for idx in key:
-      if idx is None:
-        new_chunks.append((1,))  # newaxis: insert dim, don't consume a source dim
-        continue
-      if (resolved := self._index_dim(idx, self.chunks[dim])) is not None:
-        new_chunks.append(resolved)
-      dim += 1
-
-    return self._empty(tuple(new_chunks), self.dtype)
+    raise NotImplementedError("ScaffoldArray.__getitem__")
 
   def __array_namespace__(self, *, api_version: str | None = None):
     """Mark this object as an array-API duck array for xarray.
