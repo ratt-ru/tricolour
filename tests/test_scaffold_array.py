@@ -121,6 +121,22 @@ def test_write_scaffold_dataset(tmp_path, scaffold_datset):
   written = xarray.open_dataset(out_store, engine="zarr")
   assert not ds.identical(written)
 
+  # The zarr store must be chunked exactly as the scaffold dataset asked.
+  # The scaffold carries its chunking in ``.chunks`` (a per-dimension tuple
+  # of chunk-size tuples); zarr uses a single chunk shape per dimension --
+  # the first (leading) chunk size along each axis. After a round-trip that
+  # layout surfaces in each variable's ``encoding`` as ``chunks`` (the zarr
+  # chunk shape) and ``preferred_chunks`` (a dim -> chunk-size mapping).
+  for name in ds.data_vars:
+    var = chunked_ds[name]
+    expected_chunks = tuple(sizes[0] for sizes in var.chunks)
+    expected_preferred = dict(zip(var.dims, expected_chunks))
+    assert written[name].encoding["chunks"] == expected_chunks
+    assert written[name].encoding["preferred_chunks"] == expected_preferred
+    # Sanity check the explicit values requested via ``chunk`` survived.
+    assert written[name].encoding["preferred_chunks"]["time"] == time_chunks
+    assert written[name].encoding["preferred_chunks"]["frequency"] == chan_chunks
+
   # Coordinates stay in-memory (not scaffolded) through ``chunk``, so
   # ``to_zarr`` writes their real data during the metadata write. They must
   # come back identical even though no data-variable chunks were written yet.
@@ -144,6 +160,11 @@ def test_write_scaffold_dataset(tmp_path, scaffold_datset):
       block = ds.isel(region).drop_vars(["time", "frequency"])
       block.to_zarr(out_store, region=region)
 
-  # Confirm the regions were accurately written back.
+  # Confirm the regions were accurately written back, and that filling the
+  # scaffold region-by-region left the on-disk chunking untouched.
   written = xarray.open_dataset(out_store, engine="zarr")
   xarray.testing.assert_identical(written, ds)
+  for name in ds.data_vars:
+    expected_chunks = tuple(sizes[0] for sizes in chunked_ds[name].chunks)
+    assert written[name].encoding["chunks"] == expected_chunks
+    assert written[name].encoding["preferred_chunks"] == dict(zip(chunked_ds[name].dims, expected_chunks))
