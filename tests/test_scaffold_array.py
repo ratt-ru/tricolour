@@ -113,6 +113,11 @@ def test_write_scaffold_dataset(tmp_path, scaffold_datset):
   time_chunks = 5
   chan_chunks = 4
   chunked_ds = ds.chunk(chunks={"time": time_chunks, "frequency": chan_chunks}, chunked_array_type="tricolour:scaffold")
+
+  # Variables should be substituted with a ScaffoldArray
+  for var in chunked_ds.data_vars.values():
+    assert isinstance(var.data, ScaffoldArray)
+
   out_store = tmp_path / "out.zarr"
 
   # Scaffold the store: lays out structure/metadata (and coords),
