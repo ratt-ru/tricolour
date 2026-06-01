@@ -1,0 +1,123 @@
+name: Acceptance Test
+
+# Runs the (slow) end-to-end acceptance suite. It is intentionally kept out of
+# the standard CI matrix (see ci.yml, which runs `-m "not acceptance"`).
+#
+# It runs:
+#   * on every push to master
+#   * on demand when an authorized user comments `/test-acceptance` on a PR
+on:
+  push:
+    branches: [ master ]
+  issue_comment:
+    types: [ created ]
+
+# Required to report status back and react to the triggering comment.
+permissions:
+  contents: read
+  statuses: write
+  pull-requests: write
+
+# Avoid piling up runs for the same PR / branch.
+concurrency:
+  group: acceptance-${{ github.event_name == 'issue_comment' && github.event.issue.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  acceptance:
+    name: Acceptance Test
+    # Run on master pushes, or on `/test-acceptance` comments on a PR.
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       contains(github.event.comment.body, '/test-acceptance'))
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Check authorization
+        if: github.event_name == 'issue_comment'
+        run: |
+          assoc="${{ github.event.comment.author_association }}"
+          case "$assoc" in
+            OWNER|MEMBER|COLLABORATOR)
+              echo "Authorized to run acceptance tests ($assoc)" ;;
+            *)
+              echo "::error::@${{ github.event.comment.user.login }} ($assoc) is not authorized to run acceptance tests"
+              exit 1 ;;
+          esac
+
+      - name: Acknowledge command
+        if: github.event_name == 'issue_comment'
+        run: |
+          gh api -X POST \
+            "repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions" \
+            -f content=eyes
+
+      - name: Resolve checkout ref
+        id: ref
+        run: |
+          if [ "${{ github.event_name }}" = "issue_comment" ]; then
+            sha=$(gh pr view "${{ github.event.issue.number }}" \
+              --repo "${{ github.repository }}" --json headRefOid -q .headRefOid)
+          else
+            sha="${{ github.sha }}"
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Acceptance tests will run against $sha"
+
+      - name: Mark commit status pending
+        run: |
+          gh api -X POST "repos/${{ github.repository }}/statuses/${{ steps.ref.outputs.sha }}" \
+            -f state=pending \
+            -f context="acceptance" \
+            -f description="Acceptance tests running" \
+            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.ref.outputs.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: |
+          uv sync --group test --extra meerkat --extra msv2 --extra zarr
+          # Acceptance-only dependencies, not part of the project deps.
+          # python-casacore ships manylinux wheels that bundle casacore.
+          uv pip install gdown python-casacore
+
+      - name: Run acceptance tests
+        run: uv run pytest -v -s -m acceptance
+
+      - name: Report result
+        if: always()
+        run: |
+          state=success
+          [ "${{ job.status }}" = "success" ] || state=failure
+          gh api -X POST "repos/${{ github.repository }}/statuses/${{ steps.ref.outputs.sha }}" \
+            -f state="$state" \
+            -f context="acceptance" \
+            -f description="Acceptance tests $state" \
+            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          if [ "${{ github.event_name }}" = "issue_comment" ]; then
+            run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            if [ "$state" = "success" ]; then
+              body="✅ Acceptance tests passed — [logs]($run_url)"
+            else
+              body="❌ Acceptance tests failed — [logs]($run_url)"
+            fi
+            gh api -X POST \
+              "repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments" \
+              -f body="$body"
+          fi

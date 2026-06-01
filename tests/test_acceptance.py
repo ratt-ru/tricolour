@@ -12,10 +12,17 @@ import tarfile
 import time
 from os.path import join as pjoin
 
-import gdown
 import numpy as np
 import pytest
-from pyrap.tables import table as tbl
+
+# These dependencies are only installed in the dedicated acceptance workflow.
+# Skip collection cleanly when they are absent (e.g. the standard CI matrix).
+gdown = pytest.importorskip("gdown")
+tbl = pytest.importorskip("pyrap.tables").table
+
+# Mark every test in this module so the standard suite can exclude it with
+# `-m "not acceptance"`.
+pytestmark = pytest.mark.acceptance
 
 _GOOGLE_FILE_ID = "1yxDIXUo3Xun9WXxA0x_hvX9Fmxo9Igpr"
 _MS_FILENAME = "1519747221.subset.ms"
