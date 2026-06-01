@@ -11,6 +11,12 @@ on:
     branches: [ master ]
   issue_comment:
     types: [ created ]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "PR number to run against (optional; defaults to the dispatched ref)"
+        required: false
+        type: string
 
 # Required to report status back and react to the triggering comment.
 permissions:
@@ -29,6 +35,7 @@ jobs:
     # Run on master pushes, or on `/test-acceptance` comments on a PR.
     if: >-
       github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request &&
        contains(github.event.comment.body, '/test-acceptance'))
@@ -59,14 +66,24 @@ jobs:
       - name: Resolve checkout ref
         id: ref
         run: |
-          if [ "${{ github.event_name }}" = "issue_comment" ]; then
-            sha=$(gh pr view "${{ github.event.issue.number }}" \
-              --repo "${{ github.repository }}" --json headRefOid -q .headRefOid)
+          pr=""
+          case "${{ github.event_name }}" in
+            issue_comment)
+              pr="${{ github.event.issue.number }}" ;;
+            workflow_dispatch)
+              pr="${{ github.event.inputs.pr }}" ;;
+          esac
+
+          if [ -n "$pr" ]; then
+            sha=$(gh pr view "$pr" --repo "${{ github.repository }}" \
+              --json headRefOid -q .headRefOid)
           else
             sha="${{ github.sha }}"
           fi
+
+          echo "pr=$pr" >> "$GITHUB_OUTPUT"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          echo "Acceptance tests will run against $sha"
+          echo "Acceptance tests will run against $sha${pr:+ (PR #$pr)}"
 
       - name: Mark commit status pending
         run: |
@@ -110,7 +127,8 @@ jobs:
             -f description="Acceptance tests $state" \
             -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
-          if [ "${{ github.event_name }}" = "issue_comment" ]; then
+          pr="${{ steps.ref.outputs.pr }}"
+          if [ -n "$pr" ]; then
             run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
             if [ "$state" = "success" ]; then
               body="✅ Acceptance tests passed — [logs]($run_url)"
@@ -118,6 +136,6 @@ jobs:
               body="❌ Acceptance tests failed — [logs]($run_url)"
             fi
             gh api -X POST \
-              "repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments" \
+              "repos/${{ github.repository }}/issues/$pr/comments" \
               -f body="$body"
           fi
