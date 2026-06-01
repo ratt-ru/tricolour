@@ -65,9 +65,9 @@ def load_mask(filename, dilate):
   # Load mask
   mask = np.load(filename)
 
-  if mask.dtype[0] != bool or mask.dtype[1] != np.float64:
+  if not (np.issubdtype(mask.dtype[0], bool) and np.issubdtype(mask.dtype[1], np.float64)):
     raise ValueError(
-      "Mask %s is not a valid static mask with labelled channel axis [dtype == (bool, float64)]" % filename
+      f"Mask {filename} is not a valid static mask with labelled channel axis [dtype == (bool, float64)]"
     )
 
   mask_chans = mask["chans"][1]

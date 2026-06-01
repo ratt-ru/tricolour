@@ -191,14 +191,14 @@ class FlaggingWorker:
           raise ValueError("Task '%s' does not name a valid task", task)
 
       # transpose back: b, c, t, f -> t, b, f, c
-      flT = np.transpose(self._flag_windows, axes=(2, 0, 3, 1))
+      transposed_flags = np.transpose(self._flag_windows, axes=(2, 0, 3, 1))
       if self._flagging_strategy == "polarisation" or self._flagging_strategy == "total_power":
-        flTbcast = np.zeros_like(self._partition.FLAG.data)
+        broadcast_flags = np.zeros_like(self._partition.FLAG.data)
         for ci in range(self._partition.FLAG.data.shape[3]):
-          flTbcast[:, :, :, ci] = flT[:, :, :, 0]
+          broadcast_flags[:, :, :, ci] = transposed_flags[:, :, :, 0]
       else:
-        flTbcast = flT
-      self._partition.FLAG.data = flTbcast
+        broadcast_flags = transposed_flags
+      self._partition.FLAG.data = broadcast_flags
 
       # update flagging stats per field, scan and spwid
       __update_stats(self._statistics)

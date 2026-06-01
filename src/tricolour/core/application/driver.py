@@ -33,8 +33,8 @@ def create_logger():
 
   # add an optional file handler
   logger_path = os.environ.get("TRICOLOUR_LOGPATH", os.getcwd())
-  nowT = int(np.ceil(datetime.timestamp(datetime.now())))
-  logfile = os.path.join(logger_path, f"tricolour.{nowT}.log")
+  now = int(np.ceil(datetime.timestamp(datetime.now())))
+  logfile = os.path.join(logger_path, f"tricolour.{now}.log")
   try:
     with open(logfile, "w") as f:
       f.write("")
@@ -101,9 +101,11 @@ def load_partitions(cfg):
     from xarray_ms.backend.msv2.structure import DEFAULT_PARTITION_COLUMNS
   else:
     # TODO
-    DEFAULT_PARTITION_COLUMNS = []
+    DEFAULT_PARTITION_COLUMNS = []  # noqa: N806  # mirrors the imported constant name
   dt = xarray.open_datatree(
-    cfg.ms, partition_schema=["FIELD_ID", "SCAN_NUMBER"] + DEFAULT_PARTITION_COLUMNS, auto_corrs=True
+    cfg.ms,
+    partition_schema=["FIELD_ID", "SCAN_NUMBER"] + DEFAULT_PARTITION_COLUMNS,
+    auto_corrs=True,
   )
   partitions = list(map(lambda partition: dt[partition], dt.children))
   if cfg.field_names:
@@ -212,9 +214,9 @@ def log_configuration(args):
 
 def driver(cfg: Namespace):
   if cfg.nworkers == 1:
-    context = ray.init(num_cpus=1, local_mode=True)
+    ray.init(num_cpus=1, local_mode=True)
   else:
-    context = ray.init(num_cpus=cfg.nworkers)
+    ray.init(num_cpus=cfg.nworkers)
   if not cfg.disable_post_mortem:
     post_mortem_handler.enable_pdb_on_error()
   else:
