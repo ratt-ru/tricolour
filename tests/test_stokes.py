@@ -12,7 +12,8 @@ from tricolour.core.kernels.stokes import STOKES_TYPES, polarised_intensity, sto
 def test_polarised_intensity(stokes):
   # Set up our stokes parameters in an interesting order
   stokes = list(map(STOKES_TYPES.__getitem__, stokes))
-  vis = np.asarray([[[1 + 1j, 2 + 2j, 3 + 3j, 4 + 4j]]], np.complex128)
+  # vis layout matches the kernel: (baseline, correlation, time, freq)
+  vis = np.asarray([[[[1 + 1j]], [[2 + 2j]], [[3 + 3j]], [[4 + 4j]]]], np.complex128)
 
   stokes_map = stokes_corr_map(stokes)
 
@@ -21,7 +22,7 @@ def test_polarised_intensity(stokes):
   pol = 0
 
   for c1, c2, a, s1, s2 in stokes_pol:
-    v = a * (s1 * vis[0, 0, c1] + s2 * vis[0, 0, c2])
+    v = a * (s1 * vis[0, c1, 0, 0] + s2 * vis[0, c2, 0, 0])
     pol += np.abs(v) ** 2  # imaginary contains only noise
 
   pi = np.sqrt(pol)
