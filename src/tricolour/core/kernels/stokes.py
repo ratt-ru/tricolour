@@ -77,7 +77,7 @@ def stokes_corr_map(corr_types):
   return corr_maps
 
 
-@numba.jit(nopython=False, nogil=False, cache=True)
+@numba.njit(nogil=False, cache=True)
 def polarised_intensity(vis, stokes_pol):
   r"""
   Derives the polarised intensity from visibilities
@@ -111,7 +111,7 @@ def polarised_intensity(vis, stokes_pol):
   """
 
   # Only one output correlation -- polarised intensity
-  out_vis = np.empty((vis.shape[0],1,vis.shape[2],vis.shape[3]), vis.dtype)
+  out_vis = np.empty((vis.shape[0], 1, vis.shape[2], vis.shape[3]), vis.dtype)
 
   for bl in range(vis.shape[0]):
     for t in range(vis.shape[2]):
