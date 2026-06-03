@@ -6,7 +6,7 @@ from tricolour.core.scaffold_array import ScaffoldArray
 
 
 @pytest.fixture
-def scaffold_datset():
+def small_dataset():
   na = 7
   nbl = na * (na - 1) // 2
 
@@ -45,8 +45,8 @@ def test_scaffold_array():
 
 
 @pytest.mark.filterwarnings("ignore::zarr.errors.ZarrUserWarning", reason="Consolidated Metadata Warning")
-def test_write_scaffold_dataset(tmp_path, scaffold_datset):
-  ds = scaffold_datset
+def test_write_scaffold_dataset(tmp_path, small_dataset):
+  ds = small_dataset
   time_chunks = 5
   chan_chunks = 4
   chunks = {"time": time_chunks, "frequency": chan_chunks}
