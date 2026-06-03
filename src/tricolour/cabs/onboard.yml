@@ -2,7 +2,7 @@ cabs:
   onboard:
     flavour: python
     command: tricolour.core.onboard.onboard
-    image: ghcr.io/sjperkins/tricolour:0.5.0-dev
+    image: ghcr.io/sjperkins/tricolour:reconfigure-ci
     name: onboard
     info:
       Print setup instructions for CI/CD, PyPI publishing, and GitHub configuration.
