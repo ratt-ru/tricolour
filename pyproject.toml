@@ -99,4 +99,5 @@ test = [
     "pytest>=8.0.0",
     "pytest-cov>=5.0.0",
     "scipy>=1.17.1",
+    "zarr>=3.1.5",
 ]
