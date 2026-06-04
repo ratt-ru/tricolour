@@ -28,7 +28,7 @@ class ScaffoldArray:
   design -- it must only be used for laying out metadata.
 
   The intended workflow is two-phase (see
-  ``tests/test_scaffolding_array.py`` for a full example):
+  ``tests/test_scaffold_array.py`` for a full example):
 
   1. **Scaffold.** Chunk a dataset with this backend and call ``to_zarr``.
      This writes the store's shape/chunks/dtype and coordinates, but
@@ -37,7 +37,7 @@ class ScaffoldArray:
      a time using ``to_zarr(..., region=...)``, where each region matches
      the scaffold chunking.
 
-  The backend is registered as the ``"tricolour:scaffolding"`` xarray chunk
+  The backend is registered as the ``"tricolour:scaffold"`` xarray chunk
   manager entry point (see ``pyproject.toml``), so it is selected via the
   ``chunked_array_type`` argument to :meth:`xarray.Dataset.chunk`.
 
@@ -52,7 +52,7 @@ class ScaffoldArray:
 
       chunked_ds = ds.chunk(
         chunks={"x": 5, "y": 10, "z": 15},
-        chunked_array_type="tricolour:scaffolding",
+        chunked_array_type="tricolour:scaffold",
       )
 
       chunked_ds.to_zarr("/tmp/output.zarr")
@@ -134,7 +134,7 @@ class ScaffoldChunkManager(ChunkManagerEntrypoint):
 
   Implements the :class:`~xarray.namedarray.parallelcompat.ChunkManagerEntrypoint`
   interface so xarray can treat :class:`ScaffoldArray` as a chunked array
-  type. Registered under the ``"tricolour:scaffolding"`` entry point in the
+  type. Registered under the ``"tricolour:scaffold"`` entry point in the
   ``xarray.chunkmanagers`` group, and selected via the ``chunked_array_type``
   argument to :meth:`xarray.Dataset.chunk`.
 

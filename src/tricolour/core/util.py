@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import numbers
 import re
 from argparse import ArgumentTypeError
 from typing import Iterable
@@ -30,7 +31,7 @@ def normalize_chunks(chunks: Iterable[int | Iterable[int]], shape: Iterable[int]
       A tuple of tuples, where each inner tuple contains the explicit
       integer sizes for chunks in that dimension.
   """
-  shape = tuple(shape)
+  shape = tuple(int(d) if isinstance(d, numbers.Integral) else d for d in shape)
   if not all(isinstance(d, int) for d in shape):
     raise TypeError(f"shape {shape} must be an Iterable[int]")
 
@@ -42,7 +43,8 @@ def normalize_chunks(chunks: Iterable[int | Iterable[int]], shape: Iterable[int]
 
   for c, s in zip(chunks_list, shape):
     # Case 1: Uniform integer chunk size
-    if isinstance(c, int):
+    if isinstance(c, numbers.Integral):
+      c = int(c)
       if c <= 0:
         raise ValueError(f"Chunk size must be greater than 0, got {c}")
 

@@ -46,6 +46,7 @@ def test_scaffold_array():
 
 @pytest.mark.filterwarnings("ignore::zarr.errors.ZarrUserWarning", reason="Consolidated Metadata Warning")
 def test_write_scaffold_dataset(tmp_path, small_dataset):
+  pytest.importorskip("zarr")
   ds = small_dataset
   time_chunks = 5
   chan_chunks = 4
