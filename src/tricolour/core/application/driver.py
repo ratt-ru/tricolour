@@ -99,15 +99,30 @@ def load_partitions(cfg):
   source_backend = infer_and_import_backend(cfg.ms)
   if source_backend == MSv4Backend.CASA_TABLE:
     from xarray_ms.backend.msv2.structure import DEFAULT_PARTITION_COLUMNS
+    kwargs = {
+       "partition_schema": ["FIELD_ID", "SCAN_NUMBER"] + DEFAULT_PARTITION_COLUMNS,
+       "auto_corrs": True
+    }
+  elif source_backend == MSv4Backend.ZARR:
+    kwargs = {}
   else:
-    # TODO
-    DEFAULT_PARTITION_COLUMNS = []  # noqa: N806  # mirrors the imported constant name
+    raise NotImplementedError("Currently only MSv2/v4 and Zarr datatrees are supported")
   dt = xarray.open_datatree(
     cfg.ms,
-    partition_schema=["FIELD_ID", "SCAN_NUMBER"] + DEFAULT_PARTITION_COLUMNS,
-    auto_corrs=True,
+    **kwargs
   )
   partitions = list(map(lambda partition: dt[partition], dt.children))
+
+  if source_backend == MSv4Backend.ZARR:
+    for p in partitions:
+     scan_numbers = np.unique(p.scan_name.data)
+     if len(scan_numbers) > 1:
+        raise RuntimeError("Zarr dataset has to be prepartitioned by scan. Re-dump with partition_schema including SCAN_NUMBER")
+     nant = len(p.antenna_xds.antenna_name.data)
+     nbl = len(p.baseline_id)
+     if nbl != nant * (nant - 1) // 2 + nant:
+        raise RuntimeError("Zarr dataset should have autocorrelations in the datatree. Re-dump with auto_corrs=True") 
+
   if cfg.field_names:
     # we don't use sel here because scan is not a single coordinate here
     partitions = list(
@@ -133,7 +148,9 @@ def chunk_partitions(partitions, num_bl, num_time):
   # chunks by time group
   chunked_partitions = []
   regions = []
+  data_trees = []
   for pi in partitions:
+    data_trees.append(pi.name)
     nrows = pi.time.size * pi.baseline_id.size
     nchunk_t = pi.time.size // num_time + (pi.time.size % num_time > 0)
     nchunk_bl = pi.baseline_id.size // num_bl + (pi.baseline_id.size % num_bl > 0)
@@ -144,12 +161,18 @@ def chunk_partitions(partitions, num_bl, num_time):
       for ichb in range(nchunk_bl):
         blb = ichb * num_bl
         bub = min((ichb + 1) * num_bl, pi.baseline_id.size)
-        region = dict(time=slice(tlb, tub), baseline_id=slice(blb, bub))
+        region = dict(
+          time=slice(tlb, tub), 
+          baseline_id=slice(blb, bub),
+          frequency=slice(None),
+          polarization=slice(None),
+          uvw_label=slice(None)
+        )
         chunked_partitions.append(pi.isel(**region))
         regions.append(region)
         vels_sel += (tub - tlb) * (bub - blb)
     assert vels_sel == nrows
-  return chunked_partitions, regions
+  return chunked_partitions, regions, data_trees
 
 
 def load_config(config_file):
@@ -230,12 +253,12 @@ def driver(cfg: Namespace):
   for mask in collect_masks():
     masks[mask] = load_mask(mask, dilate=cfg.dilate_masks)
   log.info(f"Partitioning database {cfg.ms}")
-  partitions, regions = chunk_partitions(load_partitions(cfg), cfg.baseline_chunks, cfg.time_chunks)
+  partitions, regions, parent_data_trees = chunk_partitions(load_partitions(cfg), cfg.baseline_chunks, cfg.time_chunks)
 
   log.info("Enquing partitions for processing...")
   wq = WorkQueue.remote()
-  for pi, ri in zip(partitions, regions):
-    wq.enqueue_partition.remote(pi, ri)
+  for pi, ri, dt in zip(partitions, regions, parent_data_trees):
+    wq.enqueue_partition.remote(pi, ri, dt)
   log.info("Starting flagging operations")
   tic = time.time()
   fw = []
@@ -251,6 +274,8 @@ def driver(cfg: Namespace):
         subtract_model_column=cfg.subtract_model_column,
         flagging_strategy=cfg.flagging_strategy,
         flagging_config=config_file["strategies"],
+        source_backend = infer_and_import_backend(cfg.ms),
+        dataset_path=cfg.ms
       )
     )
   ray.get([fwi.run.remote(wq) for fwi in fw])

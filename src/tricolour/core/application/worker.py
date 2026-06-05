@@ -1,7 +1,7 @@
 import numpy as np
 import ray
 import xarray
-
+from msv4_utils import MSv4Backend
 from tricolour.core.kernels.flag_statistics import WindowStatistics, combine_window_stats, window_stats
 from tricolour.core.kernels.flagging import (
   apply_static_mask,
@@ -23,14 +23,14 @@ class WorkQueue:
   def __init__(self):
     self._queue = []
 
-  def enqueue_partition(self, partition, region):
+  def enqueue_partition(self, partition, region, data_tree):
     if not isinstance(partition, xarray.DataTree):
       raise TypeError("Expected an xarray.DataTree type")
-    self._queue.append((partition, region))
+    self._queue.append((partition, region, data_tree))
 
   def dequeue(self, data_column, model_column=None):
     if self._queue:
-      partition, region = self._queue.pop(0)
+      partition, region, data_tree = self._queue.pop(0)
       vis_windows = getattr(partition, data_column).load()
       vis_windows = vis_windows.transpose("baseline_id", "polarization", "time", "frequency").data
       flag_windows = partition.FLAG.load()
@@ -40,14 +40,22 @@ class WorkQueue:
         model_windows = model_windows.transpose("baseline_id", "polarization", "time", "frequency").data
       else:
         model_windows = None
-      return vis_windows, flag_windows, model_windows, partition, region
+      return vis_windows, flag_windows, model_windows, partition, region, data_tree
     else:
-      return None, None, None, None, None
+      return None, None, None, None, None, None
 
 
 @ray.remote
 class FlaggingWorker:
-  def __init__(self, workqueue, masks, data_column, subtract_model_column, flagging_strategy, flagging_config):
+  def __init__(self, 
+               workqueue, 
+               masks, 
+               data_column, 
+               subtract_model_column, 
+               flagging_strategy, 
+               flagging_config, 
+               source_backend,
+               dataset_path):
     self.workqueue = workqueue
     self._masks = masks
     self._data_column = data_column
@@ -59,8 +67,11 @@ class FlaggingWorker:
     self._flag_windows = None
     self._partition = None
     self._region = None
+    self._data_tree = None
     self._statistics = dict()
     self._original_statistics = dict()
+    self._source_backend = source_backend
+    self._dataset_path = dataset_path
 
   def report_statistics(self):
     obs = []
@@ -207,12 +218,17 @@ class FlaggingWorker:
     if self._flag_windows is not None and self._partition:
       ds = self._partition.dataset.drop_vars(filter(lambda k: k != "FLAG", self._partition.dataset.data_vars.keys()))
 
-      ds.to_msv2(compute=True, region=self._region)
+      if self._source_backend == MSv4Backend.CASA_TABLE:
+        ds.to_msv2(compute=True, region=self._region)
+      elif self._source_backend == MSv4Backend.ZARR:
+        ds.to_zarr(f"{self._dataset_path}/{self._data_tree}", compute=True, region=self._region)
+      else:
+        raise NotImplementedError("Backend writeback not implemented")
 
   def run(self, workqueue):
     self.work_item_ref = workqueue.dequeue.remote(self._data_column, model_column=self._subtract_model_column)
     while True:
-      self._vis_windows, self._flag_windows, self._model_windows, self._partition, self._region = ray.get(
+      self._vis_windows, self._flag_windows, self._model_windows, self._partition, self._region, self._data_tree = ray.get(
         self.work_item_ref
       )
       if self._partition is None:
