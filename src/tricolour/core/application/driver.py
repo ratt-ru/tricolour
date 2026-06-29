@@ -150,7 +150,6 @@ def chunk_partitions(partitions, num_bl, num_time):
   regions = []
   data_trees = []
   for pi in partitions:
-    data_trees.append(pi.name)
     nrows = pi.time.size * pi.baseline_id.size
     nchunk_t = pi.time.size // num_time + (pi.time.size % num_time > 0)
     nchunk_bl = pi.baseline_id.size // num_bl + (pi.baseline_id.size % num_bl > 0)
@@ -170,6 +169,7 @@ def chunk_partitions(partitions, num_bl, num_time):
         )
         chunked_partitions.append(pi.isel(**region))
         regions.append(region)
+        data_trees.append(pi.name)
         vels_sel += (tub - tlb) * (bub - blb)
     assert vels_sel == nrows
   return chunked_partitions, regions, data_trees
