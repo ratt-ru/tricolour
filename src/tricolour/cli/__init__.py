@@ -32,6 +32,14 @@ class WindowBackend(str, Enum):
 def callback(
   ctx: typer.Context,
   ms: str,
+  ray_scheduler_address: Annotated[
+    Optional[str],
+    typer.Option(
+      "--ray-scheduler-address",
+      "-rsa",
+      help="ray scheduler address",
+    )
+  ] = None,
   config: Annotated[
     str,
     typer.Option(
@@ -98,21 +106,10 @@ def callback(
     Optional[List[str]],
     typer.Option("--field-names", "-fn", help="Name(s) of fields to flag. Defaults to flagging all."),
   ] = None,
-  scan_numbers: Annotated[
+  scan_names: Annotated[
     Optional[str],
-    typer.Option("--scan-numbers", "-sn", help="Scan numbers to flag (casa style range like 5~9)"),
+    typer.Option("--scan-names", "-sn", help="Scan names to flag. Defaults to flagging all."),
   ] = None,
-  disable_post_mortem: Annotated[
-    bool,
-    typer.Option(
-      "--disable-post-mortem",
-      "-dpm",
-      help=(
-        "Disable the default behaviour of starting the Interactive Python Debugger upon an "
-        "unhandled exception. This may be necessary for batch pipelining."
-      ),
-    ),
-  ] = False,
   window_backend: Annotated[
     WindowBackend,
     typer.Option(
