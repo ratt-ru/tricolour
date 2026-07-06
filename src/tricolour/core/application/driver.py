@@ -1,18 +1,15 @@
 import importlib
-import logging
-import os
 import time
 from argparse import Namespace
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Dict
+from typing import Any, Dict, Tuple
 
 import numpy as np
 import ray
 import xarray
+from rarg_python_patterns.multiton import Multiton
 from msv4_utils import MSv4Backend, infer_backend
 
-import tricolour.core.application.post_mortem_handler as post_mortem_handler
 from tricolour import config
 from tricolour.core.application.banner import banner
 from tricolour.core.application.worker import FlaggingWorker, WorkQueue
@@ -21,69 +18,64 @@ from tricolour.core.kernels.mask import collect_masks, load_mask
 from tricolour.core.util import casa_style_int_list
 
 
-def create_logger():
-  """Create a console logger"""
-  log = logging.getLogger("tricolour")
-  cfmt = logging.Formatter("%(name)s - %(asctime)s %(levelname)s - %(message)s")
-  log.setLevel(logging.INFO)
-  console = logging.StreamHandler()
-  console.setLevel(logging.INFO)
-  console.setFormatter(cfmt)
-  log.addHandler(console)
-
-  # add an optional file handler
-  logger_path = os.environ.get("TRICOLOUR_LOGPATH", os.getcwd())
-  now = int(np.ceil(datetime.timestamp(datetime.now())))
-  logfile = os.path.join(logger_path, f"tricolour.{now}.log")
-  try:
-    with open(logfile, "w") as f:
-      f.write("")
-    filehandler = logging.FileHandler(logfile)
-    filehandler.setFormatter(cfmt)
-    log.addHandler(filehandler)
-    if logger_path != os.getcwd():
-      log.info(f"A copy of this log is available at {logfile}")
-  except PermissionError:
-    log.warning(
-      f"Failed to initialize logfile for this run. "
-      f"Check your permissions and available space on "
-      f"'{logger_path}'. Proceeding without writing "
-      f"a logfile."
-    )
-  return log
-
-
-# Create the log object
-log = create_logger()
-
-
-@dataclass
-class FlagItem:
-  region: Dict[str, int]
 
 
 @dataclass
 class BackendImport:
   package: str
   install_option: str
+  open_kwargs: Dict[str, Any]
 
 
 BACKEND_MAP = {
-  MSv4Backend.CASA_TABLE: BackendImport("xarray_ms", "msv2"),
-  MSv4Backend.MEERKAT: BackendImport("xarray_kat", "meerkat"),
-  MSv4Backend.ZARR: BackendImport("zarr", "zarr"),
+  MSv4Backend.CASA_TABLE: BackendImport(
+    "xarray_ms",
+    "msv2",
+    {
+      "engine": "xarray-ms:msv2",
+      "partition_schema": ["FIELD_ID", "DATA_DESC_ID", "SCAN_NUMBER"],
+    }),
+  MSv4Backend.MEERKAT: BackendImport(
+    "xarray_kat",
+    "meerkat",
+    {
+      "engine": "xarray-kat",
+      "applycal": "all",
+      "chunked_array_type": "xarray-kat",
+      "chunks": {},
+      "uvw_sign_convention": "casa",
+    }),
+  MSv4Backend.ZARR: BackendImport(
+    "zarr",
+    "zarr",
+    {
+      "engine": "zarr",
+      "chunks": None,
+    }),
 }
 
 SUPPORTS_WRITEBACK = {MSv4Backend.CASA_TABLE: True, MSv4Backend.MEERKAT: False, MSv4Backend.ZARR: True}
 
 
-def infer_and_import_backend(uri: str) -> MSv4Backend:
+def infer_and_import_backend(uri: str) -> Tuple[MSv4Backend, Dict[str, Any]]:
+  """Infers the xarray backend from `uri`, imports the required backend module.
+
+  Args
+  ----
+    uri: Uniform Resource Indicator
+
+  Returns
+  -------
+    A tuple (backend, open_kwargs) where `backend` is a backend enumeration
+    and `open_kwargs` are the kwargs that should be passed through to
+    `xarray.open_datatree`.
+  """
   uri_backend = infer_backend(uri, strict=False)
 
   try:
     backend_import = BACKEND_MAP[uri_backend]
-  except KeyError as e:
-    raise ValueError(f"Unsupported MSv4 backend {uri} {uri_backend}") from e
+  except KeyError:
+    raise ValueError(f"Unsupported MSv4 backend {uri} {uri_backend}")
 
   try:
     importlib.import_module(backend_import.package)
@@ -92,7 +84,13 @@ def infer_and_import_backend(uri: str) -> MSv4Backend:
       f"The {uri_backend.name} backend is not installed.\npip install tricolour[{backend_import.install_option}]"
     )
 
-  return uri_backend
+  return uri_backend, backend_import.open_kwargs
+
+
+
+def open_datatree(uri: str) -> xarray.DataTree:
+  _, open_kwargs = infer_and_import_backend(uri)
+  return xarray.open_datatree(uri, **open_kwargs)
 
 
 def load_partitions(cfg):
@@ -121,7 +119,7 @@ def load_partitions(cfg):
      nant = len(p.antenna_xds.antenna_name.data)
      nbl = len(p.baseline_id)
      if nbl != nant * (nant - 1) // 2 + nant:
-        raise RuntimeError("Zarr dataset should have autocorrelations in the datatree. Re-dump with auto_corrs=True") 
+        raise RuntimeError("Zarr dataset should have autocorrelations in the datatree. Re-dump with auto_corrs=True")
 
   if cfg.field_names:
     # we don't use sel here because scan is not a single coordinate here
@@ -162,7 +160,7 @@ def chunk_partitions(partitions, num_bl, num_time):
         blb = ichb * num_bl
         bub = min((ichb + 1) * num_bl, pi.baseline_id.size)
         region = dict(
-          time=slice(tlb, tub), 
+          time=slice(tlb, tub),
           baseline_id=slice(blb, bub),
           frequency=slice(None),
           polarization=slice(None),
@@ -205,13 +203,13 @@ def log_configuration(args):
   try:
     strategies = cfg["strategies"]
   except KeyError:
-    log.warning("Configuration has no strategies")
+    print("Configuration has no strategies")
     return
 
   if len(strategies) > 0:
-    log.info("*****************************************")
-    log.info("The following strategies will be applied:")
-    log.info("*****************************************")
+    print("*****************************************")
+    print("The following strategies will be applied:")
+    print("*****************************************")
 
     for s, strategy in enumerate(strategies):
       name = strategy.get("name", "<nameless>")
@@ -219,31 +217,41 @@ def log_configuration(args):
       try:
         task = strategy["task"]
       except KeyError:
-        log.warning("Strategy '%s' has no associate task", name)
+        print(f"Strategy '{name}' has no associated task")
 
-      log.info("%d: %s (%s)", s, task, name)
+      print(f"{s}: {task} ({name})")
 
       for key, value in strategy.get("kwargs", empty_dict).items():
-        log.info("\t%s: %s", key, value)
-    log.info("***************** END ********************")
+        print(f"\t{key}: {value}", key, value)
+    print("***************** END ********************")
 
   if args.flagging_strategy == "polarisation":
-    log.info("Flagging based on quadrature polarized power")
+    print("Flagging based on quadrature polarized power")
   elif args.flagging_strategy == "total_power":
-    log.info("Flagging on total quadrature power")
+    print("Flagging on total quadrature power")
   else:
-    log.info("Flagging per correlation ('standard' mode)")
+    print("Flagging per correlation ('standard' mode)")
 
 
 def driver(cfg: Namespace):
+  config_file = load_config(cfg.config)
+  log_configuration(cfg)
+
+  masks = {m: load_mask(m, dilate=cfg.dilate_masks) for m in collect_masks()}
+  datatree = Multiton(open_datatree, cfg.ms).with_infinite_ttl()
+
+  if cfg.ray_scheduler_address is None:
+    ray_ctx = ray.init(num_cpus=cfg.nworkers)
+  else:
+    ray_ctx = ray.init(address=cfg.ray_scheduler_address)
+
+  return
+
   if cfg.nworkers == 1:
     ray.init(num_cpus=1, local_mode=True)
   else:
     ray.init(num_cpus=cfg.nworkers)
-  if not cfg.disable_post_mortem:
-    post_mortem_handler.enable_pdb_on_error()
-  else:
-    log.warning("Disabling crash debugging with the Interactive Python Debugger, as per user request")
+
   print(banner())
 
   config_file = load_config(cfg.config)
@@ -252,14 +260,14 @@ def driver(cfg: Namespace):
   masks = {}
   for mask in collect_masks():
     masks[mask] = load_mask(mask, dilate=cfg.dilate_masks)
-  log.info(f"Partitioning database {cfg.ms}")
+  print(f"Partitioning database {cfg.ms}")
   partitions, regions, parent_data_trees = chunk_partitions(load_partitions(cfg), cfg.baseline_chunks, cfg.time_chunks)
 
-  log.info("Enquing partitions for processing...")
+  print("Enquing partitions for processing...")
   wq = WorkQueue.remote()
   for pi, ri, dt in zip(partitions, regions, parent_data_trees):
     wq.enqueue_partition.remote(pi, ri, dt)
-  log.info("Starting flagging operations")
+  print("Starting flagging operations")
   tic = time.time()
   fw = []
   # Never spawn more workers than there are partitions to process; idle
@@ -290,10 +298,10 @@ def driver(cfg: Namespace):
 
   # finally print flagging statistics
   for line in WindowStatistics.summarise_stats(final_stats, original_stats):
-    log.info(line)
+    print(line)
 
   elapsed = toc - tic
-  log.info(
+  print(
     "Data flagged successfully in {0:02.0f}h{1:02.0f}m{2:02.0f}s".format(
       (elapsed // 60) // 60, (elapsed // 60) % 60, elapsed % 60
     )
