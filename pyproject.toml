@@ -25,7 +25,6 @@ dependencies = [
     "ruyaml",
     "donfig",
     "scipy",
-    "rarg-ray-patterns>=0.0.2",
     "rarg-python-patterns>=0.0.4",
 ]
 
@@ -90,6 +89,9 @@ markers = [
     "slow: Tests that take more time to run",
     "acceptance: End-to-end acceptance tests (requires gdown and python-casacore; run via the acceptance workflow)",
 ]
+
+[tool.uv.sources]
+rarg-ray-patterns = { path = "../rarg-ray-patterns", editable = true }
 
 [dependency-groups]
 dev = [
