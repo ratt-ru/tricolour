@@ -21,7 +21,7 @@ dependencies = [
     "numba>=0.64.0",
     "numpy>=2.4.2",
     "xarray",
-    "ray",
+    "ray[serve]",
     "ruyaml",
     "donfig",
     "scipy",
