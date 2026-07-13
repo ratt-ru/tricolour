@@ -26,7 +26,7 @@ dependencies = [
     "donfig",
     "scipy",
     "rarg-ray-patterns>=0.0.2",
-    "rarg-python-patterns>=0.0.3",
+    "rarg-python-patterns>=0.0.4",
 ]
 
 [project.urls]
