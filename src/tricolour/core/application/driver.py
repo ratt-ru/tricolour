@@ -1,91 +1,19 @@
-import importlib
 import time
 from argparse import Namespace
-from dataclasses import dataclass
-from typing import Any, Dict, Tuple
 
 import numpy as np
 import ray
 import xarray
+from msv4_utils import MSv4Backend
 from rarg_python_patterns.multiton import Multiton
-from msv4_utils import MSv4Backend, infer_backend
 
 from tricolour import config
+from tricolour.core.application.backend import infer_and_import_backend
 from tricolour.core.application.banner import banner
 from tricolour.core.application.worker import FlaggingWorker, WorkQueue
 from tricolour.core.kernels.flag_statistics import WindowStatistics, combine_window_stats
 from tricolour.core.kernels.mask import collect_masks, load_mask
 from tricolour.core.util import casa_style_int_list
-
-
-
-
-@dataclass
-class BackendImport:
-  package: str
-  install_option: str
-  open_kwargs: Dict[str, Any]
-
-
-BACKEND_MAP = {
-  MSv4Backend.CASA_TABLE: BackendImport(
-    "xarray_ms",
-    "msv2",
-    {
-      "engine": "xarray-ms:msv2",
-      "partition_schema": ["FIELD_ID", "DATA_DESC_ID", "SCAN_NUMBER"],
-    }),
-  MSv4Backend.MEERKAT: BackendImport(
-    "xarray_kat",
-    "meerkat",
-    {
-      "engine": "xarray-kat",
-      "applycal": "all",
-      "chunked_array_type": "xarray-kat",
-      "chunks": {},
-      "uvw_sign_convention": "casa",
-    }),
-  MSv4Backend.ZARR: BackendImport(
-    "zarr",
-    "zarr",
-    {
-      "engine": "zarr",
-      "chunks": None,
-    }),
-}
-
-SUPPORTS_WRITEBACK = {MSv4Backend.CASA_TABLE: True, MSv4Backend.MEERKAT: False, MSv4Backend.ZARR: True}
-
-
-def infer_and_import_backend(uri: str) -> Tuple[MSv4Backend, Dict[str, Any]]:
-  """Infers the xarray backend from `uri`, imports the required backend module.
-
-  Args
-  ----
-    uri: Uniform Resource Indicator
-
-  Returns
-  -------
-    A tuple (backend, open_kwargs) where `backend` is a backend enumeration
-    and `open_kwargs` are the kwargs that should be passed through to
-    `xarray.open_datatree`.
-  """
-  uri_backend = infer_backend(uri, strict=False)
-
-  try:
-    backend_import = BACKEND_MAP[uri_backend]
-  except KeyError:
-    raise ValueError(f"Unsupported MSv4 backend {uri} {uri_backend}")
-
-  try:
-    importlib.import_module(backend_import.package)
-  except ImportError:
-    raise ImportError(
-      f"The {uri_backend.name} backend is not installed.\npip install tricolour[{backend_import.install_option}]"
-    )
-
-  return uri_backend, backend_import.open_kwargs
-
 
 
 def open_datatree(uri: str) -> xarray.DataTree:
@@ -97,28 +25,25 @@ def load_partitions(cfg):
   source_backend = infer_and_import_backend(cfg.ms)
   if source_backend == MSv4Backend.CASA_TABLE:
     from xarray_ms.backend.msv2.structure import DEFAULT_PARTITION_COLUMNS
-    kwargs = {
-       "partition_schema": ["FIELD_ID", "SCAN_NUMBER"] + DEFAULT_PARTITION_COLUMNS,
-       "auto_corrs": True
-    }
+
+    kwargs = {"partition_schema": ["FIELD_ID", "SCAN_NUMBER"] + DEFAULT_PARTITION_COLUMNS, "auto_corrs": True}
   elif source_backend == MSv4Backend.ZARR:
     kwargs = {}
   else:
     raise NotImplementedError("Currently only MSv2/v4 and Zarr datatrees are supported")
-  dt = xarray.open_datatree(
-    cfg.ms,
-    **kwargs
-  )
+  dt = xarray.open_datatree(cfg.ms, **kwargs)
   partitions = list(map(lambda partition: dt[partition], dt.children))
 
   if source_backend == MSv4Backend.ZARR:
     for p in partitions:
-     scan_numbers = np.unique(p.scan_name.data)
-     if len(scan_numbers) > 1:
-        raise RuntimeError("Zarr dataset has to be prepartitioned by scan. Re-dump with partition_schema including SCAN_NUMBER")
-     nant = len(p.antenna_xds.antenna_name.data)
-     nbl = len(p.baseline_id)
-     if nbl != nant * (nant - 1) // 2 + nant:
+      scan_numbers = np.unique(p.scan_name.data)
+      if len(scan_numbers) > 1:
+        raise RuntimeError(
+          "Zarr dataset has to be prepartitioned by scan. Re-dump with partition_schema including SCAN_NUMBER"
+        )
+      nant = len(p.antenna_xds.antenna_name.data)
+      nbl = len(p.baseline_id)
+      if nbl != nant * (nant - 1) // 2 + nant:
         raise RuntimeError("Zarr dataset should have autocorrelations in the datatree. Re-dump with auto_corrs=True")
 
   if cfg.field_names:
@@ -164,7 +89,7 @@ def chunk_partitions(partitions, num_bl, num_time):
           baseline_id=slice(blb, bub),
           frequency=slice(None),
           polarization=slice(None),
-          uvw_label=slice(None)
+          uvw_label=slice(None),
         )
         chunked_partitions.append(pi.isel(**region))
         regions.append(region)
@@ -282,8 +207,8 @@ def driver(cfg: Namespace):
         subtract_model_column=cfg.subtract_model_column,
         flagging_strategy=cfg.flagging_strategy,
         flagging_config=config_file["strategies"],
-        source_backend = infer_and_import_backend(cfg.ms),
-        dataset_path=cfg.ms
+        source_backend=infer_and_import_backend(cfg.ms),
+        dataset_path=cfg.ms,
       )
     )
   ray.get([fwi.run.remote(wq) for fwi in fw])

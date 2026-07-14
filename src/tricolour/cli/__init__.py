@@ -1,7 +1,6 @@
 """CLI for tricolour."""
 
 import os
-from argparse import Namespace
 from enum import Enum
 from importlib.resources import files as resource_files
 from os.path import join as pjoin
@@ -23,11 +22,6 @@ class FlaggingStrategy(str, Enum):
   total_power = "total_power"
 
 
-class WindowBackend(str, Enum):
-  numpy = "numpy"
-  zarr_disk = "zarr-disk"
-
-
 @app.callback()
 def callback(
   ctx: typer.Context,
@@ -38,7 +32,7 @@ def callback(
       "--ray-scheduler-address",
       "-rsa",
       help="ray scheduler address",
-    )
+    ),
   ] = None,
   config: Annotated[
     str,
@@ -81,8 +75,11 @@ def callback(
   ] = 100,
   baseline_chunks: Annotated[
     int,
-    typer.Option("--baseline-chunks", "-bc", help="Number of baselines in a window chunk"),
+    typer.Option("--baseline-chunks", "-bc", help="Number of baselines flagged in a single thread"),
   ] = 16,
+  frequency_chunks: Annotated[
+    Optional[int], typer.Option("--frequency-chunks", "-fc", help="Number of frequencies in a channel chunk")
+  ] = None,
   nworkers: Annotated[
     int,
     typer.Option(
@@ -98,9 +95,9 @@ def callback(
     Optional[str],
     typer.Option("--dilate-masks", "-dm", help="Number of channels to dilate as int or string with units"),
   ] = None,
-  data_column: Annotated[
+  data_variable: Annotated[
     str,
-    typer.Option("--data-column", "-dc", help="Name of visibility data column to flag"),
+    typer.Option("--data-variable", "-dv", help="Name of visibility data variable to flag"),
   ] = "VISIBILITY",
   field_names: Annotated[
     Optional[List[str]],
@@ -110,36 +107,68 @@ def callback(
     Optional[str],
     typer.Option("--scan-names", "-sn", help="Scan names to flag. Defaults to flagging all."),
   ] = None,
-  window_backend: Annotated[
-    WindowBackend,
-    typer.Option(
-      "--window-backend",
-      "-wb",
-      help=(
-        "Visibility and flag data is re-ordered from a MS row ordering into time-frequency "
-        "windows ordered by baseline. For smaller problems, it may be possible to pack a "
-        "couple of scans worth of visibility data into memory, but for larger problem sizes, "
-        "it is necessary to reorder the data on disk."
-      ),
-    ),
-  ] = WindowBackend.numpy,
-  temporary_directory: Annotated[
-    Optional[str],
-    typer.Option("--temporary-directory", "-td", help="Directory location of temporary data"),
-  ] = None,
-  subtract_model_column: Annotated[
+  subtract_model_variable: Annotated[
     Optional[str],
     typer.Option(
-      "--subtract-model-column",
-      "-smc",
-      help=("Subtracts specified column from data column specified. Flagging will proceed on residual data."),
+      "--subtract-model-variable",
+      "-smv",
+      help=("Subtracts specified variable from the data variable. Flagging will proceed on residual data."),
     ),
   ] = None,
 ) -> None:
   """A Radio Astronomy Flagging Software Suite"""
-  from tricolour.core.application.driver import driver
+  from rarg_python_patterns import Multiton
+  from ray import serve
+  from ray.serve.handle import DeploymentHandle
 
-  driver(Namespace(**ctx.params))
+  from tricolour.core.application.backend import open_datatree
+  from tricolour.core.application.config import load_config, log_configuration
+  from tricolour.core.application.supervisor2 import DataLoader, DataWriter, Flagger, Tricolour
+  from tricolour.core.kernels.mask import load_masks
+
+  datatree = Multiton(open_datatree, ms)
+  config = Multiton(load_config, config).with_serialise_instance()
+  masks = Multiton(load_masks, dilate_masks).with_serialise_instance()
+  log_configuration(flagging_strategy, config.instance)
+
+  autoscaling_config = {
+    "upscale_delay_s": 1.0,
+    "min_replicas": 1,
+    "initial_replicas": 1,
+    "max_ongoing_requests": 1,
+    "max_replicas": nworkers,
+  }
+  common_options = {"num_replicas": "auto", "autoscaling_config": autoscaling_config}
+
+  data_loader = DataLoader.options(**common_options, ray_actor_options={"num_cpus": 0}).bind(
+    datatree=datatree, variables="ALL"
+  )
+
+  flagger = Flagger.options(**common_options).bind(
+    masks=masks,
+    baseline_chunks=baseline_chunks,
+    flagging_strategy=flagging_strategy,
+    flagging_config=config,
+    ignore_flags=ignore_flags,
+    data_variable=data_variable,
+    model_variable=subtract_model_variable,
+  )
+  writer = DataWriter.options(**common_options).bind()
+
+  app = Tricolour.bind(
+    datatree=datatree,
+    time_chunks=time_chunks,
+    freq_chunks=frequency_chunks,
+    field_names=field_names,
+    scan_names=scan_names,
+    data_loader=data_loader,
+    flagger=flagger,
+    data_writer=writer,
+  )
+
+  handle: DeploymentHandle = serve.run(app, name="tricolour")
+  for line in handle.remote().result():
+    print(line)
 
 
 # Register subcommands below. Imports go here (bottom) to avoid circular imports.

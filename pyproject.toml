@@ -21,6 +21,8 @@ dependencies = [
     "numba>=0.64.0",
     "numpy>=2.4.2",
     "xarray",
+    # Fixed in https://github.com/ray-project/ray/pull/64362
+    "protobuf > 6.0.0, <= 7.0.0",
     "ray[serve]",
     "ruyaml",
     "donfig",

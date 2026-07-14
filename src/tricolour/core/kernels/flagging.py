@@ -92,7 +92,7 @@ def flag_autos(flags, ubl):
   return out_flags
 
 
-def apply_static_mask(flag, ubl, antspos, masks, chan_freqs, chan_widths, accumulation_mode="or", uvrange=""):
+def apply_static_mask(flag, uvw, masks, chan_freqs, chan_widths, accumulation_mode="or", uvrange=""):
   """Interpolates and applies static masks to the data, flagging channels
   that spans over frequencies included in the mask
 
@@ -101,11 +101,8 @@ def apply_static_mask(flag, ubl, antspos, masks, chan_freqs, chan_widths, accumu
   flag : ndarray, bool
       Flags corresponding to visibility data
       of shape :code:`(bl, corr, time, chan)`
-  ubl : :class:`numpy.ndarray`
-      Unique baselines of shape :code:`(bl, 3)`
-  antspos: ndarray, float
-      antenna ECEF positions, as defined in CASA MEMO 229 ::ANTENNA,
-      of shape (nant, 3)
+  uvw : ndarray, float
+      Uvw coordinates of shape :code:`(bl, time, 3)`.
   masks: list of lists
       nested lists of masked channels, each inner list
       corresponding to a mask
@@ -125,23 +122,15 @@ def apply_static_mask(flag, ubl, antspos, masks, chan_freqs, chan_widths, accumu
   """
   uvrange = casa_style_range(uvrange)
 
-  if flag.shape[0] != ubl.shape[0]:
-    raise ValueError("flag and ubl shape mismatch %s != %s" % (flag.shape[1], ubl.shape[0]))
-
   spw_chanlb = chan_freqs - chan_widths * 0.5
   spw_chanub = chan_freqs + chan_widths * 0.5
 
-  # Work out the baseline length
-  bl_length = antspos[ubl[:, 1]] - antspos[ubl[:, 2]]
-  # UV distance is twice baseline length
-  d2 = 0.5 * np.sum(bl_length**2, axis=1)
+  uv_length = np.sqrt(np.sum(uvw**2, axis=2))
 
-  # ECEF antenna coordinates are in meters.
-  # The transforms to get it into UV space are just rotations
-  # can just take the euclidian norm here - optimized by not doing sqrt
   luvrange = 0.0 if uvrange is None else min(uvrange[0], uvrange[1])
   uuvrange = np.inf if uvrange is None else max(uvrange[0], uvrange[1])
-  bl_sel = np.logical_and(d2 >= luvrange**2, d2 <= uuvrange**2)
+  # Broadcastable (bl, 1, time, 1) selection against (bl, corr, time, chan)
+  bl_sel = np.logical_and(uv_length >= luvrange, uv_length <= uuvrange)[:, None, :, None]
   out_flags = flag.copy()
 
   for mask in masks:
@@ -155,9 +144,9 @@ def apply_static_mask(flag, ubl, antspos, masks, chan_freqs, chan_widths, accumu
 
     # All correlations flagged equally at the moment
     if accumulation_mode == "or":
-      out_flags[bl_sel, :, :, :] |= masked_channels[None, None, None, :]
+      out_flags |= np.logical_and(bl_sel, masked_channels[None, None, None, :])
     elif accumulation_mode == "override":
-      out_flags[bl_sel, :, :, :] = masked_channels[None, None, None, :]
+      np.copyto(out_flags, masked_channels[None, None, None, :], where=bl_sel)
     else:
       raise ValueError("Invalid accumulation_mode '%s'. Should be 'or' or 'override'" % accumulation_mode)
 
