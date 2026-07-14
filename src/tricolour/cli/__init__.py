@@ -26,12 +26,12 @@ class FlaggingStrategy(str, Enum):
 def callback(
   ctx: typer.Context,
   ms: str,
-  ray_scheduler_address: Annotated[
+  ray_cluster_address: Annotated[
     Optional[str],
     typer.Option(
-      "--ray-scheduler-address",
-      "-rsa",
-      help="ray scheduler address",
+      "--ray-cluster-address",
+      "-rca",
+      help="ray cluster address",
     ),
   ] = None,
   config: Annotated[
@@ -117,6 +117,7 @@ def callback(
   ] = None,
 ) -> None:
   """A Radio Astronomy Flagging Software Suite"""
+  import ray
   from rarg_python_patterns import Multiton
   from ray import serve
   from ray.serve.handle import DeploymentHandle
@@ -125,6 +126,10 @@ def callback(
   from tricolour.core.application.config import load_config, log_configuration
   from tricolour.core.application.supervisor2 import DataLoader, DataWriter, Flagger, Tricolour
   from tricolour.core.kernels.mask import load_masks
+
+  # If supplied, connect to the ray cluster
+  if ray_cluster_address is not None:
+    ray.init(address=ray_cluster_address)
 
   datatree = Multiton(open_datatree, ms)
   config = Multiton(load_config, config).with_serialise_instance()
