@@ -11,6 +11,7 @@ from typing import Any, Dict, Generator, Iterable, List, Literal, get_args
 import numpy as np
 import numpy.typing as npt
 import xarray
+from msv4_utils import MSv4Backend
 from msv4_utils.msv4_types import VISIBILITY_XDS_TYPES
 from rarg_python_patterns.multiton import Multiton
 from ray import serve
@@ -28,6 +29,11 @@ from tricolour.core.kernels.stokes import STOKES_TYPES, polarised_intensity, sto
 from tricolour.core.types import FlagStrategy
 
 STATISTICS_CHAN_BINS = 10
+MISSING_SENTINEL = object()
+# Canonical MSv4 ordering
+FLAG_DIM_ORDER = ("time", "baseline_id", "frequency", "polarization")
+# SumTreshold Flagger ordering
+CP_FLAG_DIM_ORDER = ("baseline_id", "polarization", "time", "frequency")
 
 
 @dataclass(slots=True)
@@ -147,10 +153,6 @@ class Flagger:
     ubl = np.column_stack(
       [dataset.baseline_id.values, ant_inv[: dataset.sizes["baseline_id"]], ant_inv[dataset.sizes["baseline_id"] :]]
     )
-    # Canonical MSv4 ordering
-    FLAG_DIM_ORDER = ("time", "baseline_id", "frequency", "polarization")
-    # SumTreshold Flagger ordering
-    CP_FLAG_DIM_ORDER = ("baseline_id", "polarization", "time", "frequency")
 
     if self._data_variable not in dataset:
       raise ValueError(f"Visibility variable {self._data_variable} not in dataset")
@@ -197,11 +199,10 @@ class Flagger:
     bp_flags = np.require(bp_flags, None, ["C", "W"])
     bp_vis = np.require(bp_vis, None, "C")
     original = bp_flags.copy()
-    MISSING_TASK = object()
 
     # Apply each strategy in the flagging configuation
     for strategy in self._flagging_config.instance.get("strategies", []):
-      if (task := strategy.get("task", MISSING_TASK)) is MISSING_TASK:
+      if (task := strategy.get("task", MISSING_SENTINEL)) is MISSING_SENTINEL:
         raise ValueError(f"Strategy '{strategy}' has no task")
 
       if task == "sum_threshold":
@@ -266,15 +267,30 @@ class Flagger:
 
     final_stats = chunk_window_stats(flag_array.values, dataset, ubl, antenna_names, STATISTICS_CHAN_BINS, bin_edges)
 
-    return dataset.assign(FLAG=flag_array), original_stats, final_stats
+    dataset = dataset.assign(FLAG=flag_array)
+    dataset = dataset.drop_vars(set(dataset.data_vars) - {"FLAG"})
+
+    return dataset, original_stats, final_stats
 
 
 @serve.deployment
 class DataWriter:
+  def __init__(self, path: str, backend: MSv4Backend):
+    self._path = path
+    self._backend = backend
+
   def write(
     self, item: WorkItem, flag_result: tuple[xarray.Dataset, WindowStatistics, WindowStatistics]
   ) -> tuple[WindowStatistics, WindowStatistics]:
     dataset, original_stats, final_stats = flag_result
+
+    if self._backend == MSv4Backend.CASA_TABLE:
+      dataset.to_msv2(compute=True, region=item.region)
+    elif self._backend == MSv4Backend.ZARR:
+      dataset.to_zarr(f"{self._path}/{item.path}", compute=True, region=item.region)
+    else:
+      raise NotImplementedError(f"Backend writeback unsupported for {self._backend}")
+
     return original_stats, final_stats
 
 
@@ -355,7 +371,6 @@ class Tricolour:
 
   async def __call__(self) -> List[str]:
     work_queue = deque()
-    MAX_QUEUE_SIZE = 20
     # Start with fresh statistics on each invocation
     self._statistics = WindowStatistics(STATISTICS_CHAN_BINS)
     self._original_statistics = WindowStatistics(STATISTICS_CHAN_BINS)
@@ -370,7 +385,7 @@ class Tricolour:
           self._statistics.update(final_stats)
 
     for work_item in self.work_generator():
-      await maybe_drain_queue(MAX_QUEUE_SIZE)
+      await maybe_drain_queue(20)
       if (bin_edges := stats_bin_edges.get(work_item.path)) is None:
         # Bin edges spanning the node's full spectral window, so that
         # frequency-chunked histograms accumulate into aligned bins

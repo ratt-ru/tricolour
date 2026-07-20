@@ -4,7 +4,6 @@ import importlib
 from dataclasses import dataclass
 from typing import Any, Dict, Tuple
 
-import xarray
 from msv4_utils import MSv4Backend, infer_backend
 
 
@@ -76,8 +75,3 @@ def infer_and_import_backend(uri: str) -> Tuple[MSv4Backend, Dict[str, Any]]:
     )
 
   return uri_backend, backend_import.open_kwargs
-
-
-def open_datatree(uri: str) -> xarray.DataTree:
-  _, open_kwargs = infer_and_import_backend(uri)
-  return xarray.open_datatree(uri, **open_kwargs)

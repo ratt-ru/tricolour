@@ -118,20 +118,23 @@ def callback(
 ) -> None:
   """A Radio Astronomy Flagging Software Suite"""
   import ray
+  import xarray
   from rarg_python_patterns import Multiton
   from ray import serve
   from ray.serve.handle import DeploymentHandle
 
-  from tricolour.core.application.backend import open_datatree
+  from tricolour.core.application.backend import infer_and_import_backend
   from tricolour.core.application.config import load_config, log_configuration
   from tricolour.core.application.supervisor2 import DataLoader, DataWriter, Flagger, Tricolour
   from tricolour.core.kernels.mask import load_masks
+
+  backend, open_kwargs = infer_and_import_backend(ms)
 
   # If supplied, connect to the ray cluster
   if ray_cluster_address is not None:
     ray.init(address=ray_cluster_address)
 
-  datatree = Multiton(open_datatree, ms)
+  datatree = Multiton(xarray.open_datatree, ms, **open_kwargs)
   config = Multiton(load_config, config).with_serialise_instance()
   masks = Multiton(load_masks, dilate_masks).with_serialise_instance()
   log_configuration(flagging_strategy, config.instance)
@@ -158,7 +161,7 @@ def callback(
     data_variable=data_variable,
     model_variable=subtract_model_variable,
   )
-  writer = DataWriter.options(**common_options).bind()
+  writer = DataWriter.options(**common_options).bind(path=ms, backend=backend)
 
   app = Tricolour.bind(
     datatree=datatree,
