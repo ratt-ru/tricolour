@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 import xarray
 
-from tricolour.core.application.supervisor2 import STATISTICS_CHAN_BINS, chunk_window_stats
+from tricolour.core.application.implementation import STATISTICS_CHAN_BINS, chunk_window_stats
 from tricolour.core.kernels.flag_statistics import WindowStatistics, window_stats
 
 NTIME = 4

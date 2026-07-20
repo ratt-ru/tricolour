@@ -125,7 +125,7 @@ def callback(
 
   from tricolour.core.application.backend import infer_and_import_backend
   from tricolour.core.application.config import load_config, log_configuration
-  from tricolour.core.application.supervisor2 import DataLoader, DataWriter, Flagger, Tricolour
+  from tricolour.core.application.implementation import DataLoader, DataWriter, Flagger, Tricolour
   from tricolour.core.kernels.mask import load_masks
 
   backend, open_kwargs = infer_and_import_backend(ms)
