@@ -1,9 +1,9 @@
 from dataclasses import dataclass
-from typing import Dict, Literal, NamedTuple, Protocol
+from typing import Dict, Literal, NamedTuple, Protocol, TypeAlias
 
-type NodeId = str
-type Action = Literal["read", "flag", "write"]
-type FlagStrategy = Literal["standard", "total_power", "polarisation"]
+NodeId: TypeAlias = str
+Action: TypeAlias = Literal["read", "flag", "write"]
+FlagStrategy: TypeAlias = Literal["standard", "total_power", "polarisation"]
 
 
 @dataclass(slots=True)
