@@ -185,7 +185,7 @@ class Flagger:
       stokes_pol = tuple(v for k, v in stokes_map.items() if k != "I")
       bp_vis = polarised_intensity(bp_vis, stokes_pol)
       bp_flags = np.any(bp_flags, axis=1, keepdims=True)
-    elif self.strategy == "total_power":
+    elif self._flagging_strategy == "total_power":
       stokes_map = stokes_corr_map([STOKES_TYPES[c] for c in dataset.polarization.values])
       stokes_pol = tuple(stokes_map.values())
       bp_vis = polarised_intensity(bp_vis, stokes_pol)
