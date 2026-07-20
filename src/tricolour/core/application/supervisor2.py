@@ -285,6 +285,10 @@ class DataWriter:
     dataset, original_stats, final_stats = flag_result
 
     if self._backend == MSv4Backend.CASA_TABLE:
+      # TODO(sjperkins)
+      # This is a bit of a hack
+      import xarray_ms  # noqa: F401
+
       dataset.to_msv2(compute=True, region=item.region)
     elif self._backend == MSv4Backend.ZARR:
       dataset.to_zarr(f"{self._path}/{item.path}", compute=True, region=item.region)
