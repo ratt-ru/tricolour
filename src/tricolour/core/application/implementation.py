@@ -123,7 +123,7 @@ class DataLoader:
     return dataset.isel(**item.region).load()
 
 
-@serve.deployment
+@serve.deployment(max_replicas_per_node=1)
 class Flagger:
   def __init__(
     self,
@@ -307,6 +307,7 @@ class Tricolour:
     datatree: Multiton[xarray.DataTree],
     time_chunks: int,
     freq_chunks: int | None,
+    baseline_chunks: int | None,
     field_names: List[str] | None,
     scan_names: List[str] | None,
     data_loader: DeploymentHandle,
@@ -316,6 +317,7 @@ class Tricolour:
     self._datatree = datatree.instance
     self._time_chunks = time_chunks
     self._freq_chunks = freq_chunks
+    self._baseline_chunks = baseline_chunks
     self._field_names = field_names
     self._scan_names = scan_names
     self._data_loader = data_loader
@@ -335,6 +337,7 @@ class Tricolour:
     ------
       work_item: An item of flagging work.
     """
+
     for path, node in self._datatree.children.items():
       if node.attrs.get("type") not in VISIBILITY_XDS_TYPES:
         continue
@@ -358,16 +361,20 @@ class Tricolour:
           continue
 
       ntime = node.sizes["time"]
+      nbaseline = node.sizes["baseline_id"]
       nfreq = node.sizes["frequency"]
       time_chunks = self._time_chunks
       # Take all frequencies if no frequency chunks are specified
       freq_chunks = self._freq_chunks if isinstance(self._freq_chunks, int) else nfreq
+      baseline_chunks = self._baseline_chunks
       time_range = range(0, ntime, time_chunks)
+      baseline_range = range(0, nbaseline, baseline_chunks)
       freq_range = range(0, nfreq, freq_chunks)
 
-      for t, f in product(time_range, freq_range):
+      for t, bl, f in product(time_range, baseline_range, freq_range):
         region = {
           "time": slice(t, min(t + time_chunks, ntime)),
+          "baseline_id": slice(t, min(bl + time_chunks, nbaseline)),
           "frequency": slice(f, min(f + freq_chunks, nfreq)),
         }
 
