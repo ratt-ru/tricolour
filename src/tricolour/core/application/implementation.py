@@ -233,7 +233,7 @@ class Flagger:
         # only as a "initial guess"
         bp_flags = uvcontsub_flagger(bp_vis, bp_flags, **strategy["kwargs"])
       elif task == "flag_autos":
-        np.logical_or(bp_flags, flag_autos(bp_vis, ubl), out=bp_flags)
+        np.logical_or(bp_flags, flag_autos(bp_flags, ubl), out=bp_flags)
       elif task == "combine_with_input_flags":
         np.logical_or(bp_flags, original, out=bp_flags)
       elif task == "unflag":
