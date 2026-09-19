@@ -215,7 +215,7 @@ class Flagger:
 
           # Submit sumthresholding work to the threadpool in baseline chunks
           for bl in range(0, nbl, self._baseline_chunks):
-            bl_slice = slice(0, min(nbl, bl + self._baseline_chunks))
+            bl_slice = slice(bl, min(nbl, bl + self._baseline_chunks))
             futures[
               self._pool.submit(
                 sum_threshold_flagger, bp_vis[bl_slice, ...], bp_flags[bl_slice, ...], **strategy["kwargs"]
@@ -374,7 +374,7 @@ class Tricolour:
       for t, bl, f in product(time_range, baseline_range, freq_range):
         region = {
           "time": slice(t, min(t + time_chunks, ntime)),
-          "baseline_id": slice(t, min(bl + time_chunks, nbaseline)),
+          "baseline_id": slice(bl, min(bl + baseline_chunks, nbaseline)),
           "frequency": slice(f, min(f + freq_chunks, nfreq)),
         }
 
