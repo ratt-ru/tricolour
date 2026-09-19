@@ -106,8 +106,14 @@ class DataLoader:
     self._datatree = datatree.instance
     self._variables = variables
 
-  def load(self, item: WorkItem) -> xarray.Dataset:
+  async def load(self, item: WorkItem) -> xarray.Dataset:
     """Load dataset specified by item"""
+    # Serve runs sync methods directly on the replica's event loop
+    # (RAY_SERVE_RUN_SYNC_IN_THREADPOOL defaults to off), which blocks the
+    # replica from accepting requests and from reporting autoscaling metrics.
+    return await asyncio.to_thread(self._load, item)
+
+  def _load(self, item: WorkItem) -> xarray.Dataset:
     # Select out the dataset
     dataset = self._datatree[item.path].ds
 
@@ -145,7 +151,13 @@ class Flagger:
     self._data_variable = data_variable
     self._model_variable = model_variable
 
-  def flag(
+  async def flag(
+    self, item: WorkItem, dataset: xarray.Dataset, bin_edges: npt.NDArray
+  ) -> tuple[xarray.Dataset, WindowStatistics, WindowStatistics]:
+    """Flag the dataset associated with item, off the replica event loop."""
+    return await asyncio.to_thread(self._flag, item, dataset, bin_edges)
+
+  def _flag(
     self, item: WorkItem, dataset: xarray.Dataset, bin_edges: npt.NDArray
   ) -> tuple[xarray.Dataset, WindowStatistics, WindowStatistics]:
     concatenated_antennas = np.concat((dataset.baseline_antenna1_name, dataset.baseline_antenna2_name))
@@ -289,7 +301,13 @@ class DataWriter:
     self._path = path
     self._backend = backend
 
-  def write(
+  async def write(
+    self, item: WorkItem, flag_result: tuple[xarray.Dataset, WindowStatistics, WindowStatistics]
+  ) -> tuple[WindowStatistics, WindowStatistics]:
+    """Write flags back, off the replica event loop."""
+    return await asyncio.to_thread(self._write, item, flag_result)
+
+  def _write(
     self, item: WorkItem, flag_result: tuple[xarray.Dataset, WindowStatistics, WindowStatistics]
   ) -> tuple[WindowStatistics, WindowStatistics]:
     dataset, original_stats, final_stats = flag_result
