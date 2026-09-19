@@ -164,8 +164,15 @@ def callback(
     "max_ongoing_requests": 1,
   }
 
+  # Only the variables the Flagger actually touches are worth moving through
+  # the object store. WEIGHT alone is a third of an MSv4 partition's bytes.
+  load_variables = [data_variable, "FLAG", "UVW"]
+
+  if subtract_model_variable is not None:
+    load_variables.append(subtract_model_variable)
+
   data_loader = DataLoader.options(**common_options, ray_actor_options={"num_cpus": 0}).bind(
-    datatree=datatree, variables="ALL"
+    datatree=datatree, variables=load_variables
   )
 
   flagger_options = {
