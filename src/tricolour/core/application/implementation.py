@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures as cf
+import logging
 import multiprocessing as mp
 from collections import deque
 from dataclasses import dataclass
-import logging
 from itertools import product
 from typing import Any, Dict, Generator, Iterable, List, Literal, get_args
 
@@ -289,7 +289,6 @@ class Flagger:
     bp_flags = np.any(bp_flags, axis=1, keepdims=True)
     full_shape = tuple(dataset.sizes[d] for d in CP_FLAG_DIM_ORDER)
     bp_flags = np.broadcast_to(bp_flags, full_shape).astype(flag_dtype)
-
 
     print(f"Flag {item} stops")
     logger.info("Flag %s stops", item)
