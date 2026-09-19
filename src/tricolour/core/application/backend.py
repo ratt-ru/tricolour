@@ -21,6 +21,10 @@ BACKEND_MAP = {
     {
       "engine": "xarray-ms:msv2",
       "partition_schema": ["FIELD_ID", "DATA_DESC_ID", "SCAN_NUMBER"],
+      # xarray-ms excludes auto-correlations by default, which would leave the
+      # MS's auto-correlation rows unread and unwritten. The flag_autos task
+      # needs them present (they are synthesised if absent).
+      "auto_corrs": True,
     },
   ),
   MSv4Backend.MEERKAT: BackendImport(
