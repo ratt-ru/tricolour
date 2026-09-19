@@ -144,20 +144,36 @@ def callback(
   masks = Multiton(load_masks, dilate_masks).with_serialise_instance()
   log_configuration(flagging_strategy, config.instance)
 
+  # NOTE: `max_ongoing_requests` is a deployment-level option, not an
+  # AutoscalingConfig field -- placing it in the autoscaling config silently
+  # discards it. One request per replica is expressed by the pair below.
   autoscaling_config = {
-    "upscale_delay_s": 1.0,
+    "upscale_delay_s": 0.0,
     "min_replicas": 1,
     "initial_replicas": 1,
-    "max_ongoing_requests": 1,
+    "target_ongoing_requests": 1,
+    # The defaults (10s/30s) are far too sluggish for a batch job that only
+    # runs for a few minutes; the deployment would never reach max_replicas.
+    "metrics_interval_s": 1.0,
+    "look_back_period_s": 5.0,
     "max_replicas": nworkers,
   }
-  common_options = {"num_replicas": "auto", "autoscaling_config": autoscaling_config}
+  common_options = {
+    "num_replicas": "auto",
+    "autoscaling_config": autoscaling_config,
+    "max_ongoing_requests": 1,
+  }
 
   data_loader = DataLoader.options(**common_options, ray_actor_options={"num_cpus": 0}).bind(
     datatree=datatree, variables="ALL"
   )
 
-  flagger = Flagger.options(**common_options).bind(
+  flagger_options = {
+    **common_options,
+    "autoscaling_config": {**autoscaling_config, "max_replicas": max(1, nworkers - 2)},
+  }
+
+  flagger = Flagger.options(**flagger_options).bind(
     masks=masks,
     baseline_chunks=baseline_chunks,
     flagging_strategy=flagging_strategy,
@@ -165,7 +181,7 @@ def callback(
     ignore_flags=ignore_flags,
     data_variable=data_variable,
     model_variable=subtract_model_variable,
-    multithreaded=True,
+    # multithreaded=True,
   )
   writer = DataWriter.options(**common_options).bind(path=ms, backend=backend)
 

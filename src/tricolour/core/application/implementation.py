@@ -100,7 +100,7 @@ def chunk_window_stats(
   return stats
 
 
-@serve.deployment(max_replicas_per_node=1)
+@serve.deployment
 class DataLoader:
   def __init__(self, datatree: Multiton[xarray.DataTree], variables: Literal["ALL"] | Iterable[str] = "ALL"):
     self._datatree = datatree.instance
@@ -129,7 +129,7 @@ class DataLoader:
     return dataset.isel(**item.region).load()
 
 
-@serve.deployment(max_replicas_per_node=1)
+@serve.deployment
 class Flagger:
   def __init__(
     self,
