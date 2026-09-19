@@ -125,6 +125,12 @@ def apply_static_mask(flag, uvw, masks, chan_freqs, chan_widths, accumulation_mo
   spw_chanlb = chan_freqs - chan_widths * 0.5
   spw_chanub = chan_freqs + chan_widths * 0.5
 
+  # NOTE: this differs from the original dask tricolour, which derived baseline
+  # length from the ECEF ANTENNA positions as `d2 = 0.5 * |b|**2` and compared
+  # it against `uvrange**2` -- an effective cut at sqrt(2) * uvrange (778m for a
+  # requested 550m). UVW is a rotation of the baseline vector, so |uvw| == |b|
+  # exactly and the factor was unnecessary; we compare |uvw| to uvrange directly.
+  # Consequently this flags a narrower range of baselines than the dask version.
   uv_length = np.sqrt(np.sum(uvw**2, axis=2))
 
   luvrange = 0.0 if uvrange is None else min(uvrange[0], uvrange[1])
