@@ -341,6 +341,7 @@ class Tricolour:
     data_loader: DeploymentHandle,
     flagger: DeploymentHandle,
     data_writer: DeploymentHandle,
+    max_in_flight: int = 64,
   ):
     self._datatree = datatree.instance
     self._time_chunks = time_chunks
@@ -351,6 +352,7 @@ class Tricolour:
     self._data_loader = data_loader
     self._flagger = flagger
     self._data_writer = data_writer
+    self._max_in_flight = max_in_flight
     self._statistics = WindowStatistics(STATISTICS_CHAN_BINS)
     self._original_statistics = WindowStatistics(STATISTICS_CHAN_BINS)
 
@@ -424,7 +426,7 @@ class Tricolour:
           self._statistics.update(final_stats)
 
     for work_item in self.work_generator():
-      await maybe_drain_queue(20)
+      await maybe_drain_queue(self._max_in_flight)
       if (bin_edges := stats_bin_edges.get(work_item.path)) is None:
         # Bin edges spanning the node's full spectral window, so that
         # frequency-chunked histograms accumulate into aligned bins

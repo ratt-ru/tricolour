@@ -215,6 +215,8 @@ def callback(
     data_loader=data_loader,
     flagger=flagger,
     data_writer=writer,
+    # Enough outstanding work to keep every replica of all three stages busy
+    max_in_flight=4 * nworkers,
   )
 
   handle: DeploymentHandle = serve.run(app, name="tricolour")
