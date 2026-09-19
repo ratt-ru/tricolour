@@ -127,18 +127,23 @@ def callback(
   from tricolour.core.application.config import load_config, log_configuration
   from tricolour.core.application.implementation import DataLoader, DataWriter, Flagger, Tricolour
   from tricolour.core.kernels.mask import load_masks
-  
+
   import logging
-  
+
   backend, open_kwargs = infer_and_import_backend(ms)
 
   # If supplied, connect to the ray cluster
   if ray_cluster_address is not None:
-    ray.init(address=ray_cluster_address,
-             logging_level=logging.ERROR)
+    ray.init(
+      address=ray_cluster_address,
+      logging_level=logging.ERROR
+    )
   else:
-    ray.init(logging_level=logging.ERROR,
-             log_to_driver=False)
+    ray.init(
+      logging_level=logging.ERROR,
+      log_to_driver=False,
+      logging_config=ray.LoggingConfig(encoding="JSON", log_level="INFO")
+    )
   datatree = Multiton(xarray.open_datatree, ms, **open_kwargs)
   config = Multiton(load_config, config).with_serialise_instance()
   masks = Multiton(load_masks, dilate_masks).with_serialise_instance()

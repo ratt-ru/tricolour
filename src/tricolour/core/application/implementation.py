@@ -5,6 +5,7 @@ import concurrent.futures as cf
 import multiprocessing as mp
 from collections import deque
 from dataclasses import dataclass
+import logging
 from itertools import product
 from typing import Any, Dict, Generator, Iterable, List, Literal, get_args
 
@@ -166,6 +167,10 @@ class Flagger:
       [dataset.baseline_id.values, ant_inv[: dataset.sizes["baseline_id"]], ant_inv[dataset.sizes["baseline_id"] :]]
     )
 
+    logger = logging.getLogger()
+    print(f"Flag {item} begins")
+    logger.info("Flag %s begins", item)
+
     if self._data_variable not in dataset:
       raise ValueError(f"Visibility variable {self._data_variable} not in dataset")
 
@@ -284,6 +289,10 @@ class Flagger:
     bp_flags = np.any(bp_flags, axis=1, keepdims=True)
     full_shape = tuple(dataset.sizes[d] for d in CP_FLAG_DIM_ORDER)
     bp_flags = np.broadcast_to(bp_flags, full_shape).astype(flag_dtype)
+
+
+    print(f"Flag {item} stops")
+    logger.info("Flag %s stops", item)
 
     flag_array = xarray.DataArray(bp_flags, dims=CP_FLAG_DIM_ORDER).transpose(*FLAG_DIM_ORDER)
 
