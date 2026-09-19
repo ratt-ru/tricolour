@@ -265,12 +265,13 @@ class Flagger:
       else:
         raise ValueError(f"Invalid task {task}")
 
-    # Reintroduce the missing polarizations if necessary
-    if self._flagging_strategy in ("polarisation", "total_power"):
-      full_shape = tuple(dataset.sizes[d] for d in CP_FLAG_DIM_ORDER)
-      bp_flags = np.broadcast_to(bp_flags, full_shape)
-
-    bp_flags = bp_flags.astype(flag_dtype)
+    # Flag the whole visibility if any correlation is flagged: a correlation
+    # affected by RFI is unlikely to leave the others clean, as they mix through
+    # the Stokes parameters. This also reintroduces the polarization axis for
+    # the 'polarisation' and 'total_power' strategies, which collapsed it above.
+    bp_flags = np.any(bp_flags, axis=1, keepdims=True)
+    full_shape = tuple(dataset.sizes[d] for d in CP_FLAG_DIM_ORDER)
+    bp_flags = np.broadcast_to(bp_flags, full_shape).astype(flag_dtype)
 
     flag_array = xarray.DataArray(bp_flags, dims=CP_FLAG_DIM_ORDER).transpose(*FLAG_DIM_ORDER)
 
