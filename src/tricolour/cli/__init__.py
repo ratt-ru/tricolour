@@ -183,7 +183,20 @@ def callback(
     model_variable=subtract_model_variable,
     # multithreaded=True,
   )
-  writer = DataWriter.options(**common_options).bind(path=ms, backend=backend)
+  # A single writer: concurrent writers block on the CASA table lock and one
+  # will eventually wedge, fail its Serve health check and get force-killed,
+  # taking the job with it. Writing flags back is cheap (~160MB for this MS)
+  # so serialising it costs little, and the queue here is useful backpressure.
+  # A single writer, since writes to one MS serialise anyway.
+  #
+  # NOTE: xarray-ms's to_msv2() reopens the MS on every call and leaks OS
+  # threads and file descriptors as it goes (reads do not leak). After a few
+  # dozen writes the call deadlocks with every thread parked on a futex.
+  # Serve's default health check is currently the only thing that recovers
+  # from this -- it kills the wedged replica and retries the request -- so do
+  # NOT raise health_check_timeout_s here: doing so turns an intermittent
+  # failure into an indefinite hang. The real fix belongs upstream.
+  writer = DataWriter.options(num_replicas=1, max_ongoing_requests=1).bind(path=ms, backend=backend)
 
   app = Tricolour.bind(
     datatree=datatree,
