@@ -1022,7 +1022,11 @@ def uvcontsub_flagger(vis, flags, major_cycles=5, or_original_from_cycle=1, tayl
   nbl, ncorr, ntime, nfreq = vis.shape
 
   vis = vis.reshape(nbl * ncorr, ntime, nfreq)
-  flags = flags.reshape(nbl * ncorr, ntime, nfreq)
+  # This routine masks with the flag array (`vis[flags] = np.nan`), which
+  # requires a boolean array: numpy reads an integer array (MSv4 stores FLAG as
+  # uint8) as fancy-indexing on the first axis instead, silently producing the
+  # wrong answer several hundred times more slowly.
+  flags = flags.reshape(nbl * ncorr, ntime, nfreq).astype(bool, copy=False)
 
   vis.flags.writeable = True
 

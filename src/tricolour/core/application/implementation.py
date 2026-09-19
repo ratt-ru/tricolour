@@ -165,10 +165,17 @@ class Flagger:
     bp_vis = dataset[self._data_variable].transpose(*CP_FLAG_DIM_ORDER).values
     bp_uvw = dataset["UVW"].transpose("baseline_id", "time", ...).values
 
+    # MSv4 stores FLAG as uint8, where MSv2 (and the original dask tricolour)
+    # used bool. Kernels such as uvcontsub_flagger index with the flag array
+    # (`vis[flags] = np.nan`); with a uint8 array numpy reads that as integer
+    # fancy-indexing on the first axis rather than as a boolean mask, which is
+    # both wrong and catastrophically slow. Work in bool and cast back on write.
+    flag_dtype = dataset["FLAG"].dtype
+
     if not self._ignore_flags:
-      bp_flags = dataset["FLAG"].transpose(*CP_FLAG_DIM_ORDER).values
+      bp_flags = dataset["FLAG"].transpose(*CP_FLAG_DIM_ORDER).values.astype(bool)
     else:
-      bp_flags = np.ones_like(bp_vis, dtype=np.uint8)
+      bp_flags = np.zeros_like(bp_vis, dtype=bool)
 
     # Flag the difference of the visibilities and the model
     if self._model_variable:
@@ -262,6 +269,8 @@ class Flagger:
     if self._flagging_strategy in ("polarisation", "total_power"):
       full_shape = tuple(dataset.sizes[d] for d in CP_FLAG_DIM_ORDER)
       bp_flags = np.broadcast_to(bp_flags, full_shape)
+
+    bp_flags = bp_flags.astype(flag_dtype)
 
     flag_array = xarray.DataArray(bp_flags, dims=CP_FLAG_DIM_ORDER).transpose(*FLAG_DIM_ORDER)
 
