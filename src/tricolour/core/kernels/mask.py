@@ -11,7 +11,7 @@ from scipy.ndimage import binary_dilation
 
 from tricolour import config
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("tricolour")
 
 # Look in default configuration paths, as well as the data directory
 try:

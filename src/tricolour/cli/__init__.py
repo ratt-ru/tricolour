@@ -9,6 +9,9 @@ from typing import Annotated, List, Optional
 
 import typer
 from numpy.exceptions import VisibleDeprecationWarning
+import numpy as np
+from datetime import datetime
+import tricolour.core.application.banner as banner
 
 app = typer.Typer(
   name="tricolour", help="A Radio Astronomy Flagging Software Suite", no_args_is_help=True, invoke_without_command=True
@@ -138,6 +141,7 @@ def callback(
 ) -> None:
   """A Radio Astronomy Flagging Software Suite"""
   import logging
+  import logging.handlers
 
   import ray
   import xarray
@@ -150,6 +154,46 @@ def callback(
   from tricolour.core.application.implementation import DataLoader, DataWriter, Flagger, Tricolour
   from tricolour.core.kernels.mask import load_masks
 
+  ##############################################################
+  # Initialize Application Logger
+  ##############################################################
+  def create_logger():
+      """ Create a console logger """
+      log = logging.getLogger("tricolour")
+      cfmt = logging.Formatter(u'%(name)s - %(asctime)s '
+                              '%(levelname)s - %(message)s')
+      log.setLevel(logging.INFO)
+      console = logging.StreamHandler()
+      console.setLevel(logging.INFO)
+      console.setFormatter(cfmt)
+      log.addHandler(console)
+
+      # add an optional file handler
+      logger_path = os.environ.get("TRICOLOUR_LOGPATH", os.getcwd())
+      nowT = int(np.ceil(datetime.timestamp(datetime.now())))
+      logfile = os.path.join(logger_path,
+                            f"tricolour.{nowT}.log")
+      try:
+          with open(logfile, "w") as f:
+              f.write("")
+          filehandler = logging.FileHandler(logfile)
+          filehandler.setFormatter(cfmt)
+          log.addHandler(filehandler)
+          if logger_path != os.getcwd():
+              log.info(f"A copy of this log is available at {logfile}")
+      except PermissionError:
+          log.warning(f"Failed to initialize logfile for this run. "
+                      f"Check your permissions and available space on "
+                      f"'{logger_path}'. Proceeding without writing "
+                      f"a logfile.")
+      return log
+
+
+  # Create the log object
+  log = create_logger()
+  
+  log.info(banner.banner())
+
   backend, open_kwargs = infer_and_import_backend(ms)
 
   # If supplied, connect to the ray cluster
@@ -159,7 +203,7 @@ def callback(
     ray.init(
       logging_level=logging.ERROR,
       log_to_driver=False,
-      logging_config=ray.LoggingConfig(encoding="JSON", log_level="INFO"),
+      logging_config=ray.LoggingConfig(encoding="TEXT", log_level="ERROR"),
     )
   datatree = Multiton(xarray.open_datatree, ms, **open_kwargs)
   config = Multiton(load_config, config).with_serialise_instance()
@@ -257,7 +301,7 @@ def callback(
 
   handle: DeploymentHandle = serve.run(app, name="tricolour")
   for line in handle.remote().result():
-    print(line)
+    log.info(line)
 
 
 # Register subcommands below. Imports go here (bottom) to avoid circular imports.

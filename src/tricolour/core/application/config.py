@@ -7,6 +7,8 @@ import yaml
 if TYPE_CHECKING:
   from tricolour.cli import FlaggingStrategy
 
+import logging
+log = logging.getLogger("tricolour")
 
 def load_config(config_file) -> Dict[str, Any]:
   """
@@ -25,29 +27,29 @@ def load_config(config_file) -> Dict[str, Any]:
 
 def log_configuration(flagging_strategy: FlaggingStrategy, cfg: Dict[str, Any]):
   if len(strategies := cfg.get("strategies", [])) == 0:
-    print("Configuration contains no flagging strategies")
+    log.info("Configuration contains no flagging strategies")
     return
 
-  print("*****************************************")
-  print("Applying the following strategies:       ")
-  print("*****************************************")
+  log.info("*****************************************")
+  log.info("Applying the following strategies:       ")
+  log.info("*****************************************")
 
   for s, strategy in enumerate(strategies):
     name = strategy.get("name", "<none>")
 
     if (task := strategy.get("task")) is None:
-      print(f"Strategy '{name}' has no associated task")
+      log.info(f"Strategy '{name}' has no associated task")
 
-    print(f"{s}: {task} ({name})")
+    log.info(f"{s}: {task} ({name})")
 
     for key, value in strategy.get("kwargs", {}).items():
-      print(f"\t{key}: {value}", key, value)
+      log.info(f"\t{key}: {value}")
 
-  print("***************** END ********************")
+  log.info("***************** END ********************")
 
   if flagging_strategy == "polarisation":
-    print("Flagging based on quadrature polarized power")
+    log.info("Flagging based on quadrature polarized power")
   elif flagging_strategy == "total_power":
-    print("Flagging on total quadrature power")
+    log.info("Flagging on total quadrature power")
   else:
-    print("Flagging per correlation ('standard' mode)")
+    log.info("Flagging per correlation ('standard' mode)")

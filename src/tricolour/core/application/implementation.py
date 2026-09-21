@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures as cf
 import logging
+logger = logging.getLogger("tricolour")
+
 import multiprocessing as mp
 from collections import deque
 from dataclasses import dataclass
@@ -155,8 +157,6 @@ class Flagger:
       [dataset.baseline_id.values, ant_inv[: dataset.sizes["baseline_id"]], ant_inv[dataset.sizes["baseline_id"] :]]
     )
 
-    logger = logging.getLogger()
-    print(f"Flag {item} begins")
     logger.info("Flag %s begins", item)
 
     if self._data_variable not in dataset:
@@ -278,7 +278,6 @@ class Flagger:
     full_shape = tuple(dataset.sizes[d] for d in CP_FLAG_DIM_ORDER)
     bp_flags = np.broadcast_to(bp_flags, full_shape).astype(flag_dtype)
 
-    print(f"Flag {item} stops")
     logger.info("Flag %s stops", item)
 
     flag_array = xarray.DataArray(bp_flags, dims=CP_FLAG_DIM_ORDER).transpose(*FLAG_DIM_ORDER)
@@ -368,7 +367,7 @@ class Tricolour:
           raise NotImplementedError(f"Flagging partitions containing multiple scan_names. {path}: {scan_names}")
 
         if (scan := next(iter(scan_names))) not in self._scan_names:
-          print(f"Skipping scan {scan}")
+          logger.info(f"Skipping scan {scan}")
           continue
 
       # Skip partitions whose field names don't match a supplied list
@@ -377,7 +376,7 @@ class Tricolour:
           raise NotImplementedError(f"Flagging partitions containing multiple field_names. {path}: {field_names}")
 
         if (field := next(iter(field_names))) not in self._field_names:
-          print(f"Skipping field {field}")
+          logger.info(f"Skipping field {field}")
           continue
 
       ntime = node.sizes["time"]
