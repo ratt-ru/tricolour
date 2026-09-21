@@ -101,7 +101,7 @@ def chunk_window_stats(
   return stats
 
 
-@serve.deployment
+@serve.deployment(max_replicas_per_node=1)
 class DataLoader:
   def __init__(self, datatree: Multiton[xarray.DataTree], variables: Literal["ALL"] | Iterable[str] = "ALL"):
     self._datatree = datatree.instance
