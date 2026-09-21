@@ -3,8 +3,10 @@
 import logging
 import os
 import re
+from typing import Dict
 
 import numpy as np
+import numpy.typing as npt
 from scipy.ndimage import binary_dilation
 
 from tricolour import config
@@ -126,3 +128,7 @@ def collect_masks(filename="", paths=_DEFAULT_PATHS):
     file_paths = [filename]
 
   return file_paths
+
+
+def load_masks(dilate_masks) -> Dict[str, npt.NDArray]:
+  return {m: load_mask(m, dilate=dilate_masks) for m in collect_masks()}

@@ -27,12 +27,12 @@ repos:
       - id: mixed-line-ending
 
   # Local hooks run after external hooks, ensuring they see formatted code
-  - repo: local
-    hooks:
+  # - repo: local
+  #   hooks:
 
-      - id: generate-cabs
-        name: Generate Stimela cab definitions
-        entry: python scripts/generate_cabs.py
-        language: system
-        always_run: true
-        pass_filenames: false
+  #     - id: generate-cabs
+  #       name: Generate Stimela cab definitions
+  #       entry: python scripts/generate_cabs.py
+  #       language: system
+  #       always_run: true
+  #       pass_filenames: false

@@ -6,7 +6,7 @@ from functools import partial
 import numpy as np
 
 
-def window_stats(flag_window, ubls, chan_freqs, antenna_names, scan_no, field_name, ddid, nchanbins):
+def window_stats(flag_window, ubls, chan_freqs, antenna_names, scan_no, field_name, ddid, nchanbins, bin_edges=None):
   """
   Calculate stats for a **chunk** of a flag window.
   These stats should be accumulated to form a final
@@ -14,11 +14,11 @@ def window_stats(flag_window, ubls, chan_freqs, antenna_names, scan_no, field_na
 
   Parameters
   ----------
-  flag_window : :class:`dask.Array`
-      Flag window of shape :code:`(bl, corr, time, chan)`
-  ubls : :class:`dask.Array`
+  flag_window : :class:`numpy.ndarray`
+      Flag window of shape :code:`(time, bl, chan, corr)`
+  ubls : :class:`numpy.ndarray`
       Unique baselines of shape :code:`(bl, 3)`
-  chan_freqs : :class:`dask.Array`
+  chan_freqs : :class:`numpy.ndarray`
       Channel frequencies of shape :code:`(chan,)`
   antenna_names : list or :class:`numpy.ndarray`
       Antenna names of shape :code:`(ant,)
@@ -30,6 +30,11 @@ def window_stats(flag_window, ubls, chan_freqs, antenna_names, scan_no, field_na
       Data descriptor id
   nchanbins : int, optional
       Number of bins for histogramming statistics
+  bin_edges : :class:`numpy.ndarray`, optional
+      Precomputed frequency bin edges of shape :code:`(nchanbins,)`.
+      Supply the same edges (spanning the full spectral window) to every
+      chunk so that per-chunk histograms accumulate into aligned bins.
+      Defaults to edges spanning ``chan_freqs``.
   """
   stats = WindowStatistics(nchanbins)
 
@@ -61,7 +66,12 @@ def window_stats(flag_window, ubls, chan_freqs, antenna_names, scan_no, field_na
   stats._size_per_scan[scan_no] += sz
 
   # binned per channel
-  bins_edges = np.linspace(np.min(chan_freqs), np.max(chan_freqs), nchanbins)
+  if bin_edges is not None:
+    if (nedges := len(bin_edges)) != nchanbins:
+      raise ValueError(f"bin_edges has {nedges} edges, expected nchanbins={nchanbins}")
+    bins_edges = bin_edges
+  else:
+    bins_edges = np.linspace(np.min(chan_freqs), np.max(chan_freqs), nchanbins)
   bins = np.zeros(nchanbins, dtype=np.uint32)
 
   for ch_i, ch in enumerate(bins_edges[:-1]):
