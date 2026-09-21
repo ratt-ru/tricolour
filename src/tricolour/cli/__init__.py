@@ -112,7 +112,9 @@ def callback(
   # deprecated, but still supported for now
   scan_numbers: Annotated[
     Optional[str],
-    typer.Option("--scan-numbers", help="[Deprecated, use -sn instead] Scan numbers to flag. Defaults to flagging all."),
+    typer.Option(
+      "--scan-numbers", help="[Deprecated, use -sn instead] Scan numbers to flag. Defaults to flagging all."
+    ),
   ] = None,
   subtract_model_variable: Annotated[
     Optional[str],
@@ -127,7 +129,9 @@ def callback(
     typer.Option(
       "--subtract-model-column",
       "-smc",
-      help=("[Deprecated, use -smv instead] Subtracts specified column from the data column. Flagging will proceed on residual data."),
+      help=(
+        "[Deprecated, use -smv instead] Subtracts specified column from the data column. Flagging will proceed on residual data."
+      ),
     ),
   ] = None,
 ) -> None:
@@ -185,19 +189,20 @@ def callback(
   # the object store. WEIGHT alone is a third of an MSv4 partition's bytes.
   load_variables = [data_variable, "FLAG", "UVW"]
   if subtract_model_column is not None:
-    warnings.warn("Switch subtract-model-column is deprecated. Use subtract-model-variable instead.",
-                  category=VisibleDeprecationWarning,
-                  stacklevel=2)
+    warnings.warn(
+      "Switch subtract-model-column is deprecated. Use subtract-model-variable instead.",
+      category=VisibleDeprecationWarning,
+      stacklevel=2,
+    )
     if subtract_model_variable is not None:
       raise ValueError("Cannot simultaneously specify subtract-model-column and subtract-model-variable.")
     load_variables.append(subtract_model_column)
-    
+
   if subtract_model_variable is not None:
     load_variables.append(subtract_model_variable)
 
   if scan_numbers is not None:
-    warnings.warn("Switch scan-numbers is deprecated. Use scan-names instead.",
-                  category=VisibleDeprecationWarning)
+    warnings.warn("Switch scan-numbers is deprecated. Use scan-names instead.", category=VisibleDeprecationWarning)
     if scan_names is not None:
       raise ValueError("Cannot simultaneously specify scan-numbers and scan-names.")
 
