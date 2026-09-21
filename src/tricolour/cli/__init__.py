@@ -7,6 +7,8 @@ from os.path import join as pjoin
 from typing import Annotated, List, Optional
 
 import typer
+import warnings
+from numpy.exceptions import VisibleDeprecationWarning
 
 app = typer.Typer(
   name="tricolour", help="A Radio Astronomy Flagging Software Suite", no_args_is_help=True, invoke_without_command=True
@@ -107,12 +109,25 @@ def callback(
     Optional[str],
     typer.Option("--scan-names", "-sn", help="Scan names to flag. Defaults to flagging all."),
   ] = None,
+  # deprecated, but still supported for now
+  scan_numbers: Annotated[
+    Optional[str],
+    typer.Option("--scan-numbers", help="[Deprecated, use -sn instead] Scan numbers to flag. Defaults to flagging all."),
+  ] = None,
   subtract_model_variable: Annotated[
     Optional[str],
     typer.Option(
       "--subtract-model-variable",
       "-smv",
       help=("Subtracts specified variable from the data variable. Flagging will proceed on residual data."),
+    ),
+  ] = None,
+  subtract_model_column: Annotated[
+    Optional[str],
+    typer.Option(
+      "--subtract-model-column",
+      "-smc",
+      help=("[Deprecated, use -smv instead] Subtracts specified column from the data column. Flagging will proceed on residual data."),
     ),
   ] = None,
 ) -> None:
@@ -169,9 +184,22 @@ def callback(
   # Only the variables the Flagger actually touches are worth moving through
   # the object store. WEIGHT alone is a third of an MSv4 partition's bytes.
   load_variables = [data_variable, "FLAG", "UVW"]
-
+  if subtract_model_column is not None:
+    warnings.warn("Switch subtract-model-column is deprecated. Use subtract-model-variable instead.",
+                  category=VisibleDeprecationWarning,
+                  stacklevel=2)
+    if subtract_model_variable is not None:
+      raise ValueError("Cannot simultaneously specify subtract-model-column and subtract-model-variable.")
+    load_variables.append(subtract_model_column)
+    
   if subtract_model_variable is not None:
     load_variables.append(subtract_model_variable)
+
+  if scan_numbers is not None:
+    warnings.warn("Switch scan-numbers is deprecated. Use scan-names instead.",
+                  category=VisibleDeprecationWarning)
+    if scan_names is not None:
+      raise ValueError("Cannot simultaneously specify scan-numbers and scan-names.")
 
   data_loader = DataLoader.options(**common_options, ray_actor_options={"num_cpus": 0}).bind(
     datatree=datatree, variables=load_variables
@@ -213,7 +241,7 @@ def callback(
     freq_chunks=frequency_chunks,
     baseline_chunks=baseline_chunks,
     field_names=field_names,
-    scan_names=scan_names,
+    scan_names=scan_numbers if scan_numbers is not None else scan_names,
     data_loader=data_loader,
     flagger=flagger,
     data_writer=writer,
