@@ -123,4 +123,3 @@ strategies:
     -
         name: combine_with_input_flags
         task: combine_with_input_flags
-

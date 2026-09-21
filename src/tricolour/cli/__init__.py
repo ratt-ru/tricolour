@@ -1,13 +1,13 @@
 """CLI for tricolour."""
 
 import os
+import warnings
 from enum import Enum
 from importlib.resources import files as resource_files
 from os.path import join as pjoin
 from typing import Annotated, List, Optional
 
 import typer
-import warnings
 from numpy.exceptions import VisibleDeprecationWarning
 
 app = typer.Typer(
@@ -130,7 +130,8 @@ def callback(
       "--subtract-model-column",
       "-smc",
       help=(
-        "[Deprecated, use -smv instead] Subtracts specified column from the data column. Flagging will proceed on residual data."
+        "[Deprecated, use -smv instead] Subtracts specified column from the data column. "
+        "Flagging will proceed on residual data."
       ),
     ),
   ] = None,
