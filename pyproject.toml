@@ -45,7 +45,7 @@ tricolour = "tricolour.cli:app"
 
 [project.optional-dependencies]
 msv2 = [
-    "xarray-ms >= 0.4.0a9, < 0.5.0",
+    "xarray-ms >= 0.4.0a11, < 0.5.0",
 ]
 meerkat = [
     "xarray-kat>=0.0.1",
@@ -93,9 +93,6 @@ markers = [
     "slow: Tests that take more time to run",
     "acceptance: End-to-end acceptance tests (requires gdown and python-casacore; run via the acceptance workflow)",
 ]
-
-[tool.uv.sources]
-rarg-ray-patterns = { path = "../rarg-ray-patterns", editable = true }
 
 [dependency-groups]
 dev = [
