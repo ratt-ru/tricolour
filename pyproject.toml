@@ -94,9 +94,6 @@ markers = [
     "acceptance: End-to-end acceptance tests (requires gdown and python-casacore; run via the acceptance workflow)",
 ]
 
-[tool.uv.sources]
-rarg-ray-patterns = { path = "../rarg-ray-patterns", editable = true }
-
 [dependency-groups]
 dev = [
     "ruff>=0.9.0",
