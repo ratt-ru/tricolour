@@ -1,6 +1,7 @@
 """CLI for tricolour."""
 
 import os
+import time
 import warnings
 from enum import Enum
 from importlib.resources import files as resource_files
@@ -50,6 +51,10 @@ def callback(
   ignore_flags: Annotated[
     bool,
     typer.Option("--ignore-flags", "-if", help="Ignore existing flags in the Measurement Set"),
+  ] = False,
+  verbose: Annotated[
+     bool,
+     typer.Option("--verbose", "-v", help="Enable verbose logging"),
   ] = False,
   flagging_strategy: Annotated[
     FlaggingStrategy,
@@ -154,6 +159,7 @@ def callback(
   from tricolour.core.application.implementation import DataLoader, DataWriter, Flagger, Tricolour
   from tricolour.core.kernels.mask import load_masks
 
+  tic = time.time()
   ##############################################################
   # Initialize Application Logger
   ##############################################################
@@ -197,13 +203,16 @@ def callback(
   backend, open_kwargs = infer_and_import_backend(ms)
 
   # If supplied, connect to the ray cluster
+  ray_log_level = logging.INFO if verbose else logging.ERROR
   if ray_cluster_address is not None:
-    ray.init(address=ray_cluster_address, logging_level=logging.ERROR)
+    ray.init(address=ray_cluster_address, logging_level=ray_log_level)
   else:
     ray.init(
-      logging_level=logging.ERROR,
-      log_to_driver=False,
-      logging_config=ray.LoggingConfig(encoding="TEXT", log_level="ERROR"),
+      logging_level=ray_log_level,
+      log_to_driver=verbose,
+      logging_config=ray.LoggingConfig(
+         encoding="TEXT", 
+         log_level="ERROR" if not verbose else "INFO"),
     )
   datatree = Multiton(xarray.open_datatree, ms, **open_kwargs)
   config = Multiton(load_config, config).with_serialise_instance()
@@ -303,6 +312,13 @@ def callback(
   for line in handle.remote().result():
     log.info(line)
 
+  toc = time.time()
+  elapsed = toc - tic
+  log.info("Data flagged successfully in "
+            "{0:02.0f}h{1:02.0f}m{2:02.0f}s"
+            .format((elapsed // 60) // 60,
+                    (elapsed // 60) % 60,
+                    elapsed % 60))
 
 # Register subcommands below. Imports go here (bottom) to avoid circular imports.
 from tricolour.cli.onboard import onboard  # noqa: E402
