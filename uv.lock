@@ -3826,7 +3826,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.4.2" },
     { name = "protobuf", specifier = ">6.0.0,<=7.0.0" },
     { name = "rarg-python-patterns", specifier = ">=0.0.4" },
-    { name = "ray", marker = "extra == 'ray'", specifier = ">=2.58.0" },
+    { name = "ray", marker = "extra == 'ray'" },
     { name = "ray", extras = ["serve"] },
     { name = "ruyaml" },
     { name = "scipy" },
@@ -3846,7 +3846,7 @@ dev = [
 test = [
     { name = "pytest", specifier = ">=8.0.0" },
     { name = "pytest-cov", specifier = ">=5.0.0" },
-    { name = "ray", extras = ["default"], specifier = ">=2.55.1" },
+    { name = "ray", extras = ["default"] },
     { name = "scipy", specifier = ">=1.17.1" },
     { name = "zarr", specifier = ">=3.1.5" },
 ]

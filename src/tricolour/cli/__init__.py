@@ -85,7 +85,7 @@ def callback(
   ] = 100,
   baseline_chunks: Annotated[
     int,
-    typer.Option("--baseline-chunks", "-bc", help="Number of baselines flagged in a single thread"),
+    typer.Option("--baseline-chunks", "-bc", help="Number of baselines in a window chunk"),
   ] = 16,
   frequency_chunks: Annotated[
     Optional[int], typer.Option("--frequency-chunks", "-fc", help="Number of frequencies in a channel chunk")
