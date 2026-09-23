@@ -8,6 +8,7 @@ if TYPE_CHECKING:
   from tricolour.cli import FlaggingStrategy
 
 import logging
+
 log = logging.getLogger("tricolour")
 
 def load_config(config_file) -> Dict[str, Any]:

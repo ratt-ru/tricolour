@@ -3,15 +3,16 @@
 import os
 import time
 import warnings
+from datetime import datetime
 from enum import Enum
 from importlib.resources import files as resource_files
 from os.path import join as pjoin
 from typing import Annotated, List, Optional
 
+import numpy as np
 import typer
 from numpy.exceptions import VisibleDeprecationWarning
-import numpy as np
-from datetime import datetime
+
 import tricolour.core.application.banner as banner
 
 app = typer.Typer(
@@ -176,9 +177,9 @@ def callback(
 
       # add an optional file handler
       logger_path = os.environ.get("TRICOLOUR_LOGPATH", os.getcwd())
-      nowT = int(np.ceil(datetime.timestamp(datetime.now())))
+      nowt = int(np.ceil(datetime.timestamp(datetime.now())))
       logfile = os.path.join(logger_path,
-                            f"tricolour.{nowT}.log")
+                            f"tricolour.{nowt}.log")
       try:
           with open(logfile, "w") as f:
               f.write("")
@@ -197,7 +198,7 @@ def callback(
 
   # Create the log object
   log = create_logger()
-  
+
   log.info(banner.banner())
 
   backend, open_kwargs = infer_and_import_backend(ms)
@@ -211,7 +212,7 @@ def callback(
       logging_level=ray_log_level,
       log_to_driver=verbose,
       logging_config=ray.LoggingConfig(
-         encoding="TEXT", 
+         encoding="TEXT",
          log_level="ERROR" if not verbose else "INFO"),
     )
   datatree = Multiton(xarray.open_datatree, ms, **open_kwargs)

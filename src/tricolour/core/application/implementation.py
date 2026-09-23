@@ -3,8 +3,6 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures as cf
 import logging
-logger = logging.getLogger("tricolour")
-
 import multiprocessing as mp
 from collections import deque
 from dataclasses import dataclass
@@ -30,6 +28,8 @@ from tricolour.core.kernels.flagging import (
 )
 from tricolour.core.kernels.stokes import STOKES_TYPES, polarised_intensity, stokes_corr_map
 from tricolour.core.types import FlagStrategy
+
+logger = logging.getLogger("tricolour")
 
 STATISTICS_CHAN_BINS = 10
 MISSING_SENTINEL = object()
