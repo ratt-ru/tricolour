@@ -135,14 +135,38 @@ def callback(
       ),
     ),
   ] = None,
+  dashboard: Annotated[
+    bool,
+    typer.Option("--dashboard/--no-dashboard", help="Serve the progress dashboard over HTTP"),
+  ] = True,
+  dashboard_host: Annotated[
+    str,
+    typer.Option(
+      "--dashboard-host",
+      help="Interface the dashboard listens on. Use 0.0.0.0 to reach it from outside a container.",
+    ),
+  ] = "127.0.0.1",
+  dashboard_port: Annotated[
+    int,
+    typer.Option("--dashboard-port", help="Port the dashboard listens on"),
+  ] = 8000,
+  dashboard_linger: Annotated[
+    int,
+    typer.Option(
+      "--dashboard-linger",
+      help="Seconds to keep the dashboard up after flagging finishes, so the final state can be inspected.",
+    ),
+  ] = 0,
 ) -> None:
   """A Radio Astronomy Flagging Software Suite"""
   import logging
+  import time
 
   import ray
   import xarray
   from rarg_python_patterns import Multiton
   from ray import serve
+  from ray.serve.config import ProxyLocation
   from ray.serve.handle import DeploymentHandle
 
   from tricolour.core.application.backend import infer_and_import_backend
@@ -253,11 +277,38 @@ def callback(
     data_writer=writer,
     # Enough outstanding work to keep every replica of all three stages busy
     max_in_flight=4 * nworkers,
+    ms=ms,
+    backend=backend.name,
+    run_metadata={
+      "flagging_strategy": str(flagging_strategy),
+      "time_chunks": time_chunks,
+      "frequency_chunks": frequency_chunks,
+      "baseline_chunks": baseline_chunks,
+      "nworkers": nworkers,
+      "ignore_flags": ignore_flags,
+      "data_variable": data_variable,
+      "subtract_model_variable": subtract_model_variable,
+    },
   )
 
+  # The dashboard is served by the Tricolour deployment's ingress, so it comes
+  # up with the application itself. Disabling it removes the Serve proxy.
+  if dashboard:
+    serve.start(http_options={"host": dashboard_host, "port": dashboard_port})
+  else:
+    serve.start(proxy_location=ProxyLocation.Disabled)
+
   handle: DeploymentHandle = serve.run(app, name="tricolour")
-  for line in handle.remote().result():
+
+  if dashboard:
+    print(f"\nProgress dashboard: http://{dashboard_host}:{dashboard_port}/\n")
+
+  for line in handle.run.remote().result():
     print(line)
+
+  if dashboard and dashboard_linger > 0:
+    print(f"Holding the dashboard open for {dashboard_linger}s (--dashboard-linger)")
+    time.sleep(dashboard_linger)
 
 
 # Register subcommands below. Imports go here (bottom) to avoid circular imports.
