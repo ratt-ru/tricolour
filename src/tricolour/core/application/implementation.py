@@ -405,9 +405,18 @@ class Tricolour:
   def dashboard(self) -> HTMLResponse:
     return HTMLResponse(index_html())
 
+  def snapshot(self) -> Dict[str, Any]:
+    """The run's current state.
+
+    Reachable over HTTP through :meth:`api_state` and directly through a
+    deployment handle, which is how the CLI drives its terminal progress bar
+    without depending on the dashboard being served at all.
+    """
+    return self._state.snapshot()
+
   @dashboard_app.get("/api/state")
   def api_state(self) -> Dict[str, Any]:
-    return self._state.snapshot()
+    return self.snapshot()
 
   @dashboard_app.get("/api/events")
   def api_events(self) -> StreamingResponse:

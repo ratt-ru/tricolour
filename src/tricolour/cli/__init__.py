@@ -157,6 +157,10 @@ def callback(
       help="Seconds to keep the dashboard up after flagging finishes, so the final state can be inspected.",
     ),
   ] = 0,
+  progress: Annotated[
+    bool,
+    typer.Option("--progress/--no-progress", help="Report flagging progress on the terminal"),
+  ] = True,
 ) -> None:
   """A Radio Astronomy Flagging Software Suite"""
   import logging
@@ -303,12 +307,52 @@ def callback(
   if dashboard:
     print(f"\nProgress dashboard: http://{dashboard_host}:{dashboard_port}/\n")
 
-  for line in handle.run.remote().result():
+  summary = _drive(handle, progress)
+
+  for line in summary:
     print(line)
 
   if dashboard and dashboard_linger > 0:
     print(f"Holding the dashboard open for {dashboard_linger}s (--dashboard-linger)")
     time.sleep(dashboard_linger)
+
+
+def _drive(handle, progress: bool) -> List[str]:
+  """Run the flagging job, reporting progress on the terminal as it goes.
+
+  The driver is a single Serve replica whose event loop is free between
+  awaits, so its state can simply be polled through the handle. That keeps
+  the progress bar working with ``--no-dashboard``, needs no HTTP client and
+  no second thread, and renders exactly the payload the dashboard serves.
+  """
+  import sys
+
+  from tricolour.core.application.terminal import ProgressPrinter
+
+  response = handle.run.remote()
+
+  if not progress:
+    return response.result()
+
+  # Progress goes to stderr so that redirecting the flag summary to a file
+  # still leaves the bar on the terminal.
+  printer = ProgressPrinter.for_stream(sys.stderr)
+
+  try:
+    while True:
+      try:
+        summary = response.result(timeout_s=printer.interval)
+        break
+      except TimeoutError:
+        printer.update(handle.snapshot.remote().result())
+  finally:
+    # Paint the terminal state of the run, whether it finished or raised.
+    try:
+      printer.close(handle.snapshot.remote().result())
+    except Exception:
+      printer.close()
+
+  return summary
 
 
 # Register subcommands below. Imports go here (bottom) to avoid circular imports.

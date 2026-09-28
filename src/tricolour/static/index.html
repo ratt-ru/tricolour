@@ -232,13 +232,11 @@ function render(state) {
   $("t-eta").textContent = state.running ? duration(state.eta) : "–";
   $("t-inflight").textContent = num(p.in_flight);
 
-  // Overall occupancy is the flagged fraction across every field seen so far.
-  const fields = state.ranked.field || [];
-  if (fields.length) {
-    const tot = fields.reduce((a, r) => a + r.final, 0) / fields.length;
-    const was = fields.reduce((a, r) => a + r.original, 0) / fields.length;
-    $("t-flagged").textContent = pct(tot);
-    $("t-flagged-sub").textContent = `was ${pct(was)}`;
+  // Exact overall occupancy, summed over fields by the driver rather than
+  // averaged over the ranked rows (which are only the top N, and unweighted).
+  if (state.occupancy.final !== null) {
+    $("t-flagged").textContent = pct(state.occupancy.final);
+    $("t-flagged-sub").textContent = `was ${pct(state.occupancy.original)}`;
   }
 
   const ft = state.timings.flag_seconds, wt = state.timings.write_seconds;

@@ -255,6 +255,16 @@ class ChunkReport:
   write_seconds: float = 0.0
 
 
+def _occupancy(totals: Dict[str, Tuple[int, int]]) -> float | None:
+  """Overall flagged fraction across an axis.
+
+  Summing counts and sizes gives the exact fraction; averaging the per-label
+  fractions does not, because the labels carry different amounts of data.
+  """
+  size = sum(size for _, size in totals.values())
+  return sum(flagged for flagged, _ in totals.values()) / size if size else None
+
+
 def _rank(
   final: Dict[str, Tuple[int, int]],
   original: Dict[str, Tuple[int, int]],
@@ -442,6 +452,12 @@ class RunState:
         "fraction": self.completed / self.total_items if self.total_items else 0.0,
       },
       "timings": {"flag_seconds": self.flag_seconds, "write_seconds": self.write_seconds},
+      # Taken over fields, which partition the data, so each visibility is
+      # counted exactly once.
+      "occupancy": {
+        "original": _occupancy(original.get("field", {})),
+        "final": _occupancy(final.get("field", {})),
+      },
       "strategies": [stat.as_dict() for stat in self.strategies],
       "ranked": {axis: _rank(final.get(axis, {}), original.get(axis, {}), TOP_N) for axis in final},
       "occupancy_paths": sorted(self.occupancy),
