@@ -4,20 +4,25 @@ import asyncio
 import concurrent.futures as cf
 import logging
 import multiprocessing as mp
+import time
 from collections import deque
 from dataclasses import dataclass
 from itertools import product
-from typing import Any, Dict, Generator, Iterable, List, Literal, get_args
+from typing import Any, Dict, Generator, Iterable, List, Literal, Tuple, get_args
 
 import numpy as np
 import numpy.typing as npt
 import xarray
+from fastapi import HTTPException
+from fastapi.responses import HTMLResponse, StreamingResponse
 from msv4_utils import MSv4Backend
 from msv4_utils.msv4_types import VISIBILITY_XDS_TYPES
 from rarg_python_patterns.multiton import Multiton
 from ray import serve
 from ray.serve.handle import DeploymentHandle
 
+from tricolour.core.application.dashboard import dashboard_app, index_html, snapshot_stream
+from tricolour.core.application.progress import ChunkOccupancy, ChunkReport, RunState
 from tricolour.core.kernels.flag_statistics import WindowStatistics, window_stats
 from tricolour.core.kernels.flagging import (
   apply_static_mask,
@@ -148,7 +153,7 @@ class Flagger:
 
   def flag(
     self, item: WorkItem, dataset: xarray.Dataset, bin_edges: npt.NDArray
-  ) -> tuple[xarray.Dataset, WindowStatistics, WindowStatistics]:
+  ) -> tuple[xarray.Dataset, WindowStatistics, WindowStatistics, ChunkReport]:
     concatenated_antennas = np.concat((dataset.baseline_antenna1_name, dataset.baseline_antenna2_name))
     antenna_names, ant_inv = np.unique(concatenated_antennas, return_inverse=True)
     ubl = np.column_stack(
@@ -158,14 +163,18 @@ class Flagger:
     logger = logging.getLogger()
     print(f"Flag {item} begins")
     logger.info("Flag %s begins", item)
+    flag_start = time.perf_counter()
 
     if self._data_variable not in dataset:
       raise ValueError(f"Visibility variable {self._data_variable} not in dataset")
 
     # Statistics of the flags as they arrived, for comparison against the final flags
-    original_stats = chunk_window_stats(
-      dataset["FLAG"].transpose(*FLAG_DIM_ORDER).values, dataset, ubl, antenna_names, STATISTICS_CHAN_BINS, bin_edges
-    )
+    incoming_flags = dataset["FLAG"].transpose(*FLAG_DIM_ORDER).values
+    original_stats = chunk_window_stats(incoming_flags, dataset, ubl, antenna_names, STATISTICS_CHAN_BINS, bin_edges)
+    # Reduce over baseline and polarisation for the dashboard's (time, frequency)
+    # waterfall. Work items tile that plane, so the driver reassembles the full
+    # picture by dropping each of these into place.
+    original_occupancy = np.count_nonzero(incoming_flags, axis=(1, 3)).astype(np.uint32)
 
     bp_vis = dataset[self._data_variable].transpose(*CP_FLAG_DIM_ORDER).values
     bp_uvw = dataset["UVW"].transpose("baseline_id", "time", ...).values
@@ -213,9 +222,13 @@ class Flagger:
     original = bp_flags.copy()
 
     # Apply each strategy in the flagging configuation
-    for strategy in self._flagging_config.instance.get("strategies", []):
+    strategy_stats: List[Tuple[str, str, int, int, float]] = []
+
+    for s, strategy in enumerate(self._flagging_config.instance.get("strategies", [])):
       if (task := strategy.get("task", MISSING_SENTINEL)) is MISSING_SENTINEL:
         raise ValueError(f"Strategy '{strategy}' has no task")
+
+      strategy_start = time.perf_counter()
 
       if task == "sum_threshold":
         if self._pool is None:
@@ -270,6 +283,19 @@ class Flagger:
       else:
         raise ValueError(f"Invalid task {task}")
 
+      # Cumulative occupancy and cost after this strategy. The reduction is a
+      # rounding error next to sum_threshold, and it is the only way to tell
+      # which of a dozen configured strategies is doing the work.
+      strategy_stats.append(
+        (
+          strategy.get("name", f"strategy {s}"),
+          task,
+          int(np.count_nonzero(bp_flags)),
+          int(bp_flags.size),
+          time.perf_counter() - strategy_start,
+        )
+      )
+
     # Flag the whole visibility if any correlation is flagged: a correlation
     # affected by RFI is unlikely to leave the others clean, as they mix through
     # the Stokes parameters. This also reintroduces the polarization axis for
@@ -283,12 +309,24 @@ class Flagger:
 
     flag_array = xarray.DataArray(bp_flags, dims=CP_FLAG_DIM_ORDER).transpose(*FLAG_DIM_ORDER)
 
-    final_stats = chunk_window_stats(flag_array.values, dataset, ubl, antenna_names, STATISTICS_CHAN_BINS, bin_edges)
+    final_flags = flag_array.values
+    final_stats = chunk_window_stats(final_flags, dataset, ubl, antenna_names, STATISTICS_CHAN_BINS, bin_edges)
+
+    report = ChunkReport(
+      occupancy=ChunkOccupancy(
+        original=original_occupancy,
+        final=np.count_nonzero(final_flags, axis=(1, 3)).astype(np.uint32),
+        samples_per_cell=dataset.sizes["baseline_id"] * dataset.sizes["polarization"],
+      ),
+      strategies=strategy_stats,
+      flag_seconds=time.perf_counter() - flag_start,
+      visibilities=int(np.prod([dataset.sizes[d] for d in FLAG_DIM_ORDER])),
+    )
 
     dataset = dataset.assign(FLAG=flag_array)
     dataset = dataset.drop_vars(set(dataset.data_vars) - {"FLAG"})
 
-    return dataset, original_stats, final_stats
+    return dataset, original_stats, final_stats, report
 
 
 @serve.deployment
@@ -298,9 +336,10 @@ class DataWriter:
     self._backend = backend
 
   def write(
-    self, item: WorkItem, flag_result: tuple[xarray.Dataset, WindowStatistics, WindowStatistics]
-  ) -> tuple[WindowStatistics, WindowStatistics]:
-    dataset, original_stats, final_stats = flag_result
+    self, item: WorkItem, flag_result: tuple[xarray.Dataset, WindowStatistics, WindowStatistics, ChunkReport]
+  ) -> tuple[WindowStatistics, WindowStatistics, ChunkReport]:
+    dataset, original_stats, final_stats, report = flag_result
+    write_start = time.perf_counter()
 
     if self._backend == MSv4Backend.CASA_TABLE:
       # TODO(sjperkins)
@@ -313,12 +352,23 @@ class DataWriter:
     else:
       raise NotImplementedError(f"Backend writeback unsupported for {self._backend}")
 
-    return original_stats, final_stats
+    report.write_seconds = time.perf_counter() - write_start
+    return original_stats, final_stats, report
 
 
-@serve.deployment(num_replicas=1, max_replicas_per_node=1)
+# `max_ongoing_requests` has to accommodate the long-running `run` request
+# *plus* any dashboard requests, since the ingress routes are served by this
+# same replica. Server-sent event streams are held open for the life of the
+# page, so leave generous headroom for open browser tabs.
+@serve.deployment(num_replicas=1, max_replicas_per_node=1, max_ongoing_requests=64)
+@serve.ingress(dashboard_app)
 class Tricolour:
-  """Distributes chunked work over an autoscaled deployment."""
+  """Distributes chunked work over an autoscaled deployment.
+
+  Also serves the progress dashboard. This deployment already observes every
+  work item as it completes and is pinned to a single replica, which makes it
+  the only place in the pipeline with a coherent view of the whole run.
+  """
 
   def __init__(
     self,
@@ -332,6 +382,9 @@ class Tricolour:
     flagger: DeploymentHandle,
     data_writer: DeploymentHandle,
     max_in_flight: int = 64,
+    ms: str = "",
+    backend: str = "",
+    run_metadata: Dict[str, Any] | None = None,
   ):
     self._datatree = datatree.instance
     self._time_chunks = time_chunks
@@ -343,8 +396,46 @@ class Tricolour:
     self._flagger = flagger
     self._data_writer = data_writer
     self._max_in_flight = max_in_flight
-    self._statistics = WindowStatistics(STATISTICS_CHAN_BINS)
-    self._original_statistics = WindowStatistics(STATISTICS_CHAN_BINS)
+    self._ms = ms
+    self._backend = backend
+    self._run_metadata = run_metadata or {}
+    self._state = RunState(STATISTICS_CHAN_BINS)
+
+  @dashboard_app.get("/", response_class=HTMLResponse)
+  def dashboard(self) -> HTMLResponse:
+    return HTMLResponse(index_html())
+
+  def snapshot(self) -> Dict[str, Any]:
+    """The run's current state.
+
+    Reachable over HTTP through :meth:`api_state` and directly through a
+    deployment handle, which is how the CLI drives its terminal progress bar
+    without depending on the dashboard being served at all.
+    """
+    return self._state.snapshot()
+
+  @dashboard_app.get("/api/state")
+  def api_state(self) -> Dict[str, Any]:
+    return self.snapshot()
+
+  @dashboard_app.get("/api/events")
+  def api_events(self) -> StreamingResponse:
+    return StreamingResponse(
+      snapshot_stream(self._state),
+      media_type="text/event-stream",
+      # Without this a reverse proxy will happily sit on the stream until it
+      # has "enough" to forward, which for a 1Hz trickle is never.
+      headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+  @dashboard_app.get("/api/waterfall")
+  def api_waterfall(self, path: str, kind: str = "final") -> Dict[str, Any]:
+    try:
+      return self._state.waterfall(path, kind)
+    except KeyError:
+      raise HTTPException(status_code=404, detail=f"No occupancy recorded for {path!r}")
+    except ValueError as e:
+      raise HTTPException(status_code=400, detail=str(e))
 
   def work_generator(self) -> Generator[WorkItem]:
     """Yields MSv4 DataTree node paths and time/frequency regions to flag.
@@ -400,33 +491,76 @@ class Tricolour:
 
         yield WorkItem(path, region)
 
-  async def __call__(self) -> List[str]:
+  def plan(self) -> Tuple[int, int]:
+    """Count the work before doing any of it.
+
+    ``work_generator`` derives items from dataset sizes and the configured
+    chunking, touching only metadata, so an extra pass over it is cheap and
+    buys the dashboard a real denominator rather than a spinner.
+
+    Returns
+    -------
+      A tuple (work items, visibilities) covered by this run.
+    """
+    items = 0
+    visibilities = 0
+
+    for item in self.work_generator():
+      npol = self._datatree[item.path].sizes["polarization"]
+      extent = np.prod([s.stop - s.start for s in item.region.values()])
+      items += 1
+      visibilities += int(extent) * npol
+
+    return items, visibilities
+
+  async def run(self) -> List[str]:
     work_queue = deque()
-    # Start with fresh statistics on each invocation
-    self._statistics = WindowStatistics(STATISTICS_CHAN_BINS)
-    self._original_statistics = WindowStatistics(STATISTICS_CHAN_BINS)
+    # Start with fresh state on each invocation
+    self._state = state = RunState(STATISTICS_CHAN_BINS)
+    state.begin(self._ms, self._backend, self._run_metadata)
+    state.plan(*self.plan())
     stats_bin_edges: Dict[str, npt.NDArray] = {}
 
     async def maybe_drain_queue(max_queue_size=0):
       if len(work_queue) > max_queue_size:
         to_drain = len(work_queue) - max_queue_size
-        waiters = [work_queue.pop() for _ in range(to_drain)]
-        for original_stats, final_stats in await asyncio.gather(*waiters):
-          self._original_statistics.update(original_stats)
-          self._statistics.update(final_stats)
+        items = [work_queue.pop() for _ in range(to_drain)]
+
+        try:
+          results = await asyncio.gather(*(response for _, response in items))
+        except Exception as e:
+          # Record before re-raising: the driver is about to unwind and this
+          # is the last chance to get the reason in front of the dashboard.
+          state.fail(f"{type(e).__name__}: {e}")
+          raise
+
+        for (item, _), (original_stats, final_stats, report) in zip(items, results):
+          state.record(
+            item.path,
+            item.region["time"].start,
+            item.region["frequency"].start,
+            original_stats,
+            final_stats,
+            report,
+          )
 
     for work_item in self.work_generator():
       await maybe_drain_queue(self._max_in_flight)
       if (bin_edges := stats_bin_edges.get(work_item.path)) is None:
         # Bin edges spanning the node's full spectral window, so that
         # frequency-chunked histograms accumulate into aligned bins
-        freqs = self._datatree[work_item.path].frequency.values
+        node = self._datatree[work_item.path]
+        freqs = node.frequency.values
         bin_edges = np.linspace(freqs.min(), freqs.max(), STATISTICS_CHAN_BINS)
         stats_bin_edges[work_item.path] = bin_edges
+        state.grid(work_item.path, node.sizes["time"], node.sizes["frequency"], freqs)
       load_response = self._data_loader.load.remote(work_item)
       flag_response = self._flagger.flag.remote(work_item, load_response, bin_edges)
       write_response = self._data_writer.write.remote(work_item, flag_response)
-      work_queue.appendleft(write_response)
+      work_queue.appendleft((work_item, write_response))
+      state.dispatch()
 
     await maybe_drain_queue()
-    return WindowStatistics.summarise_stats(self._statistics, self._original_statistics)
+    summary = WindowStatistics.summarise_stats(state.statistics, state.original_statistics)
+    state.finish(summary)
+    return summary

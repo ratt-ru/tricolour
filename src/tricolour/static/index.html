@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tricolour</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --border: #dfe3e8;
+    --ink: #14181d;
+    --muted: #616b76;
+    --accent: #b8451f;
+    --good: #1f7a4d;
+    --bad: #b3261e;
+    --plot-bg: #0b0b10;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e1116;
+      --panel: #161b22;
+      --border: #2a313a;
+      --ink: #e6edf3;
+      --muted: #96a2ae;
+      --accent: #ef7b4d;
+      --good: #4ac08a;
+      --bad: #f0796f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 0 16px 48px;
+    background: var(--bg);
+    color: var(--ink);
+    font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  header { padding: 24px 0 16px; display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; }
+  h1 { font-size: 20px; margin: 0; letter-spacing: .02em; }
+  h1 span { color: var(--accent); }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 12px; }
+  .ms { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); font-size: 12px;
+        overflow-wrap: anywhere; }
+  .pill { margin-left: auto; padding: 3px 12px; border-radius: 999px; font-size: 12px; font-weight: 600;
+          border: 1px solid var(--border); white-space: nowrap; }
+  .pill.running { color: var(--accent); border-color: currentColor; }
+  .pill.done { color: var(--good); border-color: currentColor; }
+  .pill.failed { color: var(--bad); border-color: currentColor; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+           padding: 16px; margin-bottom: 16px; }
+  .bar { height: 10px; border-radius: 999px; background: var(--border); overflow: hidden; margin-bottom: 14px; }
+  .bar > div { height: 100%; background: var(--accent); width: 0; transition: width .4s ease; }
+  .tiles { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); }
+  .tile .k { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .tile .v { font-size: 20px; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .tile .s { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+  select, button { font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 7px;
+                   border: 1px solid var(--border); background: var(--panel); color: var(--ink); cursor: pointer; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .plot { display: grid; grid-template-columns: 54px 1fr; grid-template-rows: 1fr 22px; gap: 4px; }
+  .yaxis { position: relative; font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .yaxis span { position: absolute; right: 6px; transform: translateY(-50%); }
+  .xaxis { grid-column: 2; position: relative; font-size: 10px; color: var(--muted);
+           font-variant-numeric: tabular-nums; }
+  .xaxis span { position: absolute; transform: translateX(-50%); top: 2px; }
+  canvas { width: 100%; height: 380px; display: block; background: var(--plot-bg);
+           border-radius: 6px; image-rendering: pixelated; }
+  .cbar { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 11px; color: var(--muted); }
+  .cbar .ramp { height: 10px; flex: 1; border-radius: 3px; max-width: 320px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--border); }
+  th:first-child, td:first-child { text-align: left; }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; }
+  td { font-variant-numeric: tabular-nums; }
+  td.name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  .meter { display: inline-block; height: 7px; border-radius: 999px; background: var(--accent); min-width: 1px;
+           vertical-align: middle; }
+  .added { color: var(--accent); font-weight: 600; }
+  .removed { color: var(--muted); font-weight: 600; }
+  .grid2 { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  .note { color: var(--muted); font-size: 12px; margin: 10px 0 0; }
+  .errors { color: var(--bad); font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap; }
+  pre.summary { font-family: ui-monospace, monospace; font-size: 12px; overflow-x: auto;
+                color: var(--muted); margin: 0; }
+  @media (max-width: 560px) { .plot { grid-template-columns: 40px 1fr; } canvas { height: 260px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>tri<span>colour</span></h1>
+      <div class="ms" id="ms">waiting for a run&hellip;</div>
+    </div>
+    <div class="pill" id="status">connecting</div>
+  </header>
+
+  <section class="panel">
+    <div class="bar"><div id="progressbar"></div></div>
+    <div class="tiles">
+      <div class="tile"><div class="k">Chunks</div><div class="v" id="t-items">&ndash;</div>
+        <div class="s" id="t-items-sub">&nbsp;</div></div>
+      <div class="tile"><div class="k">Elapsed</div><div class="v" id="t-elapsed">&ndash;</div>
+        <div class="s" id="t-rate">&nbsp;</div></div>
+      <div class="tile"><div class="k">Remaining</div><div class="v" id="t-eta">&ndash;</div>
+        <div class="s">estimated</div></div>
+      <div class="tile"><div class="k">In flight</div><div class="v" id="t-inflight">&ndash;</div>
+        <div class="s">dispatched, not written</div></div>
+      <div class="tile"><div class="k">Flagged</div><div class="v" id="t-flagged">&ndash;</div>
+        <div class="s" id="t-flagged-sub">&nbsp;</div></div>
+      <div class="tile"><div class="k">CPU split</div><div class="v" id="t-split">&ndash;</div>
+        <div class="s" id="t-split-sub">flag / write</div></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Flag occupancy</h2>
+    <div class="controls">
+      <select id="path"></select>
+      <button data-kind="final" aria-pressed="true">final</button>
+      <button data-kind="added" aria-pressed="false">added</button>
+      <button data-kind="original" aria-pressed="false">original</button>
+    </div>
+    <div class="plot">
+      <div class="yaxis" id="yaxis"></div>
+      <canvas id="waterfall"></canvas>
+      <div class="xaxis" id="xaxis"></div>
+    </div>
+    <div class="cbar"><span>0%</span><div class="ramp" id="ramp"></div><span id="cbar-max">100%</span>
+      <span id="cbar-note"></span></div>
+    <p class="note">Flag fraction against time (down) and frequency (across), averaged over baseline and
+      polarisation. Unfilled regions are chunks that have not been written yet. <em>original</em> and
+      <em>final</em> are drawn against an absolute 0&ndash;100% range; <em>added</em> is scaled to its own
+      peak, shown at the right of the colour bar.</p>
+  </section>
+
+  <section class="panel">
+    <h2>Strategies</h2>
+    <table>
+      <thead><tr><th>Strategy</th><th>Task</th><th>Occupancy after</th><th></th><th>Chunks</th>
+        <th>CPU seconds</th></tr></thead>
+      <tbody id="strategies"><tr><td colspan="6" class="note">waiting&hellip;</td></tr></tbody>
+    </table>
+    <p class="note">Cumulative flag occupancy measured after each configured strategy has run, summed over
+      every chunk. Tasks such as <code>unflag</code> and <code>apply_static_mask</code> in
+      <code>override</code> mode can lower the running total.</p>
+  </section>
+
+  <section class="grid2" id="ranked"></section>
+
+  <section class="panel" id="errors-panel" hidden>
+    <h2>Errors</h2><div class="errors" id="errors"></div>
+  </section>
+
+  <section class="panel" id="summary-panel" hidden>
+    <h2>Flag summary</h2><pre class="summary" id="summary"></pre>
+  </section>
+</div>
+
+<script>
+"use strict";
+
+// Approximation of the "inferno" sequential ramp: dark at zero, bright at one,
+// monotonic in lightness so it survives being read as a greyscale printout.
+const STOPS = [
+  [0.00,   0,   0,   4], [0.14,  31,  12,  72], [0.29,  85,  15, 109],
+  [0.43, 136,  34, 106], [0.57, 186,  54,  85], [0.71, 227,  89,  51],
+  [0.86, 249, 140,  10], [1.00, 252, 255, 164],
+];
+
+function ramp(t) {
+  for (let i = 1; i < STOPS.length; i++) {
+    if (t <= STOPS[i][0]) {
+      const [t0, r0, g0, b0] = STOPS[i - 1], [t1, r1, g1, b1] = STOPS[i];
+      const f = (t - t0) / (t1 - t0);
+      return [r0 + (r1 - r0) * f, g0 + (g1 - g0) * f, b0 + (b1 - b0) * f];
+    }
+  }
+  return STOPS[STOPS.length - 1].slice(1);
+}
+
+const LUT = new Uint8Array(256 * 3);
+for (let i = 0; i < 255; i++) {
+  const [r, g, b] = ramp(i / 254);
+  LUT[i * 3] = r; LUT[i * 3 + 1] = g; LUT[i * 3 + 2] = b;
+}
+
+document.getElementById("ramp").style.background =
+  "linear-gradient(to right," + STOPS.map(s => `rgb(${s[1]},${s[2]},${s[3]}) ${s[0] * 100}%`).join(",") + ")";
+
+const $ = id => document.getElementById(id);
+const pct = x => (x === null || x === undefined || Number.isNaN(x)) ? "–" : (x * 100).toFixed(2) + "%";
+const delta = x => (x >= 0 ? "+" : "−") + (Math.abs(x) * 100).toFixed(2);
+const num = x => (x === null || x === undefined) ? "–" : x.toLocaleString();
+
+function duration(s) {
+  if (s === null || s === undefined || !Number.isFinite(s)) return "–";
+  s = Math.max(0, Math.round(s));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  if (h) return `${h}h${String(m).padStart(2, "0")}m`;
+  if (m) return `${m}m${String(sec).padStart(2, "0")}s`;
+  return `${sec}s`;
+}
+
+let selectedPath = null;
+let kind = "final";
+let latest = null;
+
+function render(state) {
+  latest = state;
+  $("ms").textContent = state.ms || "–";
+
+  const status = $("status");
+  const failed = (state.errors || []).length > 0;
+  if (state.running) { status.textContent = "running"; status.className = "pill running"; }
+  else if (state.finished_at) {
+    status.textContent = failed ? "finished with errors" : "finished";
+    status.className = failed ? "pill failed" : "pill done";
+  } else { status.textContent = "idle"; status.className = "pill"; }
+
+  const p = state.progress;
+  $("progressbar").style.width = (p.fraction * 100).toFixed(1) + "%";
+  $("t-items").textContent = `${num(p.completed)} / ${num(p.total_items)}`;
+  $("t-items-sub").textContent = pct(p.fraction) + " complete";
+  $("t-elapsed").textContent = duration(state.elapsed);
+  $("t-rate").textContent = state.rate ? state.rate.toFixed(2) + " chunks/s" : " ";
+  $("t-eta").textContent = state.running ? duration(state.eta) : "–";
+  $("t-inflight").textContent = num(p.in_flight);
+
+  // Exact overall occupancy, summed over fields by the driver rather than
+  // averaged over the ranked rows (which are only the top N, and unweighted).
+  if (state.occupancy.final !== null) {
+    $("t-flagged").textContent = pct(state.occupancy.final);
+    $("t-flagged-sub").textContent = `was ${pct(state.occupancy.original)}`;
+  }
+
+  const ft = state.timings.flag_seconds, wt = state.timings.write_seconds;
+  if (ft + wt > 0) {
+    $("t-split").textContent = `${Math.round(100 * ft / (ft + wt))}/${Math.round(100 * wt / (ft + wt))}`;
+    $("t-split-sub").textContent = `${duration(ft)} flag / ${duration(wt)} write`;
+  }
+
+  renderPaths(state.occupancy_paths || []);
+  renderStrategies(state.strategies || []);
+  renderRanked(state.ranked || {});
+
+  const errs = state.errors || [];
+  $("errors-panel").hidden = errs.length === 0;
+  $("errors").textContent = errs.join("\n");
+
+  const summary = state.summary || [];
+  $("summary-panel").hidden = summary.length === 0;
+  $("summary").textContent = summary.join("\n");
+}
+
+function renderPaths(paths) {
+  const sel = $("path");
+  if (sel.dataset.paths === JSON.stringify(paths)) return;
+  sel.dataset.paths = JSON.stringify(paths);
+  sel.innerHTML = "";
+  for (const p of paths) {
+    const o = document.createElement("option");
+    o.value = p; o.textContent = p;
+    sel.appendChild(o);
+  }
+  if (paths.length && !paths.includes(selectedPath)) selectedPath = paths[0];
+  if (selectedPath) sel.value = selectedPath;
+}
+
+function renderStrategies(strategies) {
+  const body = $("strategies");
+  if (!strategies.length) return;
+  const maxSeconds = Math.max(...strategies.map(s => s.seconds), 1e-9);
+  body.innerHTML = "";
+  for (const s of strategies) {
+    const tr = document.createElement("tr");
+    tr.innerHTML =
+      `<td class="name">${escapeHtml(s.name)}</td>` +
+      `<td class="name">${escapeHtml(s.task)}</td>` +
+      `<td>${pct(s.fraction)}</td>` +
+      `<td style="width:22%"><span class="meter" style="width:${(100 * s.seconds / maxSeconds).toFixed(1)}%"></span></td>` +
+      `<td>${num(s.chunks)}</td>` +
+      `<td>${s.seconds.toFixed(1)}</td>`;
+    body.appendChild(tr);
+  }
+}
+
+const AXIS_TITLES = { antenna: "Antennas", baseline: "Baselines", scan: "Scans", field: "Fields" };
+
+function renderRanked(ranked) {
+  const host = $("ranked");
+  const axes = Object.keys(AXIS_TITLES).filter(a => (ranked[a] || []).length);
+  host.innerHTML = "";
+  for (const axis of axes) {
+    const rows = ranked[axis];
+    const section = document.createElement("section");
+    section.className = "panel";
+    const body = rows.map(r =>
+      `<tr><td class="name">${escapeHtml(r.label)}</td>` +
+      `<td>${pct(r.original)}</td><td>${pct(r.final)}</td>` +
+      `<td class="${r.added < 0 ? "removed" : "added"}">${delta(r.added)}</td>` +
+      `<td style="width:26%"><span class="meter" style="width:${(100 * r.final).toFixed(1)}%"></span></td></tr>`
+    ).join("");
+    section.innerHTML =
+      `<h2>${AXIS_TITLES[axis]} &mdash; most flagged</h2>` +
+      `<table><thead><tr><th>${axis}</th><th>before</th><th>after</th><th>added</th><th></th></tr></thead>` +
+      `<tbody>${body}</tbody></table>`;
+    host.appendChild(section);
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+async function refreshWaterfall() {
+  if (!selectedPath) return;
+  let payload;
+  try {
+    const r = await fetch(`api/waterfall?path=${encodeURIComponent(selectedPath)}&kind=${kind}`);
+    if (!r.ok) return;
+    payload = await r.json();
+  } catch { return; }
+
+  const [rows, cols] = payload.shape;
+  const raw = Uint8Array.from(atob(payload.data), c => c.charCodeAt(0));
+  const img = new ImageData(cols, rows);
+  for (let i = 0; i < raw.length; i++) {
+    const v = raw[i], o = i * 4;
+    if (v === payload.no_data) { img.data[o + 3] = 0; continue; }
+    img.data[o] = LUT[v * 3]; img.data[o + 1] = LUT[v * 3 + 1];
+    img.data[o + 2] = LUT[v * 3 + 2]; img.data[o + 3] = 255;
+  }
+
+  const canvas = $("waterfall");
+  const scratch = document.createElement("canvas");
+  scratch.width = cols; scratch.height = rows;
+  scratch.getContext("2d").putImageData(img, 0, 0);
+
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = Math.max(1, Math.round(rect.width));
+  canvas.height = Math.max(1, Math.round(rect.height));
+  const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(scratch, 0, 0, canvas.width, canvas.height);
+
+  // "added" is scaled to its own peak; see OccupancyGrid.display_max
+  $("cbar-max").textContent = pct(payload.vmax);
+  $("cbar-note").textContent =
+    `${cols}×${rows} bins — ${payload.freq_stride} chan, ${payload.time_stride} integrations per bin`;
+
+  const yaxis = $("yaxis"), xaxis = $("xaxis");
+  yaxis.innerHTML = ""; xaxis.innerHTML = "";
+  for (let i = 0; i <= 4; i++) {
+    const y = document.createElement("span");
+    y.style.top = `${(i / 4) * 100}%`;
+    // Keep the extreme labels inside the plot box
+    if (i === 0) y.style.transform = "translateY(0)";
+    if (i === 4) y.style.transform = "translateY(-100%)";
+    y.textContent = Math.round((i / 4) * payload.ntime);
+    yaxis.appendChild(y);
+
+    if (payload.freq_start_mhz !== null) {
+      const x = document.createElement("span");
+      x.style.left = `${(i / 4) * 100}%`;
+      const f = payload.freq_start_mhz + (i / 4) * (payload.freq_end_mhz - payload.freq_start_mhz);
+      // Carry the unit on the last tick, pulled inside the plot, rather than
+      // as a separate label sitting on top of it.
+      x.textContent = i === 4 ? `${f.toFixed(0)} MHz` : f.toFixed(0);
+      if (i === 4) x.style.transform = "translateX(-100%)";
+      xaxis.appendChild(x);
+    }
+  }
+}
+
+$("path").addEventListener("change", e => { selectedPath = e.target.value; refreshWaterfall(); });
+for (const b of document.querySelectorAll("button[data-kind]")) {
+  b.addEventListener("click", () => {
+    kind = b.dataset.kind;
+    for (const o of document.querySelectorAll("button[data-kind]")) {
+      o.setAttribute("aria-pressed", String(o === b));
+    }
+    refreshWaterfall();
+  });
+}
+window.addEventListener("resize", () => refreshWaterfall());
+
+const events = new EventSource("api/events");
+events.onmessage = e => render(JSON.parse(e.data));
+events.onerror = () => {
+  const s = $("status");
+  if (!latest || latest.running) { s.textContent = "disconnected"; s.className = "pill failed"; }
+};
+
+setInterval(() => { if (!latest || latest.running) refreshWaterfall(); }, 5000);
+setTimeout(refreshWaterfall, 1200);
+</script>
+</body>
+</html>

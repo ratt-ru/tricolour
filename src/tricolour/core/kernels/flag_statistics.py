@@ -185,6 +185,37 @@ class WindowStatistics(object):
     result.update(self)
     return result
 
+  #: Maps a public axis name onto the (counts, sizes) accumulators backing it.
+  _AXIS_ACCUMULATORS = {
+    "antenna": ("_counts_per_ant", "_size_per_ant"),
+    "baseline": ("_counts_per_bl", "_size_per_bl"),
+    "scan": ("_counts_per_scan", "_size_per_scan"),
+    "field": ("_counts_per_field", "_size_per_field"),
+  }
+
+  def totals(self):
+    """Flagged counts and sizes for each scalar accumulation axis.
+
+    Exposes the per-antenna/baseline/scan/field accumulators without
+    reaching into the private dictionaries, so that consumers other than
+    :meth:`summarise_stats` (the progress dashboard, for instance) can
+    render them.
+
+    Returns
+    -------
+    dict
+        ``{axis: {label: (flagged, size)}}`` where ``axis`` is one of
+        ``antenna``, ``baseline``, ``scan`` or ``field``.
+    """
+    totals = {}
+
+    for axis, (counts_attr, sizes_attr) in self._AXIS_ACCUMULATORS.items():
+      counts = getattr(self, counts_attr)
+      sizes = getattr(self, sizes_attr)
+      totals[axis] = {label: (int(count), int(sizes[label])) for label, count in counts.items()}
+
+    return totals
+
   @staticmethod
   def summarise_stats(final, original):
     """
