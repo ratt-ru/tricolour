@@ -1173,6 +1173,16 @@ def sum_threshold_flagger(
       Number of flagging iterations to run
   """
 
+  # The jitted kernel compiles one specialisation per argument type, so an integer
+  # in a strategy file (e.g. spike_width_time: 2) would trigger another compilation
+  outlier_nsigma = float(outlier_nsigma)
+  background_reject = float(background_reject)
+  spike_width_time = float(spike_width_time)
+  spike_width_freq = float(spike_width_freq)
+  flag_all_time_frac = float(flag_all_time_frac)
+  flag_all_freq_frac = float(flag_all_freq_frac)
+  rho = float(rho)
+
   # Collapse baseline and correlation dimensions together
   nbl, ncorr, ntime, nchan = vis.shape
   vis = vis.reshape(nbl * ncorr, ntime, nchan)
@@ -1305,23 +1315,23 @@ class SumThresholdFlagger(object):
     flag_all_freq_frac=0.8,
     rho=1.3,
   ):
-    self.outlier_nsigma = outlier_nsigma
+    self.outlier_nsigma = float(outlier_nsigma)
     self.windows_time = windows_time
     # Scale the frequency windows, and remove possible duplicates
     windows_freq = np.ceil(np.array(windows_freq, dtype=np.float32) / average_freq)
     self.windows_freq = np.unique(windows_freq.astype(np.int_))
-    self.background_reject = background_reject
+    self.background_reject = float(background_reject)
     self.background_iterations = background_iterations
-    self.spike_width_time = spike_width_time
+    self.spike_width_time = float(spike_width_time)
     # Scale spike_width by average_freq
     self.spike_width_freq = spike_width_freq / average_freq
     self.time_extend = _as_min_dtype(time_extend)
     self.freq_extend = _as_min_dtype(freq_extend)
     self.freq_chunks = freq_chunks
     self.average_freq = _as_min_dtype(average_freq)
-    self.flag_all_time_frac = flag_all_time_frac
-    self.flag_all_freq_frac = flag_all_freq_frac
-    self.rho = rho
+    self.flag_all_time_frac = float(flag_all_time_frac)
+    self.flag_all_freq_frac = float(flag_all_freq_frac)
+    self.rho = float(rho)
 
   def _get_flags(self, in_data, in_flags, out_flags):
     """Flag a batch of baselines.
